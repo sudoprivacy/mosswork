@@ -1,0 +1,10 @@
+{
+  "upstream_project": "https://github.com/TencentCloud/octop-memory",
+  "upstream_version": "1.0.1",
+  "source_archive": "https://files.pythonhosted.org/packages/44/56/04f1f5ba2b099ac0243f425beea61ee483feb090633ad1140c2c2336cd05/octop_memory-1.0.1.tar.gz",
+  "sha256": "8750dee56dbbb43bbb41ff868d85a6e5efcf4aad20f140e0675213647cd52c22",
+  "license": "MIT",
+  "package": "moss-memory",
+  "python_module": "moss_memory",
+  "version": "0.0.2"
+}

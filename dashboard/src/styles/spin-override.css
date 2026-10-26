@@ -1,0 +1,37 @@
+/**
+ * Layout contract for the global antd Spin indicator (MossworkSpinner).
+ * antd sizes and positions its default dot from the `dotSize` token, so every
+ * geometry rule it derives (box, nested-pattern centering, tip gap) has to be
+ * restated from the size variable.
+ */
+
+/* One ring size for page- and section-level loading (`size` default / large). */
+.mosswork-spin {
+  --mosswork-spinner-size: 48px;
+  --mosswork-spinner-ring-width: 4px;
+}
+
+/* `size="small"` marks spins nested in a control — input suffixes, select
+   dropdowns, inline labels — where a 48px ring would stretch its container. */
+.mosswork-spin-sm {
+  --mosswork-spinner-size: 18px;
+  --mosswork-spinner-ring-width: 2px;
+}
+
+.mosswork-spin .mosswork-spin-dot {
+  width: var(--mosswork-spinner-size) !important;
+  height: var(--mosswork-spinner-size) !important;
+}
+
+.mosswork-spin-nested-loading .mosswork-spin .mosswork-spin-dot {
+  margin: calc(var(--mosswork-spinner-size) / -2) !important;
+}
+
+/* With a tip, lift the ring and drop the text below it. */
+.mosswork-spin-nested-loading .mosswork-spin-show-text .mosswork-spin-dot {
+  margin-top: calc(var(--mosswork-spinner-size) / -2 - 12px) !important;
+}
+
+.mosswork-spin-nested-loading .mosswork-spin-show-text .mosswork-spin-text {
+  padding-top: calc(var(--mosswork-spinner-size) / 2 - 4px) !important;
+}

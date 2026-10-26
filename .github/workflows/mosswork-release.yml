@@ -1,0 +1,355 @@
+name: mosswork release
+
+on:
+  push:
+    tags: ['v*']
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: mosswork-release-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  source:
+    name: Verify tag and export source
+    runs-on: ubuntu-24.04
+    outputs:
+      tag: ${{ steps.version.outputs.tag }}
+      version: ${{ steps.version.outputs.version }}
+      prerelease: ${{ steps.version.outputs.prerelease }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v6
+        with:
+          python-version: '3.12'
+          enable-cache: true
+      - id: version
+        name: Require a tag matching the package version
+        run: |
+          uv run --no-project python - <<'PY'
+          import os, re, tomllib
+          from pathlib import Path
+          version = tomllib.loads(Path('pyproject.toml').read_text())['project']['version']
+          tag = os.environ['GITHUB_REF_NAME']
+          if os.environ['GITHUB_REF_TYPE'] != 'tag' or tag != f'v{version}':
+              raise SystemExit('Run on a v<pyproject.toml version> tag; no version is changed automatically.')
+          if not re.fullmatch(r'[0-9]+\.[0-9]+\.[0-9]+[A-Za-z0-9._-]*', version):
+              raise SystemExit('Version cannot be used as a Docker tag')
+          prerelease = not bool(re.fullmatch(r'[0-9]+\.[0-9]+\.[0-9]+', version))
+          with open(os.environ['GITHUB_OUTPUT'], 'a') as out:
+              out.write(f'tag={tag}\nversion={version}\nprerelease={str(prerelease).lower()}\n')
+          PY
+      - name: Refuse overwriting a published release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_REPO: ${{ github.repository }}
+          RELEASE_TAG: ${{ steps.version.outputs.tag }}
+        run: |
+          if gh release view "$RELEASE_TAG" >/dev/null 2>&1; then
+            test "$(gh release view "$RELEASE_TAG" --json isDraft --jq .isDraft)" = true || {
+              echo 'This tag already has a published release; choose a new tag.' >&2; exit 1;
+            }
+          fi
+      - name: Test release tooling
+        run: uv run --frozen pytest tests/unit/deployment desktop/tests/test_package_company.py desktop/tests/test_company_tools.py tests/unit/infra/test_local_harness.py tests/unit/infra/test_local_components.py tests/unit/infra/test_brand_environment.py -q
+      - name: Export the complete public source and deployment assets
+        env:
+          RELEASE_TAG: ${{ steps.version.outputs.tag }}
+        run: |
+          set -euo pipefail
+          python3 tools/export_public_source.py --output "$RUNNER_TEMP/source"
+          python3 tools/check_public_source.py --root "$RUNNER_TEMP/source"
+          mkdir -p "$RUNNER_TEMP/release" "$RUNNER_TEMP/deploy/moss-server"
+          tar -czf "$RUNNER_TEMP/release/mosswork-source-${RELEASE_TAG}.tar.gz" -C "$RUNNER_TEMP/source" .
+          for package in moss-harness moss-memory moss-browser moss-gateway; do
+            uv build --project "$RUNNER_TEMP/source" --package "$package" --wheel --out-dir "$RUNNER_TEMP/release"
+          done
+          cp "$RUNNER_TEMP/source/docker/enterprise/"{compose.release.yml,init-databases.sh,prepare.py,deploy.py} "$RUNNER_TEMP/deploy/moss-server/"
+          tar -czf "$RUNNER_TEMP/release/moss-server-deploy-${RELEASE_TAG}.tar.gz" -C "$RUNNER_TEMP/deploy" moss-server
+          sed "s/@@MOSSWORK_RELEASE_TAG@@/${RELEASE_TAG}/g" scripts/install-moss-server.sh > "$RUNNER_TEMP/release/install-moss-server.sh"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: public-source
+          path: ${{ runner.temp }}/release/*
+          if-no-files-found: error
+          retention-days: 7
+
+  client:
+    name: Client (${{ matrix.platform }})
+    needs: source
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 90
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - platform: darwin-arm64
+            os: macos-14
+            target: darwin
+            arch: arm64
+          - platform: windows-amd64
+            os: windows-2022
+            target: windows
+            arch: amd64
+    defaults:
+      run:
+        shell: bash
+        working-directory: source
+    env:
+      GREEN_HOST_PLAT: ${{ matrix.platform }}
+      PYTHONUTF8: '1'
+      PBS_BASE_URL: https://github.com/astral-sh/python-build-standalone/releases/download/20251209
+      PBS_TAG: '20251209'
+      PBS_PY: '3.12.12'
+      RELEASE_TAG: ${{ needs.source.outputs.tag }}
+      RELEASE_VERSION: ${{ needs.source.outputs.version }}
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: public-source
+          path: assets
+      - name: Extract verified source
+        working-directory: .
+        run: |
+          mkdir source
+          tar -xzf "assets/mosswork-source-${RELEASE_TAG}.tar.gz" -C source
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: source/dashboard/package-lock.json
+      - uses: astral-sh/setup-uv@v6
+        with:
+          python-version: '3.12'
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: source/desktop/src/go.mod
+          cache-dependency-path: source/desktop/src/go.sum
+      - name: Build dashboard
+        working-directory: source/dashboard
+        run: |
+          # npm 11 treats the lockfile's relative file: tarball as a registry
+          # URL when replace-registry-host=always is inherited from
+          # dashboard/.npmrc. Disable host rewriting so the vendored SheetJS
+          # package resolves from the exported source tree on every runner.
+          npm ci --no-audit --replace-registry-host=never
+          npm run build
+      - name: Install Wails
+        working-directory: source
+        run: |
+          go install github.com/wailsapp/wails/v3/cmd/wails3@v3.0.0-beta.13
+      - name: Assemble and test the offline runtime
+        run: |
+          set -euo pipefail
+          bash desktop/portable/bootstrap-runtime.sh "$GREEN_HOST_PLAT"
+          bash desktop/portable/package.sh "$GREEN_HOST_PLAT"
+          payload="desktop/portable/release/mosswork-${GREEN_HOST_PLAT}"
+          if [[ "$GREEN_HOST_PLAT" == windows-* ]]; then
+            runtime_python="$payload/runtime/python.exe"
+          else
+            runtime_python="$payload/runtime/bin/python3"
+          fi
+          uv pip install --python "$runtime_python" --target "$payload/packages" \
+            --constraint "desktop/portable/requirements-${GREEN_HOST_PLAT}.txt" \
+            -r desktop/portable/company-requirements.txt
+          uv run --no-project python desktop/prepare-company-tools.py "$GREEN_HOST_PLAT" "$payload"
+          PYTHONDONTWRITEBYTECODE=1 "$runtime_python" desktop/portable/verify_company_runtime.py "$payload"
+      - name: Prepare Windows installer dependencies
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          choco install nsis --yes --no-progress
+          if ($LASTEXITCODE -ne 0) { throw 'NSIS installation failed' }
+          "${env:ProgramFiles(x86)}\NSIS" | Out-File -Append -Encoding utf8 $env:GITHUB_PATH
+          New-Item -ItemType Directory -Force webview2 | Out-Null
+          $target = Join-Path $PWD 'webview2/MicrosoftEdgeWebView2RuntimeInstallerX64.exe'
+          Invoke-WebRequest 'https://go.microsoft.com/fwlink/?linkid=2124701' -OutFile $target
+          $signature = Get-AuthenticodeSignature $target
+          if ($signature.Status -ne 'Valid' -or $signature.SignerCertificate.Subject -notmatch 'Microsoft Corporation') {
+            throw 'WebView2 installer signature validation failed'
+          }
+      - name: Package the requested client architecture
+        env:
+          TARGET_PLATFORM: ${{ matrix.target }}
+          TARGET_ARCH: ${{ matrix.arch }}
+        run: |
+          uv run --no-project python desktop/package-company.py \
+            --platform "$TARGET_PLATFORM" --arch "$TARGET_ARCH" \
+            --runtime-dir desktop/portable/release --webview2-dir webview2 \
+            --output "$RUNNER_TEMP/client"
+          mv "$RUNNER_TEMP/client/company-package-status.json" "$RUNNER_TEMP/client/mosswork-${GREEN_HOST_PLAT}-build.json"
+          rm "$RUNNER_TEMP/client/SHA256SUMS.txt"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: client-${{ matrix.platform }}
+          path: ${{ runner.temp }}/client/*
+          if-no-files-found: error
+          retention-days: 7
+
+  image:
+    name: Server images (${{ matrix.arch }})
+    needs: source
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 90
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - arch: amd64
+            os: ubuntu-24.04
+          - arch: arm64
+            os: ubuntu-24.04-arm
+    env:
+      RELEASE_TAG: ${{ needs.source.outputs.tag }}
+      RELEASE_VERSION: ${{ needs.source.outputs.version }}
+      IMAGE_ARCH: ${{ matrix.arch }}
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: public-source
+          path: ${{ runner.temp }}/assets
+      - name: Extract verified source
+        run: |
+          mkdir "$RUNNER_TEMP/source"
+          tar -xzf "$RUNNER_TEMP/assets/mosswork-source-${RELEASE_TAG}.tar.gz" -C "$RUNNER_TEMP/source"
+      - name: Build and export architecture images
+        working-directory: ${{ runner.temp }}/source
+        run: |
+          set -euo pipefail
+          app="moss-server:${RELEASE_VERSION}"
+          im="moss-server-im:${RELEASE_VERSION}"
+          database=postgres:17.11-bookworm
+          # The native Docker builder can resolve the local base image in stage two.
+          docker build -f docker/Dockerfile -t moss-server-base:build .
+          docker build -f docker/enterprise/Dockerfile --build-arg APP_IMAGE=moss-server-base:build \
+            --label "org.opencontainers.image.version=${RELEASE_VERSION}" \
+            --label "org.opencontainers.image.revision=${GITHUB_SHA}" \
+            --label org.opencontainers.image.title=moss-server -t "$app" .
+          docker run --rm --network none "$app" moss-server --version
+          docker build --build-arg TARGETOS=linux --build-arg "TARGETARCH=${IMAGE_ARCH}" \
+            --label org.opencontainers.image.source=https://github.com/sudoprivacy/mosswork \
+            --label "org.opencontainers.image.version=${RELEASE_VERSION}" \
+            --label "org.opencontainers.image.revision=${GITHUB_SHA}" \
+            -t "$im" services/communication
+          test "$(docker image inspect --format '{{.Architecture}}' "$app")" = "$IMAGE_ARCH"
+          test "$(docker image inspect --format '{{.Architecture}}' "$im")" = "$IMAGE_ARCH"
+          docker pull "$database"
+          test "$(docker image inspect --format '{{.Architecture}}' "$database")" = "$IMAGE_ARCH"
+          mkdir -p "$RUNNER_TEMP/images"
+          docker image inspect "$app" "$im" "$database" > "$RUNNER_TEMP/images/moss-server-linux-${IMAGE_ARCH}-images.json"
+          docker image save "$app" "$im" "$database" | gzip -1 > "$RUNNER_TEMP/images/moss-server-images-${RELEASE_TAG}-linux-${IMAGE_ARCH}.tar.gz"
+          # Reload the exported archive so the deployment test uses the release payload.
+          docker image rm "$app" "$im" "$database"
+          docker image load --input "$RUNNER_TEMP/images/moss-server-images-${RELEASE_TAG}-linux-${IMAGE_ARCH}.tar.gz"
+      - name: Test first install and repeat install from release images
+        working-directory: ${{ runner.temp }}/source
+        run: |
+          set -euo pipefail
+          for attempt in 1 2; do
+            sudo python3 docker/enterprise/deploy.py --version "$RELEASE_TAG" \
+              --install-dir "$RUNNER_TEMP/moss-server-smoke" --bind 127.0.0.1 --port 18088
+            curl --fail --silent --show-error http://127.0.0.1:18088/api/health/ready
+            if [[ "$attempt" == 1 ]]; then
+              sudo cp "$RUNNER_TEMP/moss-server-smoke/initial-admin.json" "$RUNNER_TEMP/initial-admin-before.json"
+            else
+              sudo cmp "$RUNNER_TEMP/initial-admin-before.json" "$RUNNER_TEMP/moss-server-smoke/initial-admin.json"
+            fi
+          done
+      - name: Clean up deployment smoke test
+        if: always()
+        run: |
+          if [[ -f "$RUNNER_TEMP/moss-server-smoke/deployment.env" ]]; then
+            compose=(sudo docker compose -p moss-server --env-file "$RUNNER_TEMP/moss-server-smoke/deployment.env"
+              -f "$RUNNER_TEMP/moss-server-smoke/releases/${RELEASE_TAG}/compose.release.yml")
+            "${compose[@]}" logs --tail 100
+            "${compose[@]}" down --volumes
+          fi
+      - uses: actions/upload-artifact@v4
+        with:
+          name: server-linux-${{ matrix.arch }}
+          path: ${{ runner.temp }}/images/*
+          compression-level: 0
+          if-no-files-found: error
+          retention-days: 7
+
+  publish:
+    name: Publish server bundles and downloadable clients
+    needs: [source, client, image]
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: write
+    env:
+      GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      GH_REPO: ${{ github.repository }}
+      RELEASE_TAG: ${{ needs.source.outputs.tag }}
+      RELEASE_VERSION: ${{ needs.source.outputs.version }}
+      PRERELEASE: ${{ needs.source.outputs.prerelease }}
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          path: release
+          merge-multiple: true
+      - name: Check assets and create checksums
+        working-directory: release
+        run: |
+          set -euo pipefail
+          test -s "mosswork-company-macos-arm64-${RELEASE_VERSION}.dmg"
+          test -s "mosswork-company-windows-amd64-${RELEASE_VERSION}.exe"
+          test "$(find . -maxdepth 1 \( -name '*.dmg' -o -name '*.exe' \) | wc -l)" -eq 2
+          for arch in amd64 arm64; do
+            test -s "moss-server-images-${RELEASE_TAG}-linux-${arch}.tar.gz"
+            test -s "moss-server-linux-${arch}-images.json"
+          done
+          test -s "moss-server-deploy-${RELEASE_TAG}.tar.gz"
+          test -s install-moss-server.sh
+          for component in harness memory browser gateway; do
+            test -s "moss_${component}-${RELEASE_VERSION}-py3-none-any.whl"
+          done
+          # GitHub limits each Release asset to less than 2 GiB.
+          python3 - <<'PY'
+          import hashlib
+          from pathlib import Path
+          checksums = []
+          for path in sorted(Path('.').iterdir()):
+              if not path.is_file() or path.name == 'SHA256SUMS.txt':
+                  continue
+              if path.stat().st_size >= 2**31:
+                  raise SystemExit(f'Release asset exceeds 2 GiB: {path}')
+              with path.open('rb') as stream:
+                  digest = hashlib.file_digest(stream, 'sha256').hexdigest()
+              checksums.append(f'{digest}  {path.name}\n')
+          Path('SHA256SUMS.txt').write_text(''.join(checksums))
+          PY
+          sha256sum --check SHA256SUMS.txt
+      - name: Publish GitHub Release
+        run: |
+          set -euo pipefail
+          cat > release-notes.md <<EOF
+          mosswork ${RELEASE_VERSION}
+
+          Clients: macOS 13+ ARM64 DMG and Windows x64 EXE only. Both include the local task runtime and FFmpeg. Windows includes offline WebView2. macOS is ad-hoc signed without notarization; Windows is not Authenticode signed.
+
+          Components: moss-harness, moss-memory, moss-browser and moss-gateway ${RELEASE_VERSION} are built from packages/ in the attached source; all four wheels are included below.
+
+          Server: Linux amd64/arm64 image archives attached below include moss-server, moss-server-im and PostgreSQL. The installer detects the host architecture, verifies SHA-256, imports the images with Docker and starts the stack with Compose. No container registry login is needed.
+
+          Install on a Linux Docker host with Python 3.11+, curl and Compose v2:
+
+          \`\`\`sh
+          curl -fsSL https://github.com/sudoprivacy/mosswork/releases/download/${RELEASE_TAG}/install-moss-server.sh | sudo bash
+          \`\`\`
+
+          Initial credentials: /opt/moss-server/initial-admin.json (root only). Configure HTTPS for the server's public address. See moss-server-linux-*-images.json for image IDs and architecture, and SHA256SUMS.txt for download checksums. Use the attached mosswork-source archive for the verified public source.
+          EOF
+          if gh release view "$RELEASE_TAG" >/dev/null 2>&1; then
+            test "$(gh release view "$RELEASE_TAG" --json isDraft --jq .isDraft)" = true || {
+              echo 'Published releases are immutable; use a new tag.' >&2; exit 1;
+            }
+          else
+            gh release create "$RELEASE_TAG" --verify-tag --draft --title "mosswork ${RELEASE_VERSION}" --notes-file release-notes.md
+          fi
+          gh release upload "$RELEASE_TAG" release/* --clobber
+          gh release edit "$RELEASE_TAG" --draft=false --prerelease="$PRERELEASE" --latest="$([[ "$PRERELEASE" == false ]] && echo true || echo false)" --notes-file release-notes.md

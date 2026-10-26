@@ -1,0 +1,10 @@
+{
+  "upstream_project": "https://github.com/TencentCloud/octop-browser",
+  "upstream_version": "1.0.0",
+  "source_archive": "https://files.pythonhosted.org/packages/9c/a6/a89e5d3c6b27bb5dc310290f52fb85a3d1f59279b7854ebd5c9973855651/octop_browser-1.0.0.tar.gz",
+  "sha256": "a7e12bcf7ca1541d6c81e05d88ecb6a3aaf988ee648fe05922d06f94de18210c",
+  "license": "MIT",
+  "package": "moss-browser",
+  "python_module": "moss_browser",
+  "version": "0.0.2"
+}

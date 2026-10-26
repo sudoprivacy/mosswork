@@ -1,0 +1,14 @@
+{
+  "upstream_project": "https://github.com/TencentCloud/octop-harness",
+  "upstream_version": "1.0.3",
+  "source_archive": "https://files.pythonhosted.org/packages/33/2c/a957b0cd2892f841960a97b44f95098128bd6775e5a27774e97c09be08f7/octop_harness-1.0.3.tar.gz",
+  "sha256": "4a6494877f16442956fe4657290f77e26a6fe8a8b2f223fd2ca928cb1afaa291",
+  "license": "MIT",
+  "package": "moss-harness",
+  "python_module": "moss_harness",
+  "version": "0.0.2",
+  "excluded_upstream_materials": [
+    "src/octop_harness/builtin/skills/en/powerpoint (restricted redistribution license)",
+    "src/octop_harness/builtin/skills/zh/powerpoint (translation of the same restricted skill)"
+  ]
+}

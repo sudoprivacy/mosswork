@@ -1,0 +1,1 @@
+"""mosswork CLI package."""

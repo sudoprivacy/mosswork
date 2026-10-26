@@ -1,0 +1,10 @@
+{
+  "upstream_project": "https://github.com/TencentCloud/octop-gateway",
+  "upstream_version": "1.0.2",
+  "source_archive": "https://files.pythonhosted.org/packages/82/fd/e68f630a50b3f0b426ab5ecc30b93cdf066a5739e86e50cf7c2811ddf1e3/octop_gateway-1.0.2.tar.gz",
+  "sha256": "503bceef3fefbac80b102b5f9324aae77b680e67d62cced56c2f984390568c54",
+  "license": "MIT",
+  "package": "moss-gateway",
+  "python_module": "moss_gateway",
+  "version": "0.0.2"
+}

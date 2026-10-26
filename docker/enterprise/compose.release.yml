@@ -1,0 +1,84 @@
+name: moss-server
+x-hardening: &hardening
+  pull_policy: never
+  restart: unless-stopped
+  cap_drop: [ALL]
+  security_opt: [no-new-privileges:true]
+  logging:
+    driver: json-file
+    options: {max-size: 10m, max-file: '3'}
+services:
+  postgres:
+    image: postgres:17.11-bookworm
+    pull_policy: never
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: mosswork_bootstrap
+      POSTGRES_PASSWORD: ${MOSSWORK_PG_BOOTSTRAP_PASSWORD:?Run installer}
+      MOSSWORK_APP_PASSWORD: ${MOSSWORK_APP_PASSWORD:?Run installer}
+      IM_APP_PASSWORD: ${IM_APP_PASSWORD:?Run installer}
+    volumes:
+      - ${MOSSWORK_DATA_ROOT:?Run installer}/postgres:/var/lib/postgresql/data
+      - ./init-databases.sh:/docker-entrypoint-initdb.d/10-databases.sh:ro
+    networks: [internal]
+    healthcheck:
+      test: [CMD-SHELL, 'pg_isready -U $$POSTGRES_USER -d postgres']
+      interval: 5s
+      timeout: 3s
+      retries: 20
+  communication:
+    <<: *hardening
+    image: ${MOSSWORK_IM_IMAGE:?Run installer}
+    environment:
+      MOSSWORK_IM_DATABASE_URL: postgresql://im_app:${IM_APP_PASSWORD}@postgres:5432/mosswork_im?sslmode=disable
+      MOSSWORK_IM_MEDIA_ROOT: /data/media
+      MOSSWORK_IM_IDENTITY_KEY_FILE: /run/secrets/im_identity
+      MOSSWORK_IM_CURSOR_KEY_FILE: /run/secrets/im_cursor
+    secrets: [im_identity, im_cursor]
+    volumes:
+      - ${MOSSWORK_DATA_ROOT}/media:/data/media
+    networks: [internal]
+    depends_on:
+      postgres: {condition: service_healthy}
+    pids_limit: 128
+    mem_limit: 512m
+  moss-server:
+    <<: *hardening
+    image: ${MOSSWORK_APP_IMAGE:?Run installer}
+    command: [moss-server, run, --host, 0.0.0.0, --port, '8088']
+    init: true
+    user: '1000:1000'
+    group_add: ['${MOSSWORK_DOCKER_GID:?Run installer}']
+    ports: ['${MOSSWORK_BIND_ADDRESS:-0.0.0.0}:${MOSSWORK_PORT:-8088}:8088']
+    environment:
+      HOME: /data
+      MOSSWORK_HOME: /data/.mosswork
+      MOSSWORK_DATABASE_URL: postgresql://mosswork_app:${MOSSWORK_APP_PASSWORD}@postgres:5432/mosswork?sslmode=disable
+      MOSSWORK_DEVICE_CHANNEL_ENABLED: 'true'
+      MOSSWORK_COMPANY_RUNTIME_ENABLED: 'true'
+      MOSSWORK_IM_URL: http://communication:8090
+      MOSSWORK_IM_IDENTITY_KEY_FILE: /run/secrets/im_identity
+      MOSSWORK_AGENT_ISOLATION: docker
+      MOSSWORK_SANDBOX_IMAGE: ${MOSSWORK_APP_IMAGE:?Run installer}
+      MOSSWORK_SANDBOX_HOST_DATA_DIR: ${MOSSWORK_DATA_ROOT}/app
+      MOSSWORK_DEFAULT_TIMEZONE: ${MOSSWORK_DEFAULT_TIMEZONE:-Asia/Shanghai}
+    secrets: [im_identity]
+    volumes:
+      - ${MOSSWORK_DATA_ROOT}/app:/data/.mosswork
+      - ${MOSSWORK_DOCKER_SOCKET:-/var/run/docker.sock}:/var/run/docker.sock
+    networks: [default, internal]
+    depends_on:
+      postgres: {condition: service_healthy}
+    healthcheck:
+      test: [CMD, curl, -fsS, http://127.0.0.1:8088/api/health/ready]
+      interval: 10s
+      timeout: 15s
+      start_period: 90s
+      retries: 12
+    pids_limit: 512
+    mem_limit: 2g
+networks:
+  internal: {internal: true}
+secrets:
+  im_identity: {file: '${MOSSWORK_DATA_ROOT}/secrets/im_identity'}
+  im_cursor: {file: '${MOSSWORK_DATA_ROOT}/secrets/im_cursor'}

@@ -1,0 +1,42 @@
+# =============================================================================
+# Local PostgreSQL (+ pgvector) for mosswork dual-backend development / tests
+#
+# From repo root:
+#   docker compose -f docker/docker-compose.postgres.yml up -d
+#   docker compose -f docker/docker-compose.postgres.yml down
+#
+# Connection (default):
+#   postgresql://mosswork:mosswork@127.0.0.1:5432/mosswork
+#
+# For pytest / mosswork:
+#   export MOSSWORK_TEST_DATABASE_URL='postgresql://mosswork:mosswork@127.0.0.1:5432/mosswork'
+#   export MOSSWORK_DATABASE_URL='postgresql://mosswork:mosswork@127.0.0.1:5432/mosswork'
+#
+# Init layers (ADR 002):
+#   - Control-plane schema → mosswork migrate (NNN_*.pg.sql), not this compose
+#   - CREATE EXTENSION vector → postgres/init-vector.sql (initdb.d only)
+#   - Agent memory tables → moss-memory at runtime
+# =============================================================================
+
+services:
+  postgres:
+    image: pgvector/pgvector:pg16
+    container_name: mosswork-postgres
+    restart: unless-stopped
+    ports:
+      - "${MOSSWORK_PG_PORT:-5432}:5432"
+    environment:
+      POSTGRES_USER: ${MOSSWORK_PG_USER:-mosswork}
+      POSTGRES_PASSWORD: ${MOSSWORK_PG_PASSWORD:-mosswork}
+      POSTGRES_DB: ${MOSSWORK_PG_DB:-mosswork}
+    volumes:
+      - mosswork_pgdata:/var/lib/postgresql/data
+      - ./postgres/init-vector.sql:/docker-entrypoint-initdb.d/01-vector.sql:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+volumes:
+  mosswork_pgdata:

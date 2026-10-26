@@ -1,0 +1,55 @@
+# =============================================================================
+# mosswork — Docker Compose
+#
+# 用法（在仓库根目录执行）:
+#   docker compose -f docker/docker-compose.yml up -d
+#   MOSSWORK_PORT=9090 docker compose -f docker/docker-compose.yml up -d
+#   MOSSWORK_DEFAULT_PASSWORD=<your-strong-password> docker compose -f docker/docker-compose.yml up -d
+#
+# 可在 docker/ 目录放置 .env 文件，例如:
+#   MOSSWORK_PORT=9090
+#   MOSSWORK_DEFAULT_PASSWORD=<your-strong-password>
+#   MOSSWORK_ADMIN_USERNAME=admin
+#   MOSSWORK_DATABASE_DRIVER=postgresql
+#   MOSSWORK_DATABASE_URL=postgresql://mosswork:mosswork@host.docker.internal:5432/mosswork
+#
+# 注意: docker/.env 仅用于 Compose 插值；变量必须列在下方 environment
+# 才会进入容器。也可写入数据卷内的 ~/.mosswork/env（宿主机挂载目录下的 env）。
+# 密码须 ≥8 位且同时包含字母与数字（与控制台改密策略一致）。
+# 后续计划：首次启动可改为随机生成密码并写入 credential.txt。
+# =============================================================================
+
+services:
+  mosswork:
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile
+    image: mosswork:latest
+    container_name: mosswork
+    restart: unless-stopped
+    ports:
+      - "${MOSSWORK_PORT:-8088}:${MOSSWORK_PORT:-8088}"
+    volumes:
+      - ${MOSSWORK_DATA:-~/.mosswork}:/data/.mosswork
+    environment:
+      - HOME=/data
+      - MOSSWORK_BIND_HOST=0.0.0.0
+      - MOSSWORK_PORT=${MOSSWORK_PORT:-8088}
+      - MOSSWORK_LOG_LEVEL=${MOSSWORK_LOG_LEVEL:-info}
+      - MOSSWORK_DEFAULT_PASSWORD=${MOSSWORK_DEFAULT_PASSWORD:-}
+      - MOSSWORK_ADMIN_USERNAME=${MOSSWORK_ADMIN_USERNAME:-admin}
+      - MOSSWORK_ADMIN_DISPLAY_NAME=${MOSSWORK_ADMIN_DISPLAY_NAME:-Admin}
+      - MOSSWORK_DATABASE_URL=${MOSSWORK_DATABASE_URL:-}
+      - MOSSWORK_DATABASE_DRIVER=${MOSSWORK_DATABASE_DRIVER:-}
+      - MOSSWORK_DATABASE_SQLITE_PATH=${MOSSWORK_DATABASE_SQLITE_PATH:-}
+      - MOSSWORK_DATABASE_HOST=${MOSSWORK_DATABASE_HOST:-}
+      - MOSSWORK_DATABASE_PORT=${MOSSWORK_DATABASE_PORT:-}
+      - MOSSWORK_DATABASE_NAME=${MOSSWORK_DATABASE_NAME:-}
+      - MOSSWORK_DATABASE_USER=${MOSSWORK_DATABASE_USER:-}
+      - MOSSWORK_DATABASE_PASSWORD=${MOSSWORK_DATABASE_PASSWORD:-}
+      - OPENAI_API_KEY=${OPENAI_API_KEY:-}
+      - DASHSCOPE_API_KEY=${DASHSCOPE_API_KEY:-}
+      - LANGFUSE_TRACING_ENABLED=${LANGFUSE_TRACING_ENABLED:-true}
+      - LANGFUSE_PUBLIC_KEY=${LANGFUSE_PUBLIC_KEY:-}
+      - LANGFUSE_SECRET_KEY=${LANGFUSE_SECRET_KEY:-}
+      - LANGFUSE_BASE_URL=${LANGFUSE_BASE_URL:-}

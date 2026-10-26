@@ -1,0 +1,390 @@
+# Separate deployment entry: do not combine with compose.yml.
+name: moss-server
+services:
+  postgres:
+    image: postgres:17.11-bookworm
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: mosswork_bootstrap
+      POSTGRES_PASSWORD: ${MOSSWORK_PG_BOOTSTRAP_PASSWORD:?Run prepare.py}
+      MOSSWORK_APP_PASSWORD: ${MOSSWORK_APP_PASSWORD:?Run prepare.py}
+      IM_APP_PASSWORD: ${IM_APP_PASSWORD:?Run prepare.py}
+    volumes:
+    - ${MOSSWORK_DATA_ROOT:?Set absolute data directory}/postgres:/var/lib/postgresql/data
+    - ./init-databases.sh:/docker-entrypoint-initdb.d/10-databases.sh:ro
+    networks:
+    - internal
+    healthcheck:
+      test:
+      - CMD-SHELL
+      - pg_isready -U $$POSTGRES_USER -d postgres
+      interval: 5s
+      timeout: 3s
+      retries: 20
+    mem_limit: ${MOSSWORK_PG_MEMORY:-512m}
+    command:
+    - postgres
+    - -c
+    - max_connections=80
+    - -c
+    - shared_buffers=128MB
+  communication:
+    restart: unless-stopped
+    cap_drop:
+    - ALL
+    security_opt:
+    - no-new-privileges:true
+    logging:
+      driver: json-file
+      options:
+        max-size: 10m
+        max-file: '3'
+    image: ${MOSSWORK_IM_IMAGE:-moss-server-im:source}
+    build:
+      context: ../../services/communication
+    environment:
+      MOSSWORK_IM_DATABASE_URL: postgresql://im_app:${IM_APP_PASSWORD}@postgres:5432/mosswork_im?sslmode=disable
+      MOSSWORK_IM_MEDIA_ROOT: /data/media
+      MOSSWORK_IM_IDENTITY_KEY_FILE: /run/secrets/im_identity
+      MOSSWORK_IM_CURSOR_KEY_FILE: /run/secrets/im_cursor
+      MOSSWORK_IM_POOL_MAX_CONNS: ${MOSSWORK_IM_POOL_MAX_CONNS:-8}
+    secrets:
+    - im_identity
+    - im_cursor
+    volumes:
+    - ${MOSSWORK_DATA_ROOT}/media:/data/media
+    networks:
+    - internal
+    depends_on:
+      postgres:
+        condition: service_healthy
+    pids_limit: 128
+    mem_limit: ${MOSSWORK_IM_MEMORY:-256m}
+  worker:
+    restart: 'no'
+    cap_drop:
+    - ALL
+    security_opt:
+    - no-new-privileges:true
+    logging: &id001
+      driver: json-file
+      options:
+        max-size: 10m
+        max-file: '3'
+    image: ${MOSSWORK_APP_IMAGE:-moss-server:source}
+    build:
+      context: ../..
+      dockerfile: docker/enterprise/Dockerfile
+      args:
+        APP_IMAGE: ${MOSSWORK_BASE_IMAGE:-moss-server-base:source}
+    init: true
+    user: 1000:1000
+    group_add:
+    - ${MOSSWORK_DOCKER_GID:?Set Docker socket group id}
+    environment:
+      HOME: /data
+      MOSSWORK_HOME: /data/.mosswork
+      MOSSWORK_DATABASE_URL: postgresql://mosswork_app:${MOSSWORK_APP_PASSWORD}@postgres:5432/mosswork?sslmode=disable
+      MOSSWORK_DEVICE_CHANNEL_ENABLED: 'true'
+      MOSSWORK_COMPANY_RUNTIME_ENABLED: 'true'
+      MOSSWORK_IM_URL: http://communication:8090
+      MOSSWORK_IM_IDENTITY_KEY_FILE: /run/secrets/im_identity
+      MOSSWORK_AGENT_ISOLATION: docker
+      MOSSWORK_SANDBOX_IMAGE: ${MOSSWORK_APP_IMAGE:-moss-server:source}
+      MOSSWORK_SANDBOX_HOST_DATA_DIR: ${MOSSWORK_DATA_ROOT}/app
+      MOSSWORK_MEDIA_HTTP_ORIGINS: ${MOSSWORK_MEDIA_HTTP_ORIGINS:-}
+      MOSSWORK_DEFAULT_TIMEZONE: ${MOSSWORK_DEFAULT_TIMEZONE:-Asia/Shanghai}
+      MOSSWORK_NODE_ID: runtime-worker
+      MOSSWORK_NODE_INCARNATION: ${MOSSWORK_WORKER_BOOT:?Set a fresh nonce before recreating
+        the worker}
+      MOSSWORK_RESOURCE_PROFILE: ${MOSSWORK_RESOURCE_PROFILE:-4g}
+      MOSSWORK_RUNTIME_IDLE_SECONDS: ${MOSSWORK_RUNTIME_IDLE_SECONDS:-300}
+      MOSSWORK_DATABASE_POOL_MIN: '1'
+      MOSSWORK_DATABASE_POOL_MAX: ${MOSSWORK_WORKER_POOL_MAX:-4}
+      MOSSWORK_SANDBOX_MEMORY: ${MOSSWORK_SANDBOX_MEMORY:-256m}
+      MOSSWORK_MAX_UPLOAD_MB: ${MOSSWORK_MAX_UPLOAD_MB:-32}
+    secrets:
+    - im_identity
+    volumes:
+    - ${MOSSWORK_DATA_ROOT}/app:/data/.mosswork
+    - ${MOSSWORK_DOCKER_SOCKET:-/var/run/docker.sock}:/var/run/docker.sock
+    networks:
+    - default
+    - internal
+    depends_on:
+      postgres:
+        condition: service_healthy
+      initialize:
+        condition: service_completed_successfully
+      communication:
+        condition: service_started
+    healthcheck:
+      test:
+      - CMD
+      - curl
+      - -fsS
+      - http://127.0.0.1:8088/api/health/ready
+      interval: 30s
+      timeout: 15s
+      start_period: 90s
+      retries: 3
+    pids_limit: 512
+    mem_limit: ${MOSSWORK_WORKER_MEMORY:-1152m}
+    command:
+    - mosswork
+    - run
+    - --role
+    - worker
+    - --host
+    - 0.0.0.0
+    - --port
+    - '8088'
+    labels:
+      org.mosswork.node: runtime-worker
+      org.mosswork.incarnation: ${MOSSWORK_WORKER_BOOT}
+    stop_grace_period: 60s
+  initialize:
+    restart: 'no'
+    cap_drop:
+    - ALL
+    security_opt:
+    - no-new-privileges:true
+    logging:
+      driver: json-file
+      options:
+        max-size: 10m
+        max-file: '3'
+    image: ${MOSSWORK_APP_IMAGE:-moss-server:source}
+    build:
+      context: ../..
+      dockerfile: docker/enterprise/Dockerfile
+      args:
+        APP_IMAGE: ${MOSSWORK_BASE_IMAGE:-moss-server-base:source}
+    init: true
+    user: 1000:1000
+    environment:
+      HOME: /data
+      MOSSWORK_HOME: /data/.mosswork
+      MOSSWORK_DATABASE_URL: postgresql://mosswork_app:${MOSSWORK_APP_PASSWORD}@postgres:5432/mosswork?sslmode=disable
+      MOSSWORK_DEVICE_CHANNEL_ENABLED: 'true'
+      MOSSWORK_COMPANY_RUNTIME_ENABLED: 'true'
+      MOSSWORK_IM_URL: http://communication:8090
+      MOSSWORK_IM_IDENTITY_KEY_FILE: /run/secrets/im_identity
+      MOSSWORK_AGENT_ISOLATION: docker
+      MOSSWORK_SANDBOX_IMAGE: ${MOSSWORK_APP_IMAGE:-moss-server:source}
+      MOSSWORK_SANDBOX_HOST_DATA_DIR: ${MOSSWORK_DATA_ROOT}/app
+      MOSSWORK_MEDIA_HTTP_ORIGINS: ${MOSSWORK_MEDIA_HTTP_ORIGINS:-}
+      MOSSWORK_DEFAULT_TIMEZONE: ${MOSSWORK_DEFAULT_TIMEZONE:-Asia/Shanghai}
+      MOSSWORK_NODE_ID: runtime-worker
+      MOSSWORK_RESOURCE_PROFILE: ${MOSSWORK_RESOURCE_PROFILE:-4g}
+      MOSSWORK_WORKER_URLS: ${MOSSWORK_WORKER_URLS:-}
+      MOSSWORK_MODEL_CONCURRENCY: ${MOSSWORK_MODEL_CONCURRENCY:-0}
+      MOSSWORK_SANDBOX_TOTAL_MEMORY: ${MOSSWORK_SANDBOX_TOTAL_MEMORY:-512m}
+      MOSSWORK_DATABASE_POOL_MIN: '1'
+      MOSSWORK_DATABASE_POOL_MAX: '1'
+      MOSSWORK_SANDBOX_MEMORY: ${MOSSWORK_SANDBOX_MEMORY:-256m}
+      MOSSWORK_MAX_UPLOAD_MB: ${MOSSWORK_MAX_UPLOAD_MB:-32}
+    secrets:
+    - im_identity
+    volumes:
+    - ${MOSSWORK_DATA_ROOT}/app:/data/.mosswork
+    networks:
+    - default
+    - internal
+    depends_on:
+      postgres:
+        condition: service_healthy
+    pids_limit: 512
+    mem_limit: 768m
+    command:
+    - mosswork
+    - run
+    - --role
+    - init
+  web1:
+    restart: unless-stopped
+    cap_drop:
+    - ALL
+    security_opt:
+    - no-new-privileges:true
+    logging:
+      driver: json-file
+      options:
+        max-size: 10m
+        max-file: '3'
+    image: ${MOSSWORK_APP_IMAGE:-moss-server:source}
+    init: true
+    user: 1000:1000
+    environment:
+      HOME: /data
+      MOSSWORK_HOME: /data/.mosswork
+      MOSSWORK_DATABASE_URL: postgresql://mosswork_app:${MOSSWORK_APP_PASSWORD}@postgres:5432/mosswork?sslmode=disable
+      MOSSWORK_RESOURCE_PROFILE: ${MOSSWORK_RESOURCE_PROFILE:-4g}
+      MOSSWORK_DATABASE_POOL_MIN: '1'
+      MOSSWORK_MAX_UPLOAD_MB: ${MOSSWORK_MAX_UPLOAD_MB:-32}
+      MOSSWORK_WORKER_URL: http://worker:8088
+      MOSSWORK_IM_URL: http://communication:8090
+      MOSSWORK_IM_IDENTITY_KEY_FILE: /run/secrets/im_identity
+      MOSSWORK_DATABASE_POOL_MAX: ${MOSSWORK_WEB_POOL_MAX:-2}
+    secrets:
+    - im_identity
+    volumes:
+    - ${MOSSWORK_DATA_ROOT}/app:/data/.mosswork:ro
+    networks:
+    - default
+    - internal
+    depends_on:
+      initialize:
+        condition: service_completed_successfully
+      worker:
+        condition: service_healthy
+      worker2:
+        condition: service_healthy
+        required: false
+      worker3:
+        condition: service_healthy
+        required: false
+    healthcheck:
+      test:
+      - CMD
+      - curl
+      - -fsS
+      - http://127.0.0.1:8088/api/health/ready
+      interval: 30s
+      timeout: 15s
+      start_period: 90s
+      retries: 3
+    pids_limit: 64
+    mem_limit: ${MOSSWORK_WEB_MEMORY:-320m}
+    command:
+    - mosswork
+    - run
+    - --role
+    - web
+    - --host
+    - 0.0.0.0
+    - --port
+    - '8088'
+    stop_grace_period: 60s
+    read_only: true
+    tmpfs:
+    - /tmp:size=64m,mode=1777
+  web2:
+    restart: unless-stopped
+    cap_drop:
+    - ALL
+    security_opt:
+    - no-new-privileges:true
+    logging:
+      driver: json-file
+      options:
+        max-size: 10m
+        max-file: '3'
+    image: ${MOSSWORK_APP_IMAGE:-moss-server:source}
+    init: true
+    user: 1000:1000
+    environment:
+      HOME: /data
+      MOSSWORK_HOME: /data/.mosswork
+      MOSSWORK_DATABASE_URL: postgresql://mosswork_app:${MOSSWORK_APP_PASSWORD}@postgres:5432/mosswork?sslmode=disable
+      MOSSWORK_RESOURCE_PROFILE: ${MOSSWORK_RESOURCE_PROFILE:-4g}
+      MOSSWORK_DATABASE_POOL_MIN: '1'
+      MOSSWORK_MAX_UPLOAD_MB: ${MOSSWORK_MAX_UPLOAD_MB:-32}
+      MOSSWORK_WORKER_URL: http://worker:8088
+      MOSSWORK_IM_URL: http://communication:8090
+      MOSSWORK_IM_IDENTITY_KEY_FILE: /run/secrets/im_identity
+      MOSSWORK_DATABASE_POOL_MAX: ${MOSSWORK_WEB_POOL_MAX:-2}
+    secrets:
+    - im_identity
+    volumes:
+    - ${MOSSWORK_DATA_ROOT}/app:/data/.mosswork:ro
+    networks:
+    - default
+    - internal
+    depends_on:
+      initialize:
+        condition: service_completed_successfully
+      worker:
+        condition: service_healthy
+    healthcheck:
+      test:
+      - CMD
+      - curl
+      - -fsS
+      - http://127.0.0.1:8088/api/health/ready
+      interval: 30s
+      timeout: 15s
+      start_period: 90s
+      retries: 3
+    pids_limit: 64
+    mem_limit: ${MOSSWORK_WEB_MEMORY:-320m}
+    command:
+    - mosswork
+    - run
+    - --role
+    - web
+    - --host
+    - 0.0.0.0
+    - --port
+    - '8088'
+    stop_grace_period: 60s
+    read_only: true
+    tmpfs:
+    - /tmp:size=64m,mode=1777
+  worker2:
+    extends:
+      service: worker
+    profiles: [two-workers, three-workers]
+    environment:
+      MOSSWORK_NODE_ID: runtime-worker2
+      MOSSWORK_NODE_INCARNATION: ${MOSSWORK_WORKER2_BOOT:-${MOSSWORK_WORKER_BOOT}}
+    labels:
+      org.mosswork.node: runtime-worker2
+      org.mosswork.incarnation: ${MOSSWORK_WORKER2_BOOT:-${MOSSWORK_WORKER_BOOT}}
+  worker3:
+    extends:
+      service: worker
+    profiles: [three-workers]
+    environment:
+      MOSSWORK_NODE_ID: runtime-worker3
+      MOSSWORK_NODE_INCARNATION: ${MOSSWORK_WORKER3_BOOT:-${MOSSWORK_WORKER_BOOT}}
+    labels:
+      org.mosswork.node: runtime-worker3
+      org.mosswork.incarnation: ${MOSSWORK_WORKER3_BOOT:-${MOSSWORK_WORKER_BOOT}}
+  web3:
+    extends:
+      service: web1
+    profiles: [three-workers]
+  edge:
+    image: ${MOSSWORK_PROXY_IMAGE:-nginx:alpine}
+    restart: unless-stopped
+    ports:
+    - ${MOSSWORK_BIND_ADDRESS:-127.0.0.1}:${MOSSWORK_PORT:-8088}:8080
+    volumes:
+    - ./roles-nginx.conf:/etc/nginx/templates/nginx.conf.template:ro
+    environment:
+      NGINX_ENVSUBST_OUTPUT_DIR: /etc/nginx
+      NGINX_ENVSUBST_FILTER: ^MOSSWORK_WEB3_UPSTREAM$$
+      MOSSWORK_WEB3_UPSTREAM: ${MOSSWORK_WEB3_UPSTREAM:-}
+    depends_on:
+      web1:
+        condition: service_healthy
+      web2:
+        condition: service_healthy
+      web3:
+        condition: service_healthy
+        required: false
+    mem_limit: 64m
+    pids_limit: 64
+    logging: *id001
+    networks:
+    - default
+    - internal
+networks:
+  internal:
+    internal: true
+secrets:
+  im_identity:
+    file: ${MOSSWORK_DATA_ROOT}/secrets/im_identity
+  im_cursor:
+    file: ${MOSSWORK_DATA_ROOT}/secrets/im_cursor

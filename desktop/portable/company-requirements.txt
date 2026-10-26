@@ -1,0 +1,2 @@
+# Additional document runtime dependency, installed against the exported uv lock.
+pandas==2.3.3
