@@ -1,0 +1,106 @@
+version: "3"
+
+# Shell UI embeds the login bundle and the complete employee dashboard.
+
+tasks:
+  go:mod:tidy:
+    summary: Runs go mod tidy
+    internal: true
+    run: once
+    cmds:
+      - go mod tidy
+
+  install:frontend:deps:
+    summary: Installs frontend dependencies when the dependency files change
+    # Share one dependency fingerprint through common and platform task includes.
+    label: frontend:dependencies
+    sources:
+      - ../../dashboard/package.json
+      - ../../dashboard/package-lock.json
+    generates:
+      - ../../dashboard/node_modules/.package-lock.json
+    cmds:
+      - npm ci --prefix ../../dashboard --no-audit --no-fund
+
+  build:devserver:
+    summary: Builds the embedded-assets development server when its source changes
+    sources:
+      - cmd/devserver/**/*.go
+      - go.mod
+      - go.sum
+    generates:
+      - .task/devserver.exe
+    cmds:
+      - go build -o .task/devserver.exe ./cmd/devserver
+
+  build:frontend:
+    summary: Builds the embedded login assets and employee dashboard
+    run: once
+    deps:
+      - task: install:frontend:deps
+    cmds:
+      - node ../login/build.mjs
+      - cmd: python ../build-dashboard.py
+        platforms: [windows]
+      - cmd: python3 ../build-dashboard.py
+        platforms: [linux, darwin]
+
+  generate:bindings:
+    summary: Bindings unused (Call.ByName)
+    cmds:
+      - echo "skip generate bindings"
+
+  generate:icons:
+    summary: Generates .ico from appicon.png
+    dir: build
+    sources:
+      - appicon.png
+    generates:
+      - windows/icon.ico
+    cmds:
+      # Windows / Linux keep the full-bleed artwork.
+      - wails3 generate icons -input appicon.png -windowsfilename windows/icon.ico -macfilename ""
+
+  generate:icons:darwin:
+    summary: Generates .icns from appicon-macos.png via sips + iconutil
+    dir: build
+    sources:
+      - appicon-macos.png
+    generates:
+      - darwin/icons.icns
+    cmds:
+      # macOS expects 824x824 artwork on a 1024x1024 canvas; a full-bleed tile
+      # renders ~24% larger than every other app in the Dock and Launchpad.
+      #
+      # sips downsamples through Core Graphics. wails3's encoder resizes with
+      # Mitchell-Netravali, which rings on the logo's high-contrast edges and
+      # leaves stray pixels in the 32/64/128 layers.
+      - |
+        set -euo pipefail
+        work="$(mktemp -d "${TMPDIR:-/tmp}/mosswork-iconset.XXXXXX")"
+        trap 'rm -rf "$work"' EXIT
+        iconset="${work}/AppIcon.iconset"
+        mkdir -p "$iconset"
+        for spec in 16:icon_16x16 32:icon_16x16@2x 32:icon_32x32 64:icon_32x32@2x \
+                    128:icon_128x128 256:icon_128x128@2x 256:icon_256x256 \
+                    512:icon_256x256@2x 512:icon_512x512 1024:icon_512x512@2x; do
+          px="${spec%%:*}"
+          sips -s format png -z "$px" "$px" appicon-macos.png \
+            --out "${iconset}/${spec#*:}.png" >/dev/null
+        done
+        iconutil -c icns "$iconset" -o darwin/icons.icns
+
+  dev:frontend:
+    summary: Serves the embedded shell assets for Wails dev mode
+    # build/config.yml finishes install:frontend:deps before starting this task.
+    # Reinstalling here races the concurrent dashboard build against npm ci.
+    deps:
+      - task: build:devserver
+    cmds:
+      - ./.task/devserver.exe
+
+  update:build-assets:
+    summary: Updates generated build assets from config.yml
+    dir: build
+    cmds:
+      - wails3 update build-assets -name "{{.APP_NAME}}" -binaryname "{{.APP_NAME}}" -config config.yml -dir .

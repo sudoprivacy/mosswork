@@ -1,0 +1,41 @@
+name: mosswork release checks
+
+on:
+  pull_request:
+    paths:
+      - '.github/workflows/mosswork-*.yml'
+      - 'desktop/package-company.py'
+      - 'desktop/*tools*'
+      - 'desktop/tests/**'
+      - 'docker/**'
+      - 'packages/moss-harness/**'
+      - 'desktop/portable/**'
+      - 'tests/unit/infra/test_local_harness.py'
+      - 'scripts/install-moss-server.sh'
+      - 'tools/*public_source.py'
+      - 'tests/unit/deployment/**'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  release-checks:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v6
+        with:
+          python-version: '3.12'
+          enable-cache: true
+      - name: Test packaging, exports and deployment
+        run: uv run --frozen pytest tests/unit/deployment desktop/tests/test_package_company.py desktop/tests/test_company_tools.py tests/unit/infra/test_local_harness.py tests/unit/infra/test_brand_environment.py -q
+      - name: Check shell and workflow syntax
+        run: |
+          bash -n scripts/install-moss-server.sh
+          shellcheck scripts/install-moss-server.sh
+          go run github.com/rhysd/actionlint/cmd/actionlint@v1.7.7 .github/workflows/mosswork-ci.yml .github/workflows/mosswork-release.yml
+      - name: Validate public source export
+        run: |
+          python3 tools/export_public_source.py --output "$RUNNER_TEMP/mosswork-source"
+          python3 tools/check_public_source.py --root "$RUNNER_TEMP/mosswork-source"

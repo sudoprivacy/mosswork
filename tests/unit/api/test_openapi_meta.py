@@ -1,0 +1,38 @@
+"""Unit tests for OpenAPI schema customization."""
+
+from __future__ import annotations
+
+from pathlib import Path
+
+from fastapi.testclient import TestClient
+from tests.support.app import ensure_control_plane_bound, write_mosswork_config
+
+from mosswork.api.app import build_app
+from mosswork.infra.server import MossworkServer
+
+
+async def test_openapi_has_bearer_security_and_descriptions(tmp_mosswork_home: Path) -> None:
+    write_mosswork_config(tmp_mosswork_home, enable_api_docs=True)
+    srv = MossworkServer(home=tmp_mosswork_home)
+    await srv.start()
+    await ensure_control_plane_bound(srv)
+    try:
+        app = build_app(srv)
+        with TestClient(app) as c:
+            spec = c.get("/api/openapi.json").json()
+        assert spec["info"]["description"]
+        assert "BearerAuth" in spec["components"]["securitySchemes"]
+        login = spec["paths"]["/api/auth/login"]["post"]
+        assert login["summary"] == "Sign in"
+        me = spec["paths"]["/api/auth/me"]["get"]
+        assert "BearerAuth" in me["security"][0]
+        assert "security" not in spec["paths"]["/api/setup/status"]["get"]
+        messaging = spec["paths"]["/api/im/conversations/{id}/messages"]["post"]
+        assert messaging["summary"] == "Send a text or image message"
+        assert (
+            "client_message_id"
+            in messaging["requestBody"]["content"]["application/json"]["schema"]["properties"]
+        )
+        assert spec["paths"]["/api/im/media/{id}"]["get"]["summary"]
+    finally:
+        await srv.stop()

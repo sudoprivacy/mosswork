@@ -1,0 +1,22 @@
+{
+  "darwin-arm64": [
+    {
+      "url": "https://sudowork-runtime-1309794936.cos.accelerate.myqcloud.com/ffmpeg/autobuild-2026-09-05-13-10/ffmpeg-darwin-arm64.tar.gz",
+      "sha256": "e1414711b6399d0852493538e5f8b476044bc45dbd46973913f7a60b0e7f68ea",
+      "files": [
+        "ffmpeg",
+        "ffprobe"
+      ]
+    }
+  ],
+  "windows-amd64": [
+    {
+      "url": "https://sudowork-runtime-1309794936.cos.accelerate.myqcloud.com/ffmpeg/autobuild-2026-09-05-13-10/ffmpeg-win32-x64.tar.gz",
+      "sha256": "730264bebacaeb872108d5683197f6cd20e120472731f3cf3f3e6240696c6fb0",
+      "files": [
+        "ffmpeg.exe",
+        "ffprobe.exe"
+      ]
+    }
+  ]
+}
