@@ -1,0 +1,60 @@
+.downloads {
+  width: 100%;
+  text-align: center;
+}
+
+.status {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  margin: 12px 0;
+  color: var(--fn-text-tertiary);
+  font-size: 13px;
+}
+
+.title {
+  margin: 0;
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--fn-text-secondary);
+}
+
+.version {
+  margin: 6px 0 14px;
+  font-size: 12px;
+  color: var(--fn-text-tertiary);
+}
+
+.links {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.link {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 10px 6px;
+  border: 1px solid var(--fn-border-primary);
+  border-radius: 10px;
+  color: var(--fn-text-primary);
+  font-size: 13px;
+  text-decoration: none;
+  transition: border-color var(--fn-transition);
+
+  &:hover,
+  &:focus-visible {
+    border-color: var(--fn-color-primary);
+    color: var(--fn-color-primary);
+  }
+
+  small {
+    display: block;
+    margin-top: 3px;
+    font-size: 11px;
+    color: var(--fn-text-tertiary);
+  }
+}

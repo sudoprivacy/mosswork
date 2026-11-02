@@ -5327,6 +5327,12 @@
     "expertsRequired": "This page needs an expert"
   },
   "login": {
+    "clientDownloads": {
+      "title": "Download desktop client",
+      "loading": "Loading download links…",
+      "unavailable": "Download links are unavailable. Please refresh and try again.",
+      "version": "Matches this server · v{{version}}"
+    },
     "title": "Sign in",
     "subtitle": "An intelligent partner that understands you, helps you, and grows with you",
     "username": "Username or email",

@@ -2,7 +2,7 @@
 
 [English](open-source-release_EN.md)
 
-本文面向维护者，说明 [mosswork](https://github.com/sudoprivacy/mosswork) 的源码导出、校验和发行要求。当前源码版本为 `0.0.4`，主项目、自有引擎及通信模块采用 MIT。
+本文面向维护者，说明 [mosswork](https://github.com/sudoprivacy/mosswork) 的源码导出、校验和发行要求。当前源码版本为 `0.0.5`，主项目、自有引擎及通信模块采用 MIT。
 
 本仓库提供源码，服务端镜像与 Windows/macOS 企业客户端按对应构建文档生成。发行材料通过[本仓库 Releases](https://github.com/sudoprivacy/mosswork/releases)分发；二进制安装包需单独完成目标平台验证，并记录签名与公证状态。
 
@@ -20,7 +20,7 @@
 
 ## Tag 自动发布
 
-推送与 `pyproject.toml` 版本完全一致的 `v<version>` tag 后，`mosswork-release.yml` 自动构建。当前版本对应 `v0.0.4`；工作流不自动修改版本、提交代码或创建 tag。手工重跑须选择同一个 tag，选择分支会被拒绝。
+推送与 `pyproject.toml` 版本完全一致的 `v<version>` tag 后，`mosswork-release.yml` 自动构建。当前版本对应 `v0.0.5`；工作流不自动修改版本、提交代码或创建 tag。手工重跑须选择同一个 tag，选择分支会被拒绝。
 
 发布前先按下文导出并验证完整公开源码，将确定的源码提交到发行仓库，再由维护者推送 tag。流程从该 tag 再次导出完整公开范围，并从同一份导出物构建客户端和镜像。
 
@@ -32,7 +32,7 @@
 | 本地组件 | moss-harness、moss-memory、moss-browser、moss-gateway 四个 wheel，源码位于 `packages/` |
 | 下载附件 | 公开源码、部署包、`install-moss-server.sh`、构建记录、镜像 ID 与 SHA-256 |
 
-CI 不发布 macOS Intel、Windows ARM、Linux 客户端、PyPI 包或独立 portable 下载包。两个客户端和两个架构的镜像都成功后才发布 GitHub Release，任一失败不会发布部分版本。预发布 tag（如 `v0.0.4b1`）标记为 prerelease，不更新正式版 `latest`。已公开的 Release 不允许覆盖。
+CI 不发布 macOS Intel、Windows ARM、Linux 客户端、PyPI 包或独立 portable 下载包。两个客户端和两个架构的镜像都成功后才发布 GitHub Release，任一失败不会发布部分版本。预发布 tag（如 `v0.0.5b1`）标记为 prerelease，不更新正式版 `latest`。已公开的 Release 不允许覆盖。
 
 仓库需允许 Actions 的 `GITHUB_TOKEN` 写入 Releases。所有产物均作为 Release 附件分发，无需 Packages 权限或镜像仓库凭据。两个原生 Linux runner 分别构建并导出对应架构的 Docker 镜像包，重新导入归档后验证首次部署、健康检查和重复安装。发布前校验每个附件小于 GitHub 的 2 GiB 上限，并生成 SHA-256 清单。
 

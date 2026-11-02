@@ -5327,6 +5327,12 @@
     "expertsRequired": "此页需要专家"
   },
   "login": {
+    "clientDownloads": {
+      "title": "下载客户端",
+      "loading": "正在获取下载链接…",
+      "unavailable": "暂时无法获取下载链接，请刷新后重试。",
+      "version": "与服务端版本一致 · v{{version}}"
+    },
     "title": "登录",
     "subtitle": "懂你、帮你、陪你成长的智能伙伴",
     "username": "用户名或邮箱",

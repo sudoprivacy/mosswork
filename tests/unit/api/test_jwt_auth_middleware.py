@@ -26,6 +26,7 @@ def test_exempt_paths() -> None:
     assert is_jwt_exempt_path("/api/setup/status")
     assert is_jwt_exempt_path("/api/auth/login")
     assert is_jwt_exempt_path("/api/auth/captcha")
+    assert is_jwt_exempt_path("/api/auth/client-downloads")
     assert is_jwt_exempt_path("/api/auth/oidc/status")
     assert is_jwt_exempt_path("/api/auth/oidc/start")
     assert is_jwt_exempt_path("/api/auth/oidc/callback")
@@ -73,6 +74,23 @@ async def test_middleware_allows_login_without_token(client) -> None:
     await bootstrap_admin(c, home)
     r = await c.post("/api/auth/login", json={"username": "admin", "password": "TestPass12"})
     assert r.status_code == 200
+
+
+@pytest.mark.parametrize("version", ["0.0.4", "0.0.5b1"])
+async def test_public_client_downloads_match_running_server(client, monkeypatch, version) -> None:
+    from octop.api.routers import auth
+
+    c, _srv, home = client
+    await bootstrap_admin(c, home)
+    monkeypatch.setattr(auth, "__version__", version)
+    response = await c.get("/api/auth/client-downloads")
+    assert response.status_code == 200
+    base = f"https://github.com/sudoprivacy/mosswork/releases/download/v{version}"
+    assert response.json() == {
+        "version": version,
+        "windows_url": f"{base}/mosswork-company-windows-amd64-{version}.exe",
+        "macos_url": f"{base}/mosswork-company-macos-arm64-{version}.dmg",
+    }
 
 
 async def test_middleware_allows_api_docs_without_token(tmp_path: Path) -> None:

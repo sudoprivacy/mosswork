@@ -10,6 +10,7 @@ from typing import Any
 from fastapi import APIRouter, Depends, File, Request, Response, UploadFile
 from pydantic import BaseModel, Field
 
+from octop import __version__
 from octop.api.common.client_ip import resolve_client_ip
 from octop.api.deps import _decode, current_user, extract_raw_token, get_server, sign_token
 from octop.infra.auth.captcha import current_env, ensure_captcha, load_effective, public_config
@@ -80,6 +81,27 @@ class CaptchaPublicResponse(BaseModel):
 class ChangePasswordBody(BaseModel):
     old_password: str
     new_password: str
+
+
+class ClientDownloadsResponse(BaseModel):
+    version: str = Field(description="Version of the running server and matching desktop clients.")
+    windows_url: str = Field(description="Windows x64 installer for this server version.")
+    macos_url: str = Field(description="macOS 13+ Apple Silicon installer for this server version.")
+
+
+@router.get(
+    "/client-downloads",
+    summary="Download desktop clients matching this server",
+    description="Public installer links for the running server version. No login is required.",
+    response_model=ClientDownloadsResponse,
+)
+async def client_downloads() -> ClientDownloadsResponse:
+    base = f"https://github.com/sudoprivacy/mosswork/releases/download/v{__version__}"
+    return ClientDownloadsResponse(
+        version=__version__,
+        windows_url=f"{base}/mosswork-company-windows-amd64-{__version__}.exe",
+        macos_url=f"{base}/mosswork-company-macos-arm64-{__version__}.dmg",
+    )
 
 
 @router.get(

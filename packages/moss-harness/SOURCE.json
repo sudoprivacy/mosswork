@@ -6,7 +6,7 @@
   "license": "MIT",
   "package": "moss-harness",
   "python_module": "moss_harness",
-  "version": "0.0.4",
+  "version": "0.0.5",
   "excluded_upstream_materials": [
     "src/octop_harness/builtin/skills/en/powerpoint (restricted redistribution license)",
     "src/octop_harness/builtin/skills/zh/powerpoint (translation of the same restricted skill)"

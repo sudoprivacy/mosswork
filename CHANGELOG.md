@@ -4,6 +4,16 @@
 
 格式遵循 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/)，版本号遵循 [语义化版本规范](https://semver.org/spec/v2.0.0.html)。
 
+## [0.0.5] - 2026-11-02
+
+### 新增
+- moss-server 登录页新增「下载客户端」Tab，提供与当前服务端版本一致的 GitHub Release 下载链接：Windows x64 EXE、macOS 13+ Apple Silicon DMG。
+- 下载页显示对应版本，支持中文、英文和深色主题；切换 Tab 保留已输入的登录信息。
+
+### 修复
+- 登录页在较矮窗口中可以滚动到底部，避免登录按钮和下载入口被遮挡。
+- 客户端员工登录页和启动页统一使用 mosswork 图标，修复旧形象残留。
+
 ## [0.0.4] - 2026-11-02
 
 ### 部署

@@ -84,7 +84,7 @@ export function EmployeeLogin() {
       <button type="button" aria-pressed={!en} onClick={()=>void chooseLanguage('zh')}>中文</button>
       <button type="button" aria-pressed={en} onClick={()=>void chooseLanguage('en')}>English</button>
     </div>
-    <img className="logo" src="/mosswork-mascot-peek.webp" alt={text('mosswork','mosswork')}/><div className="brand">mosswork <span className="edition">{text('企业版','Enterprise')}</span></div>
+    <img className="logo" src="/mosswork-icon.png" alt={text('mosswork','mosswork')}/><div className="brand">mosswork <span className="edition">{text('企业版','Enterprise')}</span></div>
     <h1>{text('员工登录','Employee sign in')}</h1><p className="intro">{text('使用管理员分配的账号登录','Sign in with the account provided by your administrator')}</p>
     <label htmlFor="username">{text('账号','Account')}</label><input id="username" autoComplete="username" placeholder={text('用户名或邮箱','Username or email')} required maxLength={320} value={username} onChange={e=>setUsername(e.target.value)} disabled={busy}/>
     <label htmlFor="password">{text('密码','Password')}</label><input id="password" type="password" autoComplete="current-password" placeholder={text('请输入密码','Password')} required maxLength={4096} value={password} onChange={e=>setPassword(e.target.value)} disabled={busy}/>
