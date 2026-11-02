@@ -244,20 +244,25 @@ jobs:
           mkdir -p "$RUNNER_TEMP/images"
           docker image inspect "$app" "$im" "$database" > "$RUNNER_TEMP/images/moss-server-linux-${IMAGE_ARCH}-images.json"
           docker image save "$app" "$im" "$database" | gzip -1 > "$RUNNER_TEMP/images/moss-server-images-${RELEASE_TAG}-linux-${IMAGE_ARCH}.tar.gz"
-          # Reload the exported archive so the deployment test uses the release payload.
+          # Require the offline installer to reload the exported release payload.
           docker image rm "$app" "$im" "$database"
-          docker image load --input "$RUNNER_TEMP/images/moss-server-images-${RELEASE_TAG}-linux-${IMAGE_ARCH}.tar.gz"
-      - name: Test first install and repeat install from release images
+      - name: Test offline install from archives and already-loaded images
         working-directory: ${{ runner.temp }}/source
         run: |
           set -euo pipefail
-          tar -xzf "$RUNNER_TEMP/assets/moss-server-deploy-${RELEASE_TAG}.tar.gz" -C "$RUNNER_TEMP"
+          mkdir "$RUNNER_TEMP/offline"
+          ln -s "$RUNNER_TEMP/assets/moss-server-deploy-${RELEASE_TAG}.tar.gz" "$RUNNER_TEMP/offline/"
+          ln -s "$RUNNER_TEMP/images/moss-server-images-${RELEASE_TAG}-linux-${IMAGE_ARCH}.tar.gz" "$RUNNER_TEMP/offline/"
+          cd "$RUNNER_TEMP/offline"
+          sha256sum ./*.tar.gz | sed 's|  ./|  |' > SHA256SUMS.txt
           for attempt in 1 2; do
-            sudo bash "$RUNNER_TEMP/moss-server/deploy.sh" --version "$RELEASE_TAG" \
+            sudo bash "$RUNNER_TEMP/assets/install-moss-server.sh" --offline-dir "$RUNNER_TEMP/offline" \
+              --version "$RELEASE_TAG" \
               --install-dir "$RUNNER_TEMP/moss-server-smoke" --bind 127.0.0.1 --port 18088
             curl --fail --silent --show-error http://127.0.0.1:18088/api/health/ready
             if [[ "$attempt" == 1 ]]; then
               sudo cp "$RUNNER_TEMP/moss-server-smoke/initial-admin.json" "$RUNNER_TEMP/initial-admin-before.json"
+              rm "moss-server-images-${RELEASE_TAG}-linux-${IMAGE_ARCH}.tar.gz"
             else
               sudo cmp "$RUNNER_TEMP/initial-admin-before.json" "$RUNNER_TEMP/moss-server-smoke/initial-admin.json"
             fi
@@ -345,6 +350,14 @@ jobs:
           \`\`\`sh
           curl -fsSL https://github.com/sudoprivacy/mosswork/releases/download/${RELEASE_TAG}/install-moss-server.sh | sudo bash
           \`\`\`
+
+          Offline installation: download install-moss-server.sh, moss-server-deploy-${RELEASE_TAG}.tar.gz, the matching Linux image archive and SHA256SUMS.txt into the same directory. Run the following there; curl and GitHub access are not required:
+
+          \`\`\`sh
+          sudo bash install-moss-server.sh --offline
+          \`\`\`
+
+          Use --offline-dir /path/to/downloads to select another asset directory. If all three images are already loaded in Docker, the image archive can be omitted. Local archives are verified in place and retained. Installation starts the services in /opt/moss-server by default; --install-dir selects another installation directory. Start or stop later with sudo bash /opt/moss-server/start.sh or stop.sh. Missing files or invalid checksums fail without downloading.
 
           Initial credentials: /opt/moss-server/initial-admin.json (root only). Configure HTTPS for the server's public address. See moss-server-linux-*-images.json for image IDs and architecture, and SHA256SUMS.txt for download checksums. Use the attached mosswork-source archive for the verified public source.
           EOF

@@ -2785,7 +2785,7 @@ wheels = [
 
 [[package]]
 name = "moss-browser"
-version = "0.0.3"
+version = "0.0.4"
 source = { editable = "packages/moss-browser" }
 dependencies = [
     { name = "aiohttp" },
@@ -2823,7 +2823,7 @@ provides-extras = ["dev"]
 
 [[package]]
 name = "moss-gateway"
-version = "0.0.3"
+version = "0.0.4"
 source = { editable = "packages/moss-gateway" }
 dependencies = [
     { name = "aiohttp" },
@@ -2901,7 +2901,7 @@ provides-extras = ["examples", "dev"]
 
 [[package]]
 name = "moss-harness"
-version = "0.0.3"
+version = "0.0.4"
 source = { editable = "packages/moss-harness" }
 dependencies = [
     { name = "deepagents" },
@@ -3079,7 +3079,7 @@ dev = [
 
 [[package]]
 name = "moss-memory"
-version = "0.0.3"
+version = "0.0.4"
 source = { editable = "packages/moss-memory" }
 
 [package.optional-dependencies]
@@ -3163,7 +3163,7 @@ dev = [
 
 [[package]]
 name = "mosswork"
-version = "0.0.3"
+version = "0.0.4"
 source = { editable = "." }
 dependencies = [
     { name = "acme" },

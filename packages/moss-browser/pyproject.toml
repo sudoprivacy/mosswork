@@ -7,7 +7,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "moss-browser"
-version = "0.0.3"
+version = "0.0.4"
 description = "AI-friendly browser automation via CDP with profile-based login persistence"
 readme = "README.md"
 license = { text = "MIT" }
