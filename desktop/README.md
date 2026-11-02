@@ -194,7 +194,7 @@ For Windows x64 use `--platform windows --arch amd64` and
 `darwin-arm64/` or `windows-amd64/` (the `mosswork-` directory prefix is also accepted). Each directory must
 contain `runtime/`, `packages/`, `launch.py`, and `tools/ffmpeg[.exe]` plus
 `tools/ffprobe[.exe]`. Install dependencies while preparing the payload, never on
-the employee machine. The package includes moss-harness, moss-memory, moss-browser and moss-gateway 0.0.2, pandas, openpyxl,
+the employee machine. The package includes moss-harness, moss-memory, moss-browser and moss-gateway 0.0.3, pandas, openpyxl,
 python-docx, python-pptx, pypdf and Pillow. Run the supplied
 `desktop/portable/verify_company_runtime.py <payload>` **using that payload's
 Python on its target OS/architecture**; it imports the engine and exercises
@@ -213,7 +213,7 @@ installations perform one complete check to create the receipt. The **Check
 tools** button in local workspace settings explicitly repeats the full check;
 ordinary startup and status refreshes reuse the cache.
 
-The runtime requires the four workspace components at version 0.0.2, as specified by
+The runtime requires the four workspace components at version 0.0.3, as specified by
 the source dependencies. Rebuild the company runtime payload and native shell
 together; Harness 1.0.2 payloads fail the server/client version check.
 The shell supports text steering and withdrawal over nonce-bound IPC. While a

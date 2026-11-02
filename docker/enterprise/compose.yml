@@ -1,4 +1,4 @@
-name: moss-server
+name: ${MOSSWORK_PROJECT_NAME:-moss-server}
 x-hardening: &hardening
   restart: unless-stopped
   cap_drop: [ALL]
@@ -12,9 +12,9 @@ services:
     restart: unless-stopped
     environment:
       POSTGRES_USER: mosswork_bootstrap
-      POSTGRES_PASSWORD: ${MOSSWORK_PG_BOOTSTRAP_PASSWORD:?Run prepare.py}
-      MOSSWORK_APP_PASSWORD: ${MOSSWORK_APP_PASSWORD:?Run prepare.py}
-      IM_APP_PASSWORD: ${IM_APP_PASSWORD:?Run prepare.py}
+      POSTGRES_PASSWORD: ${MOSSWORK_PG_BOOTSTRAP_PASSWORD:?Run prepare.sh}
+      MOSSWORK_APP_PASSWORD: ${MOSSWORK_APP_PASSWORD:?Run prepare.sh}
+      IM_APP_PASSWORD: ${IM_APP_PASSWORD:?Run prepare.sh}
     volumes:
       - ${MOSSWORK_DATA_ROOT:?Set absolute data directory}/postgres:/var/lib/postgresql/data
       - ./init-databases.sh:/docker-entrypoint-initdb.d/10-databases.sh:ro

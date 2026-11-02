@@ -22,7 +22,7 @@
 | --- | --- |
 | 系统与权限 | Linux Docker 主机；管理员具有 sudo 和 Docker 操作权限 |
 | 容器工具 | [Docker Engine](https://docs.docker.com/engine/install/) 与 [Docker Compose 插件](https://docs.docker.com/compose/install/linux/)；本指南命令使用支持 `up --wait` 的版本 |
-| 宿主工具 | Python 3.11+（配置与备份脚本）、curl；Node、uv 和 Go 在镜像构建阶段使用，无需先在宿主安装 |
+| 宿主工具 | shell、curl、tar 和 sha256sum；不需要 Python、Node、uv 或 Go |
 | 构建网络 | 能获取 Dockerfile 中的基础镜像、系统包以及 npm、Python、Go 依赖；纯离线服务器需要另行准备这些构建材料 |
 | 访问与模型 | 确定员工访问的内网地址；准备可用模型服务及其凭据。生产访问入口可使用企业域名和受信任的 HTTPS 证书 |
 | 数据与备份 | 独立持久化目录与目录之外的备份位置；员工电脑项目另外备份 |
@@ -32,7 +32,7 @@
 ```sh
 sudo docker info
 sudo docker compose version
-python3 --version
+sha256sum --version
 ```
 
 Docker daemon 无法连接时，先处理 Docker 启动或 socket 权限。默认 socket 为 `/var/run/docker.sock`；使用其他 socket 时，在首次生成配置时传入 `--socket /absolute/path/to/docker.sock`，并确保 Docker CLI 使用同一引擎。不要把本机开发环境的 socket 或绝对目录照抄到服务器。
@@ -44,10 +44,10 @@ Docker daemon 无法连接时，先处理 Docker 启动或 socket 权限。默�
 ### 1. 生成新的私有配置
 
 ```sh
-sudo python3 docker/enterprise/prepare.py --data /srv/mosswork --env /etc/mosswork.env
+sudo bash docker/enterprise/prepare.sh --data /srv/mosswork --env /etc/mosswork.env
 ```
 
-`prepare.py` 只接受全新数据目录和新的环境文件，自动生成三个独立数据库密码及两个通信密钥，并设置私有目录与文件权限。使用 sudo 执行时会为应用、媒体和密钥目录设置 UID/GID 1000；PostgreSQL 目录由官方镜像入口初始化。没有使用 sudo 的部署需按脚本提示自行修正所有者。
+`prepare.sh` 只接受全新数据目录和新的环境文件，自动生成三个独立数据库密码及两个通信密钥，并设置私有目录与文件权限。使用 sudo 执行时会为应用、媒体和密钥目录设置 UID/GID 1000；PostgreSQL 目录由官方镜像入口初始化。没有使用 sudo 的部署需按脚本提示自行修正所有者。
 
 这个脚本不能用于升级或修复已有实例，已有密钥必须保留。
 
@@ -153,7 +153,7 @@ sudo docker compose --env-file /etc/mosswork.env -f docker/enterprise/compose.ym
 | `MOSSWORK_MEDIA_HTTP_ORIGINS` | 可由环境文件覆盖；管理员批准的 HTTP 生图 origin，逗号分隔，默认空；精确匹配域名和端口，无通配符。例如显式配置 `http://image-service.example.internal:3001` |
 | `MOSSWORK_DEFAULT_TIMEZONE` | 可由环境文件覆盖；默认 Asia/Shanghai，用户日期和定时任务沿用服务器设置 |
 
-迁移已有部署时，先核对原有环境变量、数据库和密钥与上表的对应关系；保留原数据与密钥，按下节执行升级，不运行 `prepare.py`。
+迁移已有部署时，先核对原有环境变量、数据库和密钥与上表的对应关系；保留原数据与密钥，按下节执行升级，不运行 `prepare.sh`。
 
 ## 升级与回退
 
@@ -198,7 +198,7 @@ sudo python3 docker/enterprise/backup.py --env /etc/mosswork.env --output /srv/b
 恢复只在另一台干净主机或明确准备好的空实例中执行：
 
 1. 从选定发行提交构建对应镜像；校验 manifest 每个文件的 SHA-256。不要使用 `complete=false` 的归档。
-2. 还原 `deployment.env` 为私有环境文件；修改宿主路径、socket 和 GID，保留所有密码和签名密钥。安全解压 `files.tar.gz` 到新的数据根，保留 uid/gid 1000，**不要运行 prepare.py 重新生成密钥**。
+2. 还原 `deployment.env` 为私有环境文件；修改宿主路径、socket 和 GID，保留所有密码和签名密钥。安全解压 `files.tar.gz` 到新的数据根，保留 uid/gid 1000，**不要运行 prepare.sh 重新生成密钥**。
 3. 启动空 PostgreSQL，使初始化脚本创建两库及角色。停止应用与通信。分别运行：
 
    ```sh

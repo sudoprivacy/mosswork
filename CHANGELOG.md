@@ -4,6 +4,13 @@
 
 格式遵循 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/)，版本号遵循 [语义化版本规范](https://semver.org/spec/v2.0.0.html)。
 
+## [0.0.3] - 2026-11-02
+
+### 部署
+- Release 部署包提供 `.env`、`docker-compose.yml` 和一键启动、停止脚本；复制目录并修改项目名、端口和数据路径可运行独立环境。
+- 服务端安装和升级使用 Shell，从 GitHub Release 下载并校验对应架构的 Docker 镜像包，部署主机不需要 Python、Node 或 uv。
+- 失败重试保留密码和通信密钥；升级检查数据库中的已有用户，健康检查通过后切换版本配置。
+
 ## [1.0.1b2] - 2026-10-24
 
 ### 新增

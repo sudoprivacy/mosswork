@@ -12,7 +12,7 @@
 <p><strong>AI 在员工电脑上工作，账号、模型与权限留在企业手里。</strong></p>
 
 <p>
-  <a href="desktop/README.md"><img alt="Version 0.0.2" src="https://img.shields.io/badge/version-0.0.2-F5453A?style=flat-square"></a>
+  <a href="desktop/README.md"><img alt="Version 0.0.3" src="https://img.shields.io/badge/version-0.0.3-F5453A?style=flat-square"></a>
   <a href="LICENSE"><img alt="License: MIT" src="https://img.shields.io/badge/license-MIT-17996B?style=flat-square"></a>
   <a href="docker/enterprise/README.md"><img alt="Self-hosted" src="https://img.shields.io/badge/self--hosted-121417?style=flat-square"></a>
   <a href="docker/enterprise/README.md"><img alt="Server: Linux + Docker" src="https://img.shields.io/badge/server-Linux%20%2B%20Docker-3B5BDB?style=flat-square"></a>
@@ -66,7 +66,7 @@
 
 ## 快速开始
 
-当前版本：**0.0.2**。在 [Releases](https://github.com/sudoprivacy/mosswork/releases) 下载 mosswork 客户端（macOS ARM64 DMG、Windows x64 EXE）。服务端 moss-server 使用 Docker 镜像，按[一键部署指南](docker/enterprise/INSTALL.md)安装；源码构建见[桌面说明](desktop/README.md)。
+当前版本：**0.0.3**。在 [Releases](https://github.com/sudoprivacy/mosswork/releases) 下载 mosswork 客户端（macOS ARM64 DMG、Windows x64 EXE）。服务端 moss-server 使用 Docker 镜像，按[一键部署指南](docker/enterprise/INSTALL.md)安装；源码构建见[桌面说明](desktop/README.md)。
 
 GitHub 下载较慢时，可使用[夸克网盘下载](https://pan.quark.cn/s/6da75d82a576)，选择与服务器匹配的客户端版本。
 

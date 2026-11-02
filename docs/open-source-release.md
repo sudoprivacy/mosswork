@@ -2,7 +2,7 @@
 
 [English](open-source-release_EN.md)
 
-本文面向维护者，说明 [mosswork](https://github.com/sudoprivacy/mosswork) 的源码导出、校验和发行要求。当前源码版本为 `0.0.2`，主项目、自有引擎及通信模块采用 MIT。
+本文面向维护者，说明 [mosswork](https://github.com/sudoprivacy/mosswork) 的源码导出、校验和发行要求。当前源码版本为 `0.0.3`，主项目、自有引擎及通信模块采用 MIT。
 
 本仓库提供源码，服务端镜像与 Windows/macOS 企业客户端按对应构建文档生成。发行材料通过[本仓库 Releases](https://github.com/sudoprivacy/mosswork/releases)分发；二进制安装包需单独完成目标平台验证，并记录签名与公证状态。
 
@@ -12,6 +12,7 @@
 - 根目录及通信服务保留原始 MIT 许可和贡献者声明。第三方来源与分发范围见 [NOTICE](../NOTICE.md)。
 - 本发行版禁用在线更新 CLI/API、上游一键安装脚本及 `make publish` / `publish-test`；安装和升级使用本仓库的 Release 镜像、客户端或源码。
 - 公开副本排除 Git 历史、本地工具配置、运行环境文件、浏览器会话、部署记录和构建产物。
+- `docker/deploy/.env` 是不含凭据的部署模板，作为复制目录的入口保留；真实环境文件仍不纳入发行。
 - `office-automation` 专家及其头像不纳入源码发行，因为其随附文档技能限制再分发。测试和示例使用公开包含的专家；独立文档处理库和本机工具不受此排除影响。
 - 员工快速上手使用 [Markdown 文档](user-guide.md)；源码发行不包含生成的 `docs/user-guide.html` 和上游个人版介绍 `docs/mosswork-introduction.html`。
 - 源码发行不包含 FnOS 打包工具及上游发行资产下载表生成工具。
@@ -19,7 +20,7 @@
 
 ## Tag 自动发布
 
-推送与 `pyproject.toml` 版本完全一致的 `v<version>` tag 后，`mosswork-release.yml` 自动构建。当前版本对应 `v0.0.2`；工作流不自动修改版本、提交代码或创建 tag。手工重跑须选择同一个 tag，选择分支会被拒绝。
+推送与 `pyproject.toml` 版本完全一致的 `v<version>` tag 后，`mosswork-release.yml` 自动构建。当前版本对应 `v0.0.3`；工作流不自动修改版本、提交代码或创建 tag。手工重跑须选择同一个 tag，选择分支会被拒绝。
 
 发布前先按下文导出并验证完整公开源码，将确定的源码提交到发行仓库，再由维护者推送 tag。流程从该 tag 再次导出完整公开范围，并从同一份导出物构建客户端和镜像。
 
@@ -31,7 +32,7 @@
 | 本地组件 | moss-harness、moss-memory、moss-browser、moss-gateway 四个 wheel，源码位于 `packages/` |
 | 下载附件 | 公开源码、部署包、`install-moss-server.sh`、构建记录、镜像 ID 与 SHA-256 |
 
-CI 不发布 macOS Intel、Windows ARM、Linux 客户端、PyPI 包或独立 portable 下载包。两个客户端和两个架构的镜像都成功后才发布 GitHub Release，任一失败不会发布部分版本。预发布 tag（如 `v0.0.2b1`）标记为 prerelease，不更新正式版 `latest`。已公开的 Release 不允许覆盖。
+CI 不发布 macOS Intel、Windows ARM、Linux 客户端、PyPI 包或独立 portable 下载包。两个客户端和两个架构的镜像都成功后才发布 GitHub Release，任一失败不会发布部分版本。预发布 tag（如 `v0.0.3b1`）标记为 prerelease，不更新正式版 `latest`。已公开的 Release 不允许覆盖。
 
 仓库需允许 Actions 的 `GITHUB_TOKEN` 写入 Releases。所有产物均作为 Release 附件分发，无需 Packages 权限或镜像仓库凭据。两个原生 Linux runner 分别构建并导出对应架构的 Docker 镜像包，重新导入归档后验证首次部署、健康检查和重复安装。发布前校验每个附件小于 GitHub 的 2 GiB 上限，并生成 SHA-256 清单。
 
@@ -60,7 +61,7 @@ python3 tools/check_public_source.py --root /absolute/new-directory/mosswork-Ent
 
 ## 构建前提
 
-服务端支持目标是 Linux + Docker Engine + Compose，命令见[企业部署与恢复](../docker/enterprise/README.md)。构建网络需要能获取基础镜像与依赖；镜像包包含应用、通信服务和 PostgreSQL；安装主机仍需预先具备 Docker Engine、Compose v2 和 Python 3.11+。将镜像包、部署包和摘要清单复制到主机后可以离线导入并启动。
+服务端支持目标是 Linux + Docker Engine + Compose，命令见[企业部署与恢复](../docker/enterprise/README.md)。构建网络需要能获取基础镜像与依赖；镜像包包含应用、通信服务和 PostgreSQL；安装主机只需预先具备 Docker Engine、Compose v2 和 shell 工具。将镜像包、部署包和摘要清单复制到主机后可以离线导入并启动。
 
 客户端构建见[桌面说明](../desktop/README.md)（English）。正式 CI 产物限定 Windows amd64 和 macOS 13+ ARM64。`desktop/package-company.py` 优先从 `PUBLIC_SOURCE.json` 读取来源身份；普通检出使用 Git HEAD 和工作树状态。导出源码无需重新创建 Git 提交。
 

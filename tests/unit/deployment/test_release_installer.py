@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import hashlib
 import io
-import json
 import os
 import subprocess
 import sys
@@ -27,9 +26,10 @@ def test_installer_verifies_architecture_and_payloads_before_loading(
     downloads.mkdir()
     archive = downloads / "moss-server-deploy-v1.0.1b2.tar.gz"
     with tarfile.open(archive, "w:gz") as bundle:
-        data = b"# Deployment entry point\n"
-        member = tarfile.TarInfo("moss-server/deploy.py")
+        data = b'#!/bin/sh\nprintf \'%s\\n\' "$@" > "$INSTALLER_TEST_ROOT/deployed.args"\n'
+        member = tarfile.TarInfo("moss-server/deploy.sh")
         member.size = len(data)
+        member.mode = 0o755
         bundle.addfile(member, io.BytesIO(data))
     images = downloads / f"moss-server-images-v1.0.1b2-linux-{arch}.tar.gz"
     images.write_bytes(b"docker image archive")
@@ -73,33 +73,31 @@ elif name == 'curl':
     if '/releases/latest' in url:
         raise SystemExit('Pinned installer must never resolve latest')
     shutil.copyfile(root / 'downloads' / url.rsplit('/', 1)[1], args[args.index('-o') + 1])
-elif name == 'python3':
-    if args and pathlib.Path(args[0]).name == 'deploy.py':
-        assert (root / 'loaded.txt').exists(), 'Images must be loaded before deployment'
-        (root / 'deployed.json').write_text(json.dumps(args))
-    else:
-        os.execv(sys.executable, [sys.executable, *args])
 """
     )
-    for name in ("uname", "id", "docker", "curl", "python3"):
+    for name in ("uname", "id", "docker", "curl"):
         binary = binaries / name
         binary.write_text(dispatcher)
         binary.chmod(0o755)
     template = Path(__file__).resolve().parents[3] / "scripts/install-moss-server.sh"
     installer = tmp_path / "install.sh"
     installer.write_text(template.read_text().replace("@@MOSSWORK_RELEASE_TAG@@", "v1.0.1b2"))
+    temporary = tmp_path / "temporary"
+    temporary.mkdir()
     result = subprocess.run(
         ["bash", str(installer), "--port", "18088"],
         env={
             **os.environ,
             "PATH": str(binaries) + os.pathsep + os.environ["PATH"],
             "INSTALLER_TEST_ROOT": str(tmp_path),
+            "TMPDIR": str(temporary),
             "INSTALLER_TEST_MACHINE": "ppc64le" if failure == "unsupported-arch" else machine,
             "INSTALLER_TEST_FAIL_LOAD": "1" if failure == "load" else "0",
         },
         capture_output=True,
         text=True,
     )
+    assert not list(temporary.iterdir()), "Installer must clean up downloaded images"
     if failure:
         assert result.returncode != 0
         expected = {
@@ -107,12 +105,12 @@ elif name == 'python3':
             "unsupported-arch": "Only Linux amd64 and arm64 are supported",
         }.get(failure, "checksum mismatch")
         assert expected in result.stderr
-        assert not (tmp_path / "deployed.json").exists()
+        assert not (tmp_path / "deployed.args").exists()
         assert not (tmp_path / "loaded.txt").exists()
     else:
         assert result.returncode == 0, result.stderr
-        arguments = json.loads((tmp_path / "deployed.json").read_text())
-        assert arguments[1:] == ["--version", "v1.0.1b2", "--port", "18088"]
+        arguments = (tmp_path / "deployed.args").read_text().splitlines()
+        assert arguments == ["--version", "v1.0.1b2", "--port", "18088"]
         assert (tmp_path / "loaded.txt").read_text() == images.name
     if failure == "unsupported-arch":
         assert not (tmp_path / "requests.txt").exists()

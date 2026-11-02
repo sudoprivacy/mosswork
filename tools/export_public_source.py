@@ -15,6 +15,7 @@ PROJECT_WORKFLOWS = {
     ".github/workflows/mosswork-ci.yml",
     ".github/workflows/mosswork-release.yml",
 }
+PUBLIC_ENV_TEMPLATES = {"docker/deploy/.env"}
 
 EXCLUDED = (
     ".git/",
@@ -89,7 +90,11 @@ def excluded(name: str) -> bool:
     ):
         return True
     base = Path(name).name
-    return (base == ".env" or base.startswith(".env.")) and base != ".env.example"
+    return (
+        (base == ".env" or base.startswith(".env."))
+        and base != ".env.example"
+        and name not in PUBLIC_ENV_TEMPLATES
+    )
 
 
 def candidates(root: Path) -> list[str]:

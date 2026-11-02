@@ -1,4 +1,4 @@
-name: moss-server
+name: ${MOSSWORK_PROJECT_NAME:-moss-server}
 x-hardening: &hardening
   pull_policy: never
   restart: unless-stopped
@@ -29,6 +29,7 @@ services:
   communication:
     <<: *hardening
     image: ${MOSSWORK_IM_IMAGE:?Run installer}
+    pull_policy: never
     environment:
       MOSSWORK_IM_DATABASE_URL: postgresql://im_app:${IM_APP_PASSWORD}@postgres:5432/mosswork_im?sslmode=disable
       MOSSWORK_IM_MEDIA_ROOT: /data/media
@@ -45,6 +46,7 @@ services:
   moss-server:
     <<: *hardening
     image: ${MOSSWORK_APP_IMAGE:?Run installer}
+    pull_policy: never
     command: [moss-server, run, --host, 0.0.0.0, --port, '8088']
     init: true
     user: '1000:1000'

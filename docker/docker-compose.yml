@@ -19,13 +19,14 @@
 # 后续计划：首次启动可改为随机生成密码并写入 credential.txt。
 # =============================================================================
 
+name: ${MOSSWORK_PROJECT_NAME:-mosswork}
+
 services:
   mosswork:
     build:
       context: ..
       dockerfile: docker/Dockerfile
-    image: mosswork:latest
-    container_name: mosswork
+    image: ${MOSSWORK_IMAGE:-mosswork:latest}
     restart: unless-stopped
     ports:
       - "${MOSSWORK_PORT:-8088}:${MOSSWORK_PORT:-8088}"

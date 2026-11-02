@@ -22,7 +22,7 @@ Manual administrator upgrades are current:
 4. Stop the app and communication service, run the new communication image's migration command, then start the new services; main-database migrations run when the app starts.
 5. Check readiness, sign-in, model requests, message attachments and local client tasks, then resume normal use.
 
-Commands and rollback conditions are in [Enterprise deployment and recovery](../docker/enterprise/README_EN.md#upgrade-and-rollback). Upgrades do not run `prepare.py`, do not run `mosswork init` again, and do not replace existing communication keys. The in-product "System backup" is not a backup of every enterprise component.
+Commands and rollback conditions are in [Enterprise deployment and recovery](../docker/enterprise/README_EN.md#upgrade-and-rollback). Upgrades do not run `prepare.sh`, do not run `mosswork init` again, and do not replace existing communication keys. The in-product "System backup" is not a backup of every enterprise component.
 
 Web users can load newly deployed web code after refreshing. The employee client interface is bundled in the installer; updating only the server does not replace its page assets. See the target release notes for client compatibility.
 

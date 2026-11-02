@@ -53,6 +53,8 @@ def test_export_includes_dirty_and_untracked_source_but_not_private_material(
         "desktop/src/assets/login.bundle.css": "generated login styles\n",
         ".github/workflows/release.yml": "name: upstream release\n",
         ".env": "private configuration\n",
+        "docker/deploy/.env": "MOSSWORK_PROJECT_NAME=mosswork\n",
+        "docker/enterprise/.env.example": "MOSSWORK_PROJECT_NAME=moss-server\n",
         "output/receipt.json": "private receipt\n",
         "docs/company-desktop-runtime-delivery.md": "internal deployment\n",
         "docs/upstream-sync-20261017.md": "internal delivery receipt\n",
@@ -82,6 +84,8 @@ def test_export_includes_dirty_and_untracked_source_but_not_private_material(
         "dashboard/src/components/ClientConfigUpdatePrompt/index.tsx",
         "desktop/src/company_ui.go",
         "desktop/build-dashboard.py",
+        "docker/deploy/.env",
+        "docker/enterprise/.env.example",
     ):
         assert (target / name).is_file()
     for name in files:

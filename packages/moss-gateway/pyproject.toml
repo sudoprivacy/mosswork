@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "moss-gateway"
-version = "0.0.2"
+version = "0.0.3"
 description = "Multi-platform IM channel bridge with unified message abstraction for AI agents and bots"
 readme = "README.md"
 license = { text = "MIT" }
@@ -47,7 +47,7 @@ examples = [
     "langchain-openai>=1.2.2",
     "langgraph>=1.2.1",
     "langchain-core>=1.4.0",
-    "moss-harness==0.0.2",
+    "moss-harness==0.0.3",
 ]
 dev = [
     "pytest>=8.0",
@@ -61,7 +61,7 @@ dev = [
     "langchain-openai>=1.2.2",
     "langgraph>=1.2.1",
     "langchain-core>=1.4.0",
-    "moss-harness==0.0.2",
+    "moss-harness==0.0.3",
 ]
 
 [project.urls]

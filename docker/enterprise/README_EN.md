@@ -20,7 +20,7 @@ Validate one employee's sign-in, model call, local task, messaging and attachmen
 | --- | --- |
 | OS and permissions | Linux Docker host; administrator has sudo and Docker operation permissions |
 | Container tooling | [Docker Engine](https://docs.docker.com/engine/install/) and the [Docker Compose plugin](https://docs.docker.com/compose/install/linux/); this guide uses commands that support `up --wait` |
-| Host tools | Python 3.11+ (configuration and backup scripts), curl; Node, uv and Go are used during image builds and do not need to be installed on the host |
+| Host tools | shell, curl, tar and sha256sum; Python, Node, uv and Go are not required on the host |
 | Build network | Access to base images, system packages and npm, Python and Go dependencies referenced by the Dockerfile; fully offline servers need these build materials prepared separately |
 | Access and models | Decide the intranet address employees use; prepare a working model service and credentials. Production entry points may use a company domain and a trusted HTTPS certificate |
 | Data and backup | A dedicated persistent directory and a backup location outside it; back up employee-computer projects separately |
@@ -30,7 +30,7 @@ Verify the tools first; the following commands only read the environment:
 ```sh
 sudo docker info
 sudo docker compose version
-python3 --version
+sha256sum --version
 ```
 
 If the Docker daemon is unreachable, fix Docker startup or socket permissions first. The default socket is `/var/run/docker.sock`; when using another socket, pass `--socket /absolute/path/to/docker.sock` when first generating configuration and make the Docker CLI use the same engine. Do not copy a local development socket or absolute path to the server.
@@ -42,10 +42,10 @@ Use this project's source archive or a specific release commit and run the steps
 ### 1. Generate a new private configuration
 
 ```sh
-sudo python3 docker/enterprise/prepare.py --data /srv/mosswork --env /etc/mosswork.env
+sudo bash docker/enterprise/prepare.sh --data /srv/mosswork --env /etc/mosswork.env
 ```
 
-`prepare.py` accepts only a new data directory and a new environment file. It generates three independent database passwords and two communication keys, and sets private directory and file permissions. When run with sudo, it sets UID/GID 1000 for the application, media and secret directories; the PostgreSQL directory is initialized by the official image entrypoint. Deployments without sudo must correct ownership as prompted by the script.
+`prepare.sh` accepts only a new data directory and a new environment file. It generates three independent database passwords and two communication keys, and sets private directory and file permissions. When run with sudo, it sets UID/GID 1000 for the application, media and secret directories; the PostgreSQL directory is initialized by the official image entrypoint. Deployments without sudo must correct ownership as prompted by the script.
 
 This script must not be used to upgrade or repair an existing instance; existing keys must be preserved.
 
@@ -151,7 +151,7 @@ The table lists both Compose inputs and in-container process configuration. The 
 | `MOSSWORK_MEDIA_HTTP_ORIGINS` | May be overridden; administrator-approved HTTP image-generation origins, comma-separated, empty by default; exact domain and port match, no wildcards. For example `http://image-service.example.internal:3001` |
 | `MOSSWORK_DEFAULT_TIMEZONE` | May be overridden; defaults to Asia/Shanghai; user dates and scheduled tasks follow the server setting |
 
-When migrating an existing deployment, first map the existing environment variables, databases and keys to this table; keep the existing data and keys and follow the upgrade section below. Do not run `prepare.py`.
+When migrating an existing deployment, first map the existing environment variables, databases and keys to this table; keep the existing data and keys and follow the upgrade section below. Do not run `prepare.sh`.
 
 ## Upgrade and rollback
 
@@ -196,7 +196,7 @@ The backup temporarily stops the running application, communication service and 
 Recovery runs only on another clean host or an explicitly prepared empty instance:
 
 1. Build matching images from the selected release commit; verify the SHA-256 of every file in the manifest. Do not use a `complete=false` archive.
-2. Restore `deployment.env` as the private environment file; adjust host paths, socket and GID, and keep all passwords and signing keys. Safely extract `files.tar.gz` into the new data root, preserving uid/gid 1000; **do not run prepare.py to regenerate keys**.
+2. Restore `deployment.env` as the private environment file; adjust host paths, socket and GID, and keep all passwords and signing keys. Safely extract `files.tar.gz` into the new data root, preserving uid/gid 1000; **do not run prepare.sh to regenerate keys**.
 3. Start empty PostgreSQL so the initialization script creates both databases and roles. Stop the application and communication service. Run:
 
    ```sh

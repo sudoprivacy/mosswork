@@ -67,9 +67,12 @@ jobs:
           for package in moss-harness moss-memory moss-browser moss-gateway; do
             uv build --project "$RUNNER_TEMP/source" --package "$package" --wheel --out-dir "$RUNNER_TEMP/release"
           done
-          cp "$RUNNER_TEMP/source/docker/enterprise/"{compose.release.yml,init-databases.sh,prepare.py,deploy.py} "$RUNNER_TEMP/deploy/moss-server/"
+          cp "$RUNNER_TEMP/source/docker/enterprise/"{compose.release.yml,init-databases.sh,prepare.sh,deploy.sh,start.sh,stop.sh} "$RUNNER_TEMP/deploy/moss-server/"
+          cp "$RUNNER_TEMP/deploy/moss-server/compose.release.yml" "$RUNNER_TEMP/deploy/moss-server/docker-compose.yml"
+          sed "s/@@MOSSWORK_RELEASE_TAG@@/${RELEASE_TAG}/g" "$RUNNER_TEMP/source/docker/enterprise/.env.example" > "$RUNNER_TEMP/deploy/moss-server/.env"
           tar -czf "$RUNNER_TEMP/release/moss-server-deploy-${RELEASE_TAG}.tar.gz" -C "$RUNNER_TEMP/deploy" moss-server
           sed "s/@@MOSSWORK_RELEASE_TAG@@/${RELEASE_TAG}/g" scripts/install-moss-server.sh > "$RUNNER_TEMP/release/install-moss-server.sh"
+          chmod +x "$RUNNER_TEMP/release/install-moss-server.sh"
       - uses: actions/upload-artifact@v4
         with:
           name: public-source
@@ -248,8 +251,9 @@ jobs:
         working-directory: ${{ runner.temp }}/source
         run: |
           set -euo pipefail
+          tar -xzf "$RUNNER_TEMP/assets/moss-server-deploy-${RELEASE_TAG}.tar.gz" -C "$RUNNER_TEMP"
           for attempt in 1 2; do
-            sudo python3 docker/enterprise/deploy.py --version "$RELEASE_TAG" \
+            sudo bash "$RUNNER_TEMP/moss-server/deploy.sh" --version "$RELEASE_TAG" \
               --install-dir "$RUNNER_TEMP/moss-server-smoke" --bind 127.0.0.1 --port 18088
             curl --fail --silent --show-error http://127.0.0.1:18088/api/health/ready
             if [[ "$attempt" == 1 ]]; then
@@ -336,7 +340,7 @@ jobs:
 
           Server: Linux amd64/arm64 image archives attached below include moss-server, moss-server-im and PostgreSQL. The installer detects the host architecture, verifies SHA-256, imports the images with Docker and starts the stack with Compose. No container registry login is needed.
 
-          Install on a Linux Docker host with Python 3.11+, curl and Compose v2:
+          Install on a Linux Docker host with shell tools, curl and Compose v2; Python is not required:
 
           \`\`\`sh
           curl -fsSL https://github.com/sudoprivacy/mosswork/releases/download/${RELEASE_TAG}/install-moss-server.sh | sudo bash

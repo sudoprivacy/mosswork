@@ -4,7 +4,7 @@
 
 ## 一键安装
 
-准备 Linux amd64/arm64 主机、Docker Engine、支持 `up --wait` 的 Compose v2、Python 3.11+、curl 和 tar。主机需要能够下载 GitHub Releases 附件；服务端、通信服务和 PostgreSQL 镜像均包含在发行包中。默认安装在 `/opt/moss-server`，监听 `0.0.0.0:8088`。
+准备 Linux amd64/arm64 主机、Docker Engine、支持 `up --wait` 的 Compose v2、shell、curl、tar 和 sha256sum。主机需要能够下载 GitHub Releases 附件；服务端、通信服务和 PostgreSQL 镜像均包含在发行包中。默认安装在 `/opt/moss-server`，监听 `0.0.0.0:8088`。
 
 安装最新正式版：
 
@@ -15,7 +15,7 @@ curl -fsSL https://github.com/sudoprivacy/mosswork/releases/latest/download/inst
 预发布版本不进入 GitHub 的 `latest` 入口。从对应 Release 复制带 tag 的命令，例如：
 
 ```sh
-curl -fsSL https://github.com/sudoprivacy/mosswork/releases/download/v0.0.2/install-moss-server.sh | sudo bash
+curl -fsSL https://github.com/sudoprivacy/mosswork/releases/download/v0.0.3/install-moss-server.sh | sudo bash
 ```
 
 自定义目录、监听地址和端口：
@@ -25,7 +25,7 @@ curl -fsSL https://github.com/sudoprivacy/mosswork/releases/latest/download/inst
   sudo bash -s -- --install-dir /srv/moss-server --bind 127.0.0.1 --port 8088
 ```
 
-脚本按主机架构下载部署包与镜像包，校验两个文件的 SHA-256，通过 `docker load` 导入同一发行版本的镜像，生成数据库密码和通信密钥，执行迁移、创建首个管理员，并等待服务健康。初始凭据只写入权限为 `0600` 的文件：
+脚本按主机架构下载部署包与镜像包，校验两个文件的 SHA-256，通过 `docker load` 导入同一发行版本的镜像，生成数据库密码和通信密钥，执行迁移、创建首个管理员，并等待服务健康。脚本不需要 Python、Node 或包管理器。初始凭据只写入权限为 `0600` 的文件：
 
 ```sh
 sudo cat /opt/moss-server/initial-admin.json
@@ -37,7 +37,9 @@ sudo cat /opt/moss-server/initial-admin.json
 
 | 路径 | 内容 |
 | --- | --- |
-| `/opt/moss-server/deployment.env` | 镜像版本、端口和私有配置 |
+| `/opt/moss-server/.env` | 镜像版本、端口和私有配置；`deployment.env` 是兼容链接 |
+| `/opt/moss-server/docker-compose.yml` | 可直接使用的 Compose 文件 |
+| `/opt/moss-server/start.sh`、`stop.sh` | 一键启动、停止；停止保留数据 |
 | `/opt/moss-server/data/` | 数据库、应用数据、媒体和通信密钥 |
 | `/opt/moss-server/current/` | 最近一次成功启动版本的 Compose 和部署工具 |
 | `/opt/moss-server/releases/<tag>/` | 各版本部署文件 |
@@ -53,6 +55,19 @@ curl -fsS http://127.0.0.1:8088/api/health/ready
 ```
 
 首次安装中断时，可用同一版本重新执行安装命令。已生成的密码、密钥和数据会保留；数据库已有用户时不会再次创建管理员。初始化文件记录的是初始密码，用户修改密码后不会更新此文件。
+
+日常启动和停止：
+
+```sh
+sudo bash /opt/moss-server/start.sh
+sudo bash /opt/moss-server/stop.sh
+```
+
+## 复制为另一个环境
+
+将同一 Release 的部署包解压到新目录，编辑其中的 `.env`，将 `MOSSWORK_PROJECT_NAME` 和 `MOSSWORK_PORT` 改成未占用的项目名和端口。`MOSSWORK_DATA_ROOT` 留空时自动创建该目录内的 `data/`；也可指定独立的绝对路径。镜像已导入后，在新目录执行 `sudo bash start.sh` 即可生成新密码、密钥和数据库并启动。
+
+已有环境也可在停止服务后复制整个目录，再修改副本 `.env` 的项目名、端口和 `MOSSWORK_DATA_ROOT`（改为副本的数据目录绝对路径）。副本会保留原账号和资料；两个环境不能共用同一数据目录。
 
 ## 升级与备份
 
@@ -80,13 +95,13 @@ Release 提供 `moss-server-images-<tag>-linux-amd64.tar.gz` 和 `moss-server-im
 
 ## 手动导入或离线安装
 
-主机已具备上述 Docker、Compose 和 Python 环境时，可从同一 Release 下载部署包、对应架构的镜像包和 `SHA256SUMS.txt`，复制到服务器同一个目录。以下以 amd64 的 `v0.0.2` 为例；arm64 主机替换镜像包文件名中的架构：
+主机已具备上述 Docker、Compose 和 shell 工具时，可从同一 Release 下载部署包、对应架构的镜像包和 `SHA256SUMS.txt`，复制到服务器同一个目录。以下以 amd64 的 `v0.0.3` 为例；arm64 主机替换镜像包文件名中的架构：
 
 ```sh
 sha256sum --check --ignore-missing SHA256SUMS.txt
-sudo docker image load --input moss-server-images-v0.0.2-linux-amd64.tar.gz
-tar -xzf moss-server-deploy-v0.0.2.tar.gz
-sudo python3 moss-server/deploy.py --version v0.0.2
+sudo docker image load --input moss-server-images-v0.0.3-linux-amd64.tar.gz
+tar -xzf moss-server-deploy-v0.0.3.tar.gz
+sudo bash moss-server/deploy.sh --version v0.0.3
 ```
 
 导入和启动阶段不需要镜像仓库访问权限。镜像包较大，下载和导入前应预留临时文件与 Docker 镜像的磁盘空间。

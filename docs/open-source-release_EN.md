@@ -2,7 +2,7 @@
 
 [中文](open-source-release.md)
 
-This document is for maintainers and describes source export, verification and release requirements for [mosswork](https://github.com/sudoprivacy/mosswork). The current source version is `0.0.2`; the main project and own communication module use MIT.
+This document is for maintainers and describes source export, verification and release requirements for [mosswork](https://github.com/sudoprivacy/mosswork). The current source version is `0.0.3`; the main project and own communication module use MIT.
 
 This repository provides source code; server images and Windows/macOS enterprise clients are generated according to the corresponding build documents. Release material is distributed through [this repository's Releases](https://github.com/sudoprivacy/mosswork/releases); binary installers require separate target-platform verification and records of signing and notarization status.
 
@@ -19,7 +19,7 @@ This repository provides source code; server images and Windows/macOS enterprise
 
 ## Tag releases
 
-Push a tag exactly matching `v<pyproject.toml version>` after exporting, checking and committing the complete public source. The current version corresponds to `v0.0.2`. The workflow never bumps versions or creates tags; manual runs must select an existing version tag.
+Push a tag exactly matching `v<pyproject.toml version>` after exporting, checking and committing the complete public source. The current version corresponds to `v0.0.3`. The workflow never bumps versions or creates tags; manual runs must select an existing version tag.
 
 The release includes only two client installers: a macOS 13+ ARM64 DMG and a Windows amd64 EXE. Both include the offline local runtime, document tools and checksum-pinned FFmpeg from the public Sudowork mirror. Native runners exercise the packaged runtime before assembly. Windows includes Microsoft's signed offline WebView2 installer. macOS uses ad-hoc signing without notarization; the Windows client is not Authenticode signed.
 
@@ -50,7 +50,7 @@ The verification tool checks manifest digests, local links, anchors and images i
 
 ## Build prerequisites
 
-The server supports Linux + Docker Engine + Compose; commands are in [Enterprise deployment and recovery](../docker/enterprise/README_EN.md). Builds must reach base images and dependencies. The image archives include the application, communication service and PostgreSQL. The destination host must already have Docker Engine, Compose v2 and Python 3.11+; it can then import the downloaded archives and start the stack offline.
+The server supports Linux + Docker Engine + Compose; commands are in [Enterprise deployment and recovery](../docker/enterprise/README_EN.md). Builds must reach base images and dependencies. The image archives include the application, communication service and PostgreSQL. The destination host only needs Docker Engine, Compose v2 and shell tools; it can then import the downloaded archives and start the stack offline.
 
 Client builds are in [Desktop builds](../desktop/README.md). Release CI targets Windows amd64 and macOS 13+ ARM64. `desktop/package-company.py` reads provenance from `PUBLIC_SOURCE.json` for exports, or Git HEAD/worktree state in a checkout. Exported sources do not need a new Git commit.
 

@@ -10,7 +10,7 @@ worker 按排序后的节点列表和员工用户 ID 分片，同一用户的 Ag
 
 ## 初始化与启动
 
-沿用 [企业部署指南](README.md) 的主机、源码镜像、目录和密钥准备。`compose.roles.yml` 是独立入口，不与 `compose.yml` 合并。已有实例保留全部数据和密钥，不能再次运行 `prepare.py`、`mosswork init` 或 `init --force`。
+沿用 [企业部署指南](README.md) 的主机、源码镜像、目录和密钥准备。`compose.roles.yml` 是独立入口，不与 `compose.yml` 合并。已有实例保留全部数据和密钥，不能再次运行 `prepare.sh`、`mosswork init` 或 `init --force`。
 
 1. 保存原镜像和可恢复的两库、app/media/secrets、工作区卷及环境文件备份，在临时实例验证恢复。
 2. 停止旧入口接收新任务，排空并核对活动任务，停止旧单体、通信和其工作区容器。旧单体与新 worker 不能同时连接同一执行域；旧版代码不会识别新的执行模式标记。

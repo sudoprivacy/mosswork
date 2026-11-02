@@ -18,6 +18,8 @@ Desktop.ini
 .env
 .env.*
 !.env.example
+!docker/deploy/
+!docker/deploy/.env
 
 # Python
 __pycache__/

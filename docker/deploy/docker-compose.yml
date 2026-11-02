@@ -1,0 +1,37 @@
+name: ${MOSSWORK_PROJECT_NAME:-mosswork}
+
+# Offline-friendly deployment compose file.
+# Load the application image before starting this directory, for example:
+#   docker load --input mosswork-image.tar
+# The compose file never builds or pulls an image on its own.
+services:
+  mosswork:
+    image: ${MOSSWORK_IMAGE:-mosswork:latest}
+    pull_policy: never
+    restart: unless-stopped
+    ports:
+      - "${MOSSWORK_PORT:-8088}:${MOSSWORK_PORT:-8088}"
+    volumes:
+      - ${MOSSWORK_DATA:-./data}:/data/.mosswork
+    environment:
+      HOME: /data
+      MOSSWORK_BIND_HOST: 0.0.0.0
+      MOSSWORK_PORT: ${MOSSWORK_PORT:-8088}
+      MOSSWORK_LOG_LEVEL: ${MOSSWORK_LOG_LEVEL:-info}
+      MOSSWORK_DEFAULT_PASSWORD: ${MOSSWORK_DEFAULT_PASSWORD:-}
+      MOSSWORK_ADMIN_USERNAME: ${MOSSWORK_ADMIN_USERNAME:-admin}
+      MOSSWORK_ADMIN_DISPLAY_NAME: ${MOSSWORK_ADMIN_DISPLAY_NAME:-Admin}
+      MOSSWORK_DATABASE_URL: ${MOSSWORK_DATABASE_URL:-}
+      MOSSWORK_DATABASE_DRIVER: ${MOSSWORK_DATABASE_DRIVER:-}
+      MOSSWORK_DATABASE_SQLITE_PATH: ${MOSSWORK_DATABASE_SQLITE_PATH:-}
+      MOSSWORK_DATABASE_HOST: ${MOSSWORK_DATABASE_HOST:-}
+      MOSSWORK_DATABASE_PORT: ${MOSSWORK_DATABASE_PORT:-}
+      MOSSWORK_DATABASE_NAME: ${MOSSWORK_DATABASE_NAME:-}
+      MOSSWORK_DATABASE_USER: ${MOSSWORK_DATABASE_USER:-}
+      MOSSWORK_DATABASE_PASSWORD: ${MOSSWORK_DATABASE_PASSWORD:-}
+      OPENAI_API_KEY: ${OPENAI_API_KEY:-}
+      DASHSCOPE_API_KEY: ${DASHSCOPE_API_KEY:-}
+      LANGFUSE_TRACING_ENABLED: ${LANGFUSE_TRACING_ENABLED:-true}
+      LANGFUSE_PUBLIC_KEY: ${LANGFUSE_PUBLIC_KEY:-}
+      LANGFUSE_SECRET_KEY: ${LANGFUSE_SECRET_KEY:-}
+      LANGFUSE_BASE_URL: ${LANGFUSE_BASE_URL:-}
