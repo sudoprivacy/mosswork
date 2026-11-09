@@ -14,6 +14,7 @@ import os
 import re
 import signal
 import subprocess
+import sys
 import time
 from collections.abc import Callable
 from contextvars import ContextVar
@@ -252,7 +253,7 @@ class ProjectBackend(HarnessLocalShellBackend):
         raise RuntimeError("Synchronous execution is disabled; use asynchronous runtime")
 
     async def stop_process(self, process: asyncio.subprocess.Process) -> None:
-        if os.name == "nt":
+        if sys.platform == "win32":
             killer = await asyncio.create_subprocess_exec(
                 "taskkill",
                 "/PID",
@@ -386,9 +387,9 @@ class ProjectBackend(HarnessLocalShellBackend):
                 status = "failed"
             return ExecuteResponse(
                 output="stdout:\n"
-                + tails["stdout"].decode("utf-8", "replace")
+                + tails["stdout"].decode("utf-8", "replace").replace("\r\n", "\n")
                 + "\nstderr:\n"
-                + tails["stderr"].decode("utf-8", "replace"),
+                + tails["stderr"].decode("utf-8", "replace").replace("\r\n", "\n"),
                 exit_code=process.returncode,
                 truncated=truncated,
             )
@@ -417,9 +418,9 @@ class ProjectBackend(HarnessLocalShellBackend):
             if isinstance(exc, TimeoutError):
                 return ExecuteResponse(
                     output="stdout:\n"
-                    + tails.get("stdout", b"").decode("utf-8", "replace")
+                    + tails.get("stdout", b"").decode("utf-8", "replace").replace("\r\n", "\n")
                     + "\nstderr:\n"
-                    + tails.get("stderr", b"").decode("utf-8", "replace")
+                    + tails.get("stderr", b"").decode("utf-8", "replace").replace("\r\n", "\n")
                     + f"\nprocess timed out after {effective_timeout} seconds; inspect output files before retry"
                     + ("; process termination could not be confirmed" if cleanup_failed else ""),
                     exit_code=124,
@@ -428,7 +429,7 @@ class ProjectBackend(HarnessLocalShellBackend):
             raise
         finally:
             # Kill descendants even if a shell daemonized them and exited first.
-            if os.name != "nt":
+            if sys.platform != "win32":
                 with contextlib.suppress(ProcessLookupError):
                     os.killpg(process.pid, signal.SIGKILL)
             self.processes.discard(process)

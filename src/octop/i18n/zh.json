@@ -399,6 +399,8 @@
     "SETUP_RATE_LIMITED": "尝试验证次数过多，请稍后再试。",
     "SETUP_TOKEN_INVALID": "向导会话无效或已过期，请重新验证启动密码。",
     "AGENT_NOT_FOUND": "未找到 Agent。",
+    "MOSS_IDENTITY_INVALID": "个人 Moss 的归属或 Agent 引用无效。",
+    "MOSS_ACCESS_DENIED": "此企业成员没有可用的 Moss 使用权。",
     "AGENT_NOT_RUNNING": "此专家未启用。",
     "AGENT_FAILED": "Agent 启动失败。",
     "AGENT_BUSY": "Agent 正忙。",

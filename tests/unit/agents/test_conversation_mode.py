@@ -56,8 +56,9 @@ def test_harness_allowlist_accepts_workspace_plan_after_mosswork_patch() -> None
     assert not harness_ok("SOUL.md")
 
 
-def test_workspace_plan_path_rewrites_container_root(tmp_path: Path) -> None:
-    ws = tmp_path / ".mosswork" / "agents" / "ABC123"
+def test_workspace_plan_path_rewrites_container_root() -> None:
+    # This logical rewrite targets a POSIX container on every test host.
+    ws = Path("/data/.mosswork/agents/ABC123")
     expected = f"{ws.as_posix()}/plans/foo.md"
     assert workspace_plan_path("plans/foo.md", ws) == expected
     assert workspace_plan_path("/plans/foo.md", ws) == expected
