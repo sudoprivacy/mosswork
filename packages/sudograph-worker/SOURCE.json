@@ -1,0 +1,36 @@
+{
+  "repository": "https://github.com/sudoprivacy/moss",
+  "commit": "d0b84d4c8fd5905d9ec3f7c160f2ce633f535d0d",
+  "files": [
+    {
+      "path": "src/server/ontology/compilerContextWorker.ts",
+      "source_sha256": "cd5af935965ad3f222aa1c74b9b960836c6daebcbd703fbfbd0265ceee8ce4ae",
+      "adaptation": "Only replace archived registry type/validator imports with local wire contract"
+    },
+    {
+      "path": "src/server/ontology/compilerContextWorkerCli.ts",
+      "source_sha256": "75af115c6631f14fab3971efbab9c7993c9c455edfbe84c5c66440c9209d3756",
+      "adaptation": "Verbatim source"
+    },
+    {
+      "path": "src/server/ontology/compilerWorkerConfig.ts",
+      "source_sha256": "752c7ced2415747ad0c0d0d94552ba3af3fc1b3c44464111b48e5316fce09ed4",
+      "adaptation": "Verbatim source"
+    },
+    {
+      "path": "src/server/ontology/contextWorker.ts",
+      "source_sha256": "ac66917f5099d47b48a403941e0453b5cb002f0821a63de2afe2dfb2c48d65ee",
+      "adaptation": "Only replace archived registry type/validator imports with local wire contract"
+    },
+    {
+      "path": "src/server/ontology/workerReviewProtocol.ts",
+      "source_sha256": "6dc15093ab1ec4859ed9d7f5f2a4000ac1b191dc03d1c4fc466e650803494706",
+      "adaptation": "Verbatim source"
+    }
+  ],
+  "context_validator": "Same canonical-context format, 64-hex pointers, nonempty text and 4 MiB UTF-8 bound extracted from projectRegistry.ts; no database/project/identity authority copied",
+  "context_source_sha256": "7a1d605b6a30fe9b5ea881aacb075e8a2f72f116b5dd7a2adadbf57cad63da5b",
+  "dependencies": "Published Sudograph runtime reused; MCP/Zod/TypeScript versions match source bun.lock, with npm integrity recorded in package-lock.json",
+  "protocol": "Four existing MCP tools and sudograph-worker-review/v2; retain moss/host-review-profile metadata for wire compatibility",
+  "scope": "Worker extraction only, not a native or human grant authority, full active backend, review dispatcher or production acceptance"
+}

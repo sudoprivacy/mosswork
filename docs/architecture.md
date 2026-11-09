@@ -200,6 +200,11 @@ comments, SudoCode/Nexus agent management and A2A, or per-user gateway policy.
 Tool visibility is not authorization. The isolated fixture's worker credential
 must not replace the existing production management and authorization authority.
 
+The [Sudograph domain client](sudograph-domain-client.md) adds checked
+context/model/review operations behind required trusted host ports. Its local
+and installed-worker tests do not establish the outstanding production host,
+grant or durable comment-ingress integration.
+
 ## See also
 
 - [AGENTS.md](../AGENTS.md) — module boundaries, hard bans, change workflow

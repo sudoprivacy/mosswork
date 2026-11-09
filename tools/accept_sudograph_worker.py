@@ -1,4 +1,4 @@
-"""Qualify Mosswork's MCP client against an installed, pinned Sudograph worker.
+"""Qualify Mosswork's MCP client against an installed, verified Sudograph worker.
 
 This developer acceptance creates its own SQLite source, canonical model and
 Mosswork connector database. It does not register production credentials or
@@ -71,8 +71,11 @@ def decode_content(value: Any) -> dict[str, Any]:
 
 
 class Acceptance:
-    def __init__(self, output: Path, compiler: Path, worker: Path) -> None:
+    def __init__(
+        self, output: Path, compiler: Path, worker: Path, *, emit_review_fixture: bool = False
+    ) -> None:
         self.output, self.compiler, self.worker = output, compiler, worker
+        self.emit_review_fixture = emit_review_fixture
         self.source = output / "source.db"
         self.token = secrets.token_urlsafe(48)
         self.events: list[dict[str, Any]] = []
@@ -195,7 +198,7 @@ class Acceptance:
             "sudograph_model_contract",
             "sudograph_model_apply",
         }, "The actual Mosswork loader must discover the complete worker contract"
-        self.record("mosswork_discovers_published_worker_tools", tools=sorted(by_name))
+        self.record("mosswork_discovers_installed_worker_tools", tools=sorted(by_name))
 
         names = mcp_tool_names(tools)
         selection = {"mcp_tool_names": names, "server_names": frozenset({"model"})}
@@ -293,10 +296,11 @@ class Acceptance:
             )
             assert refused_request.status_code == 401
             self.record("wrong_worker_credential_refused")
+            record_endpoint = "/review/" + uuid.uuid4().hex + "/v1"
             review = await client.post(
                 endpoint.removesuffix("/mcp") + "/review",
                 headers={"Authorization": "Bearer " + self.token},
-                json={"operation": "document", "endpoint": "/review/" + uuid.uuid4().hex + "/v1"},
+                json={"operation": "document", "endpoint": record_endpoint},
             )
             assert review.status_code == 200, review.text[:300]
             document = review.json()["result"]
@@ -306,7 +310,151 @@ class Acceptance:
             self.record(
                 "review_html_uses_same_revision_and_source_identity", revision=current["revision"]
             )
+            if self.emit_review_fixture:
+                current_contract = await call("sudograph_model_contract", {})
+                catalogue = await call(
+                    "sudograph_context_read",
+                    {
+                        "revision": current["revision"],
+                        "context_digest": current["context_digest"],
+                        "id": "catalog",
+                    },
+                )
+                await self.export_review_fixture(
+                    client,
+                    endpoint,
+                    review.json(),
+                    current,
+                    current_contract,
+                    catalogue,
+                    target["id"],
+                    record_endpoint,
+                )
         return str(current["revision"])
+
+    async def export_review_fixture(
+        self,
+        client: httpx.AsyncClient,
+        endpoint: str,
+        document: dict[str, Any],
+        context: dict[str, Any],
+        contract: dict[str, Any],
+        catalogue: dict[str, Any],
+        object_id: str,
+        record_endpoint: str,
+    ) -> None:
+        """Export only this command's synthetic model through the actual worker."""
+        original_hashes = {name: sha256(self.output / name) for name in ("fixture.db", "source.db")}
+        pointer = {key: context[key] for key in ("revision", "context_digest")}
+        assert document["format"] == "sudograph-worker-review/v2"
+        assert all(document["result"][key] == value for key, value in pointer.items())
+        assert contract["revision"] == pointer["revision"]
+
+        async def read(request: dict[str, Any]) -> Any:
+            response = await client.post(
+                endpoint.removesuffix("/mcp") + "/review",
+                headers={"Authorization": "Bearer " + self.token},
+                json={**request, "resource": document["resource_ref"]},
+            )
+            assert response.status_code == 200, response.text[:300]
+            envelope = response.json()
+            for key in (
+                "format",
+                "authority_ref",
+                "model_ref",
+                "resource_ref",
+                "source_refs",
+                "scope",
+            ):
+                assert envelope[key] == document[key], "Fixture reads must share one binding"
+            return envelope["result"]
+
+        model = await read({"operation": "graph"})
+        params = {**pointer, "id": object_id, "offset": 0, "limit": 50}
+        page = await read({"operation": "page", "params": params})
+        assert all(page[key] == value for key, value in pointer.items())
+        assert page["source_object"] == object_id
+        assert page["rows"] == [[1, "row-only-sentinel"], [2, None], [3, "third"]]
+        assert await read({"operation": "head"}) == pointer
+        assert original_hashes == {name: sha256(self.output / name) for name in original_hashes}
+
+        targets = []
+        for source in model["source_schema"]["sources"]:
+            for obj in source["objects"]:
+                targets.append({"id": obj["id"], "kind": "source_object", "text": obj["name"]})
+                targets.extend(
+                    {
+                        "id": field["id"],
+                        "kind": "source_field",
+                        "text": field["column"],
+                        "parent": obj["id"],
+                    }
+                    for field in obj["fields"]
+                )
+        targets.extend(
+            {"id": definition["id"], "kind": "business_definition", "text": definition["label"]}
+            for definition in model.get("business", {}).get("definitions", {}).values()
+        )
+        payloads = {
+            "review.html": document["result"]["html"],
+            "model.yaml": contract["model"],
+            "model.json": model,
+            "head.json": pointer,
+            "context.json": context,
+            "catalog.json": catalogue,
+            "record-page.request.json": {
+                "view": document["resource_ref"],
+                "operation": "page",
+                "params": params,
+            },
+            "record-page.response.json": {"result": page},
+        }
+        public = json.dumps(payloads, ensure_ascii=False)
+        for secret in (self.token, str(self.output), self.output.as_posix(), str(self.compiler)):
+            assert json.dumps(secret, ensure_ascii=False)[1:-1] not in public, (
+                "Private fixture data in export"
+            )
+        destination = self.output / "browser-fixture"
+        destination.mkdir(exist_ok=False)
+        files = []
+        for name, value in payloads.items():
+            path = destination / name
+            if isinstance(value, str):
+                path.write_bytes(value.encode("utf-8"))
+            else:
+                write_json(path, value)
+            files.append({"path": name, "sha256": sha256(path), "bytes": path.stat().st_size})
+        write_json(
+            destination / "manifest.json",
+            {
+                "format": "sudograph-browser-fixture/v1",
+                "generated_at_utc": datetime.now(UTC).isoformat(),
+                **pointer,
+                **{
+                    key: document[key]
+                    for key in ("authority_ref", "model_ref", "resource_ref", "source_refs")
+                },
+                "stable_targets": targets,
+                "files": files,
+                "worker_sha256": sha256(self.worker),
+                "acceptance_script_sha256": sha256(Path(__file__)),
+                "source_and_model_store_unchanged": original_hashes,
+                "serving_contract": {
+                    "record_endpoint": record_endpoint,
+                    "review_html": "Serve unchanged compiler bytes with inline renderer assets",
+                    "record_transport": "window.__SHAREONE__.read.request or same-origin POST",
+                    "comment_host": "Connected window.__SHAREONE__.anchors select/report/on; a pending stub is not a comment composer",
+                },
+                "credentials_or_databases_included": False,
+                "scope": "Synthetic compiler/worker output only; not authenticated comments, live grants, model execution or production acceptance. Require the parent acceptance receipt before treating this run as passed.",
+            },
+        )
+        self.record(
+            "current_browser_fixture_emitted",
+            revision=pointer["revision"],
+            context_digest=pointer["context_digest"],
+            manifest_sha256=sha256(destination / "manifest.json"),
+        )
 
     def run(self) -> None:
         process = None
@@ -398,9 +546,7 @@ class Acceptance:
 
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument(
-        "--worker", type=Path, required=True, help="Installed sudograph-context-worker.mjs"
-    )
+    parser.add_argument("--worker", type=Path, required=True, help="Installed compiler worker CLI")
     parser.add_argument(
         "--worker-sha256", required=True, help="Expected SHA-256 of the verified installed worker"
     )
@@ -409,6 +555,11 @@ def main() -> int:
         type=Path,
         required=True,
         help="Python with the installed Sudograph compiler",
+    )
+    parser.add_argument(
+        "--emit-review-fixture",
+        action="store_true",
+        help="Export non-secret synthetic browser-fixture HTML, model, exact pointers and hashes",
     )
     parser.add_argument(
         "--output",
@@ -427,7 +578,7 @@ def main() -> int:
     if not worker.is_file() or not compiler.is_file() or sha256(worker) != args.worker_sha256:
         parser.error("Require existing compiler/worker files and the exact verified worker SHA-256")
     output.mkdir(parents=True, exist_ok=False)
-    Acceptance(output, compiler, worker).run()
+    Acceptance(output, compiler, worker, emit_review_fixture=args.emit_review_fixture).run()
     print(json.dumps({"passed": True, "receipt": str(output / "receipt.json")}))
     return 0
 
