@@ -62,7 +62,7 @@ derive one from the current conversation or current model. This domain helper
 does not implement the production storage adapter, authenticate stored metadata,
 or supply a missing session identity. The recovery tests use a temporary SQLite
 fixture and actual compiler output; production served-pointer persistence and
-trusted review delivery still need the Owner6/PC3 composition.
+trusted review delivery still require the host's persistence and ingress wiring.
 
 The client refuses results if post-authorization or audit fails. That does not
 undo an already committed model write. A lost/cancelled write response must be
@@ -71,6 +71,10 @@ replacement ID or cancels another conversation. Compiler diagnostics retain
 their repair guidance. Unexpected transport errors omit upstream exception
 text. The HTTP/product adapter must map domain codes through the existing
 localized error layer, rather than display private transport exceptions.
+Cancellation stays observable as `CancelledError` even when the audit also
+fails. In that case the exception carries a fixed `AUDIT_UNAVAILABLE` note;
+the host must retain that failure evidence without reporting successful audit
+or replaying the original operation.
 
 ## Qualification boundary
 
@@ -93,8 +97,7 @@ when neither path is supplied; partial/mismatched configuration fails. The
 optional `MOSSWORK_TEST_SUDOGRAPH_NODE` chooses the worker's Node executable
 separately from the host/frontend toolchain; otherwise it uses `node` on PATH.
 This permits the existing Node20 frontend build and Node22 worker in one gate.
-It does not change any test assertion, deadline or worker configuration.
-The
+It does not change any test assertion, deadline or worker configuration. The
 current worker is built and packed from `packages/sudograph-worker`, installed
 in an isolated directory and byte-verified against its source/build manifest.
 Run `python tools/package_sudograph_worker.py --output <new-directory>` to

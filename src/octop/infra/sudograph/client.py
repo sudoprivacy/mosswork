@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import copy
 from collections.abc import Awaitable
 from typing import Any, Literal, Protocol
@@ -143,6 +144,7 @@ class SudographClient:
             review_request(request) if operation == "review" else tool_request(operation, request)
         )
         status: Literal["success", "error"] = "error"
+        cancelled: asyncio.CancelledError | None = None
         try:
             await _require_completion(ports.authorize(binding, operation))
             if operation == "review":
@@ -160,6 +162,9 @@ class SudographClient:
             await _require_completion(ports.authorize(binding, operation))
             status = "success"
             return result
+        except asyncio.CancelledError as error:
+            cancelled = error
+            raise
         except SudographError:
             raise
         except PermissionError:
@@ -177,6 +182,11 @@ class SudographClient:
             try:
                 await _require_completion(ports.audit(binding, operation, status))
             except Exception:
+                if cancelled is not None:
+                    # Keep task cancellation observable without losing the
+                    # audit failure or exposing its private storage diagnostic.
+                    cancelled.add_note("AUDIT_UNAVAILABLE: canonical model audit did not complete")
+                    raise cancelled from None
                 raise SudographError(
                     "AUDIT_UNAVAILABLE",
                     "Canonical model audit unavailable",

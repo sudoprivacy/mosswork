@@ -5,6 +5,7 @@ from __future__ import annotations
 import asyncio
 import copy
 import json
+import traceback
 from typing import Any
 
 import pytest
@@ -483,6 +484,59 @@ def test_cancellation_propagates_and_has_no_automatic_retry() -> None:
         asyncio.run(SudographClient(BINDING, ports).contract())
     assert len(ports.calls) == 1
     assert ports.audits == [("sudograph_model_contract", "error")]
+
+
+@pytest.mark.parametrize("phase", ["pre", "tool", "post"])
+@pytest.mark.parametrize("audit_failure", ["raise", "verdict"])
+def test_real_task_cancellation_survives_failed_audit_without_replaying_write(
+    phase: str, audit_failure: str
+) -> None:
+    async def exercise() -> None:
+        entered = asyncio.Event()
+
+        async def pause() -> None:
+            entered.set()
+            await asyncio.Event().wait()
+
+        class PausingPorts(Ports):
+            async def authorize(self, binding: ModelBinding, operation: Operation) -> None:
+                await super().authorize(binding, operation)
+                if (phase == "pre" and len(self.authorizations) == 1) or (
+                    phase == "post" and len(self.authorizations) == 2
+                ):
+                    await pause()
+
+            async def call_tool(
+                self, binding: ModelBinding, name: Operation, arguments: dict[str, Any]
+            ) -> ToolResult:
+                result = await super().call_tool(binding, name, arguments)
+                if phase == "tool":
+                    await pause()
+                return result
+
+        ports = PausingPorts()
+        ports.audit_error = audit_failure == "raise"
+        if audit_failure == "verdict":
+            ports.audit_result = False
+        client = SudographClient(BINDING, ports)
+        request = {"base_revision": "r", "operation_id": "original-write", "model": "yaml"}
+        task = asyncio.create_task(client.apply(request))
+        await asyncio.wait_for(entered.wait(), timeout=5)
+        assert task.cancel()
+        with pytest.raises(asyncio.CancelledError) as failure:
+            await task
+        assert task.cancelled()
+        assert failure.value.__notes__ == [
+            "AUDIT_UNAVAILABLE: canonical model audit did not complete"
+        ]
+        assert "private audit storage diagnostic" not in "".join(
+            traceback.format_exception(failure.value)
+        )
+        assert len(ports.calls) == (0 if phase == "pre" else 1)
+        assert all(arguments == request for _, arguments in ports.calls)
+        assert ports.audits == [("sudograph_model_apply", "error")]
+
+    asyncio.run(exercise())
 
 
 def test_audit_failure_is_a_failure_not_a_successful_read() -> None:
