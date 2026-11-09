@@ -500,6 +500,7 @@ class FeishuChannel(BaseChannel):
 
             # Build raw payload dict for parse_inbound
             raw_payload = {
+                "app_id": getattr(data.header, "app_id", "") if data.header else "",
                 "message_id": message_id,
                 "message_type": message.message_type,
                 "content": message.content,
@@ -510,6 +511,9 @@ class FeishuChannel(BaseChannel):
                 "sender": {
                     "sender_id": sender_id,
                     "sender_type": sender_type,
+                    "open_id": getattr(sender_id_obj, "open_id", "") if sender_id_obj else "",
+                    "user_id": getattr(sender_id_obj, "user_id", "") if sender_id_obj else "",
+                    "tenant_key": getattr(sender, "tenant_key", ""),
                 },
                 "create_time": data.header.create_time if data.header else "",
             }
@@ -1028,6 +1032,13 @@ class FeishuChannel(BaseChannel):
             "chat_type": chat_type,
             "to_handle": to_handle,
             "sender_id": sender_id,
+            # Preserve SDK identity evidence for the trusted product router.
+            # Parsing alone does not authenticate an event or grant membership.
+            "sender_type": raw_payload.get("sender", {}).get("sender_type", ""),
+            "sender_open_id": raw_payload.get("sender", {}).get("open_id", ""),
+            "sender_user_id": raw_payload.get("sender", {}).get("user_id", ""),
+            "sender_tenant_key": raw_payload.get("sender", {}).get("tenant_key", ""),
+            "feishu_app_id": raw_payload.get("app_id", ""),
             "bot_mentioned": bot_mentioned,
             "mentions": mentions,
         }

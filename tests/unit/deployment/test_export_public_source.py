@@ -116,11 +116,16 @@ def test_export_preserves_project_ci_and_archives_unknown_workflows(tmp_path: Pa
     _repo(root)
     workflows = root / ".github/workflows"
     workflows.mkdir(parents=True)
-    for name in ("mosswork-ci.yml", "mosswork-release.yml", "auto-tag.yml"):
+    for name in (
+        "mosswork-ci.yml",
+        "mosswork-identity-ci.yml",
+        "mosswork-release.yml",
+        "auto-tag.yml",
+    ):
         (workflows / name).write_text(f"name: {name}\n")
     target = tmp_path / "public"
     exporter.export(root, target)
-    for name in ("mosswork-ci.yml", "mosswork-release.yml"):
+    for name in ("mosswork-ci.yml", "mosswork-identity-ci.yml", "mosswork-release.yml"):
         assert (target / ".github/workflows" / name).is_file()
     assert not (target / ".github/workflows/auto-tag.yml").exists()
     assert (target / ".github/upstream-workflows/auto-tag.yml.disabled").is_file()

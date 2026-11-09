@@ -1,0 +1,76 @@
+{
+  "sourceCommit": "d0b84d4c8fd5905d9ec3f7c160f2ce633f535d0d",
+  "producer": "Exact original MossImIdentity connection and conversationKey with real Bun SQLite registration rows",
+  "cases": [
+    {
+      "name": "original member",
+      "org": "org-a",
+      "connectionOwner": "bot-owner",
+      "member": "member-a",
+      "tenant": "tenant-a",
+      "app": "cli_app_a",
+      "revision": "r1",
+      "chat": "oc_group",
+      "plugin": "plugin-a",
+      "scope": "[\"org-a\",\"bot-owner\",\"plugin-a\",\"tenant-a\",\"cli_app_a\",\"r1\"]",
+      "agentRef": "moss-agent:operator:WyJvcmctYSIsIm1lbWJlci1hIl0",
+      "conversationKey": "moss-im:3e3c42a024cedc044c3e8180448470ffb5bec25e55753d314880eb7e372dd790"
+    },
+    {
+      "name": "second member same group",
+      "org": "org-a",
+      "connectionOwner": "bot-owner",
+      "member": "member-b",
+      "tenant": "tenant-a",
+      "app": "cli_app_a",
+      "revision": "r1",
+      "chat": "oc_group",
+      "plugin": "plugin-a",
+      "scope": "[\"org-a\",\"bot-owner\",\"plugin-a\",\"tenant-a\",\"cli_app_a\",\"r1\"]",
+      "agentRef": "moss-agent:operator:WyJvcmctYSIsIm1lbWJlci1iIl0",
+      "conversationKey": "moss-im:c199f89960314dcd5d2e8e874d3e0e84e813bdbed1b7b6d274c10e1de25c4593"
+    },
+    {
+      "name": "registered revision changed",
+      "org": "org-a",
+      "connectionOwner": "bot-owner",
+      "member": "member-a",
+      "tenant": "tenant-a",
+      "app": "cli_app_a",
+      "revision": "r2",
+      "chat": "oc_group",
+      "plugin": "plugin-a",
+      "scope": "[\"org-a\",\"bot-owner\",\"plugin-a\",\"tenant-a\",\"cli_app_a\",\"r2\"]",
+      "agentRef": "moss-agent:operator:WyJvcmctYSIsIm1lbWJlci1hIl0",
+      "conversationKey": "moss-im:a47646a5aae6337b58ffc9aa6055c33bd6f2cf18727bfa97e6505be6655ac40b"
+    },
+    {
+      "name": "other organization",
+      "org": "org-b",
+      "connectionOwner": "bot-owner",
+      "member": "member-a",
+      "tenant": "tenant-b",
+      "app": "cli_app_b",
+      "revision": "r1",
+      "chat": "oc_group",
+      "plugin": "plugin-a",
+      "scope": "[\"org-b\",\"bot-owner\",\"plugin-a\",\"tenant-b\",\"cli_app_b\",\"r1\"]",
+      "agentRef": "moss-agent:operator:WyJvcmctYiIsIm1lbWJlci1hIl0",
+      "conversationKey": "moss-im:3fda27583856e972ceab5b41685e3d9da943bd9d454c637f43cfc3b95500598c"
+    },
+    {
+      "name": "nonascii retained identifiers",
+      "org": "数牍科技",
+      "connectionOwner": "机器人",
+      "member": "成员甲",
+      "tenant": "tenant-a",
+      "app": "cli_app_a",
+      "revision": "版本一",
+      "chat": "群组",
+      "plugin": "plugin-a",
+      "scope": "[\"数牍科技\",\"机器人\",\"plugin-a\",\"tenant-a\",\"cli_app_a\",\"版本一\"]",
+      "agentRef": "moss-agent:operator:WyLmlbDniY3np5HmioAiLCLmiJDlkZjnlLIiXQ",
+      "conversationKey": "moss-im:87d904db7072aceefad9e7c9a7f431bcba5d98c8c06404315a41dcdb9d0c56af"
+    }
+  ]
+}

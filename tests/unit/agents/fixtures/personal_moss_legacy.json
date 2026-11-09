@@ -1,0 +1,48 @@
+{
+  "sourceCommit": "59310782774b136ee44c2a3fe7fe334613e0b8fe",
+  "producer": "Exact retained Moss agentIdentity.ts executed with Bun",
+  "cases": [
+    {
+      "organizationId": "org-a",
+      "ownerId": "member-a",
+      "reference": "moss-agent:operator:WyJvcmctYSIsIm1lbWJlci1hIl0",
+      "runtimeAgentName": "moss-5f2c08d00704c5c8402b695b4cdabd9b6ca6138cfbed324a3ef513d62d97442b"
+    },
+    {
+      "organizationId": "org-b",
+      "ownerId": "member-a",
+      "reference": "moss-agent:operator:WyJvcmctYiIsIm1lbWJlci1hIl0",
+      "runtimeAgentName": "moss-74d749f4638a45f2cbcad7bc3352b06a70313b47745b4f51dc05da9b8abc79d6"
+    },
+    {
+      "organizationId": "org-a",
+      "ownerId": "member-b",
+      "reference": "moss-agent:operator:WyJvcmctYSIsIm1lbWJlci1iIl0",
+      "runtimeAgentName": "moss-3e556964327fd882ee9d3294710a16ab4d61be582f90f3e83fe0e8f381befd33"
+    },
+    {
+      "organizationId": "数牍科技",
+      "ownerId": "宋一民",
+      "reference": "moss-agent:operator:WyLmlbDniY3np5HmioAiLCLlrovkuIDmsJEiXQ",
+      "runtimeAgentName": "moss-ea7663fb6d87f9ad7ee176cabfed5305e6f532139ca3a9920df762b7e2614071"
+    },
+    {
+      "organizationId": "org/with:reserved",
+      "ownerId": "member\\with@reserved",
+      "reference": "moss-agent:operator:WyJvcmcvd2l0aDpyZXNlcnZlZCIsIm1lbWJlclxcd2l0aEByZXNlcnZlZCJd",
+      "runtimeAgentName": "moss-2b62406f6e44810d673a95749cb61bb37a7ef38afd3ee2a7b4909a8c5ce5dccc"
+    },
+    {
+      "organizationId": "org-🎯",
+      "ownerId": "member-é",
+      "reference": "moss-agent:operator:WyJvcmct8J-OryIsIm1lbWJlci3DqSJd",
+      "runtimeAgentName": "moss-7420ebff7e743dc2d5922e7437b8a477c2dd0baf22790a6880d443e1ca5f37f5"
+    },
+    {
+      "organizationId": "org\nline",
+      "ownerId": "member\u0000",
+      "reference": "moss-agent:operator:WyJvcmdcbmxpbmUiLCJtZW1iZXJcdTAwMDAiXQ",
+      "runtimeAgentName": "moss-b9defafab58e9911ff00d0b1e5d05208865cf9bd86a4dc3638f6efcbe9bf1bf2"
+    }
+  ]
+}

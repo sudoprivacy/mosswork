@@ -13,6 +13,7 @@ from pathlib import Path
 
 PROJECT_WORKFLOWS = {
     ".github/workflows/mosswork-ci.yml",
+    ".github/workflows/mosswork-identity-ci.yml",
     ".github/workflows/mosswork-release.yml",
 }
 PUBLIC_ENV_TEMPLATES = {"docker/deploy/.env"}
