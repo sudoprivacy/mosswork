@@ -121,7 +121,7 @@ def export(root: Path, destination: Path) -> int:
         source = root / name
         if source.is_symlink():
             resolved = source.resolve()
-            if not resolved.is_relative_to(root) or excluded(str(resolved.relative_to(root))):
+            if not resolved.is_relative_to(root) or excluded(resolved.relative_to(root).as_posix()):
                 raise ValueError(f"Symbolic link leaves public source scope: {name}")
             if source.readlink().is_absolute():
                 raise ValueError(f"Absolute symbolic link must be made portable: {name}")
@@ -165,11 +165,13 @@ def export(root: Path, destination: Path) -> int:
     )
     # Re-exporting an imported source repository regenerates this note and its hash.
     records = [
-        record for record in records if record["path"] != str(archive_note.relative_to(destination))
+        record
+        for record in records
+        if record["path"] != archive_note.relative_to(destination).as_posix()
     ]
     records.append(
         {
-            "path": str(archive_note.relative_to(destination)),
+            "path": archive_note.relative_to(destination).as_posix(),
             "sha256": hashlib.sha256(archive_note.read_bytes()).hexdigest(),
         }
     )
