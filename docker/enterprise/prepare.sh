@@ -25,7 +25,9 @@ while [ "$#" -gt 0 ]; do
     *) echo "Unknown option: $1" >&2; usage ;;
   esac
 done
-[ -n "$data" ] && [ -n "$env_file" ] || usage
+if [ -z "$data" ] || [ -z "$env_file" ]; then
+  usage
+fi
 
 case "$data$env_file$socket" in
   *[$'\n\r\"$`\\']*) echo 'Paths must not contain newlines, quotes, backticks, backslashes or dollar signs' >&2; exit 1 ;;

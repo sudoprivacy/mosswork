@@ -14,6 +14,8 @@ on:
       - 'tests/unit/infra/test_local_components.py'
       - 'scripts/install-moss-server.sh'
       - 'tools/*public_source.py'
+      - 'tools/accept_sudograph_worker.py'
+      - 'src/octop/infra/connectors/**'
       - 'tests/unit/deployment/**'
   workflow_dispatch:
 
@@ -21,6 +23,83 @@ permissions:
   contents: read
 
 jobs:
+  sudograph-interop:
+    name: Published Sudograph connector interoperability
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-24.04, windows-2022]
+    runs-on: ${{ matrix.os }}
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v6
+        with:
+          python-version: '3.12'
+          enable-cache: true
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - uses: actions/cache@v4
+        with:
+          path: ${{ runner.temp }}/sudograph-artifacts
+          key: sudograph-worker-${{ runner.os }}-0c88caaaa59d0c1d8ebca76a613904edb3fc1e9167a3a7d291036de08de94ef6-compiler-b0fcd5b257b995f9764081968f4c797f00d5a70f1d04b771c11818f5204e6ef2
+      - name: Verify published worker and compiler bytes
+        shell: bash
+        run: |
+          set -euo pipefail
+          artifact_temp="$RUNNER_TEMP"
+          if [ "$RUNNER_OS" = Windows ]; then
+            artifact_temp="$(cygpath -u "$artifact_temp")"
+          fi
+          artifacts="$artifact_temp/sudograph-artifacts"
+          worker="$artifacts/moss-server/app/bin/sudograph-context-worker.mjs"
+          wheel="$artifacts/sudograph_compiler-0.1.0-py3-none-any.whl"
+          mkdir -p "$artifacts"
+          if [ ! -f "$worker" ]; then
+            archive="$artifact_temp/moss-server.tar.gz"
+            curl --fail --location --output "$archive" https://github.com/sudoprivacy/moss/releases/download/server-v0.1.104-rc.2/moss-server-0.1.104-rc.2-linux-amd64.tar.gz
+            echo "ce75754f207426403074e958bfb4270919cd60e152d6cb2966e0ddb7ab938efc  $archive" | sha256sum --check
+            tar --force-local -xzf "$archive" -C "$artifacts" moss-server/app/bin/sudograph-context-worker.mjs
+          fi
+          echo "0c88caaaa59d0c1d8ebca76a613904edb3fc1e9167a3a7d291036de08de94ef6  $worker" | sha256sum --check
+          if [ ! -f "$wheel" ]; then
+            curl --fail --location --output "$wheel" https://github.com/sudoprivacy/sudograph/releases/download/v0.1.0/sudograph_compiler-0.1.0-py3-none-any.whl
+          fi
+          echo "b0fcd5b257b995f9764081968f4c797f00d5a70f1d04b771c11818f5204e6ef2  $wheel" | sha256sum --check
+          uv venv "$RUNNER_TEMP/sudograph-compiler" --python 3.12
+          compiler="$RUNNER_TEMP/sudograph-compiler/bin/python"
+          if [ "$RUNNER_OS" = Windows ]; then
+            compiler="$RUNNER_TEMP/sudograph-compiler/Scripts/python.exe"
+          fi
+          uv pip install --python "$compiler" --only-binary :all: "$wheel"
+          echo "SUDOGRAPH_COMPILER_PYTHON=$compiler" >> "$GITHUB_ENV"
+      - name: Run actual connector and compiler acceptance
+        run: |
+          uv run --no-default-groups --frozen python tools/accept_sudograph_worker.py \
+            --worker "$RUNNER_TEMP/sudograph-artifacts/moss-server/app/bin/sudograph-context-worker.mjs" \
+            --worker-sha256 0c88caaaa59d0c1d8ebca76a613904edb3fc1e9167a3a7d291036de08de94ef6 \
+            --compiler-python "$SUDOGRAPH_COMPILER_PYTHON" \
+            --output "$RUNNER_TEMP/sudograph-acceptance"
+      - name: Check connector regressions and portable source exports
+        run: |
+          uv run --frozen pytest tests/unit/connectors/test_custom_mcp.py tests/unit/deployment/test_export_public_source.py -q
+          uv run --frozen pytest tests/integration/test_connectors_api.py -q -k 'patch_custom_mcp_server_default_open_only or shared_custom_mcp_is_visible_with_collision_safe_name or chat_rejects_unknown_mcp or chat_accepts_user_instance_mcp'
+          uv run --frozen python tools/export_public_source.py --output "$RUNNER_TEMP/sudograph-public-source"
+          uv run --frozen python tools/check_public_source.py --root "$RUNNER_TEMP/sudograph-public-source"
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: sudograph-interop-receipts-${{ runner.os }}
+          path: |
+            ${{ runner.temp }}/sudograph-acceptance/receipt.json
+            ${{ runner.temp }}/sudograph-acceptance/checks.json
+            ${{ runner.temp }}/sudograph-acceptance/incomplete.json
+            ${{ runner.temp }}/sudograph-acceptance/registration.stdout.log
+            ${{ runner.temp }}/sudograph-acceptance/registration.stderr.log
+          if-no-files-found: ignore
   release-checks:
     runs-on: ubuntu-24.04
     steps:
@@ -33,7 +112,9 @@ jobs:
         run: uv run --frozen pytest tests/unit/deployment desktop/tests/test_package_company.py desktop/tests/test_company_tools.py tests/unit/infra/test_local_harness.py tests/unit/infra/test_local_components.py tests/unit/infra/test_brand_environment.py -q
       - name: Check shell and workflow syntax
         run: |
-          bash -n scripts/install-moss-server.sh docker/deploy/*.sh docker/enterprise/{prepare.sh,deploy.sh,start.sh,stop.sh}
+          for script in scripts/install-moss-server.sh docker/deploy/*.sh docker/enterprise/{prepare.sh,deploy.sh,start.sh,stop.sh}; do
+            bash -n "$script"
+          done
           shellcheck scripts/install-moss-server.sh docker/deploy/*.sh docker/enterprise/{prepare.sh,deploy.sh,start.sh,stop.sh}
           go run github.com/rhysd/actionlint/cmd/actionlint@v1.7.7 .github/workflows/mosswork-ci.yml .github/workflows/mosswork-release.yml
       - name: Validate public source export
