@@ -106,10 +106,10 @@ verify_checksum() {
   expected=$(awk -v target="$name" '$2 == target || $2 == "*" target {print $1; exit}' \
     "$asset_dir/SHA256SUMS.txt")
   actual=$(sha256sum "$asset_dir/$name" | cut -d ' ' -f 1)
-  [ -n "$expected" ] && [ "$expected" = "$actual" ] || {
+  if [ -z "$expected" ] || [ "$expected" != "$actual" ]; then
     echo "Download checksum mismatch: $name" >&2
     exit 1
-  }
+  fi
 }
 verify_checksum "$asset"
 if [ -f "$asset_dir/$images" ]; then

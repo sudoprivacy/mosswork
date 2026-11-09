@@ -114,7 +114,13 @@ class Acceptance:
             timeout=120,
             check=False,
         )
-        assert registration.returncode == 0, "Installed compiler registration failed"
+        (self.output / "registration.stdout.log").write_text(registration.stdout, encoding="utf-8")
+        (self.output / "registration.stderr.log").write_text(registration.stderr, encoding="utf-8")
+        assert registration.returncode == 0, (
+            "Installed compiler registration failed; "
+            "see registration.stdout.log and registration.stderr.log: "
+            + registration.stderr[-4000:]
+        )
         result = json.loads(registration.stdout)
         write_json(self.output / "registration.json", result)
         assert result["ok"], result
@@ -411,9 +417,11 @@ def main() -> int:
         help="New private acceptance directory; existing paths are refused",
     )
     args = parser.parse_args()
+    # Keep a virtualenv's executable path: resolving its POSIX symlink selects
+    # the base interpreter and loses the installed compiler's site-packages.
     worker, compiler, output = (
         args.worker.resolve(strict=True),
-        args.compiler_python.resolve(strict=True),
+        Path(os.path.abspath(args.compiler_python)),
         args.output.resolve(),
     )
     if not worker.is_file() or not compiler.is_file() or sha256(worker) != args.worker_sha256:
