@@ -50,12 +50,16 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          artifacts="$RUNNER_TEMP/sudograph-artifacts"
+          artifact_temp="$RUNNER_TEMP"
+          if [ "$RUNNER_OS" = Windows ]; then
+            artifact_temp="$(cygpath -u "$artifact_temp")"
+          fi
+          artifacts="$artifact_temp/sudograph-artifacts"
           worker="$artifacts/moss-server/app/bin/sudograph-context-worker.mjs"
           wheel="$artifacts/sudograph_compiler-0.1.0-py3-none-any.whl"
           mkdir -p "$artifacts"
           if [ ! -f "$worker" ]; then
-            archive="$RUNNER_TEMP/moss-server.tar.gz"
+            archive="$artifact_temp/moss-server.tar.gz"
             curl --fail --location --output "$archive" https://github.com/sudoprivacy/moss/releases/download/server-v0.1.104-rc.2/moss-server-0.1.104-rc.2-linux-amd64.tar.gz
             echo "ce75754f207426403074e958bfb4270919cd60e152d6cb2966e0ddb7ab938efc  $archive" | sha256sum --check
             tar --force-local -xzf "$archive" -C "$artifacts" moss-server/app/bin/sudograph-context-worker.mjs
