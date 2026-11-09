@@ -157,7 +157,15 @@ def check(root: Path) -> list[str]:
     else:
         errors.append("PUBLIC_SOURCE.json missing; run against an exported source snapshot")
 
-    docs = set(root.glob("*.md")) | set((root / "docs").glob("*.md"))
+    errors.extend(check_references(root))
+    return errors
+
+
+def check_references(root: Path, extra_docs: tuple[Path, ...] = ()) -> list[str]:
+    """Check live documentation and expert references without an export manifest."""
+    root = root.resolve()
+    errors: list[str] = []
+    docs = set(root.glob("*.md")) | set((root / "docs").glob("*.md")) | set(extra_docs)
     docs |= {
         root / name
         for name in (

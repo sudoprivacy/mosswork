@@ -1,7 +1,6 @@
 #!/usr/bin/env bash
-# Pre-commit gate: make precommit (format BE+FE + lint + typecheck + testmon-scoped
-# tests) + dashboard build. The full suite still runs in CI (`make all`); this is a
-# fast, change-aware local gate so commits don't wait on the whole test matrix.
+# Independent documentation/tool changes use checked scoped validation.
+# Application and unknown changes retain make precommit + dashboard build.
 # Enable once per clone:  make install-hooks
 # Bypass (emergency only): SKIP_PRECOMMIT=1 git commit ...
 # Or: git commit --no-verify
@@ -15,15 +14,29 @@ fi
 ROOT="$(git rev-parse --show-toplevel)"
 cd "$ROOT"
 
+if uv run --no-project python tools/precommit.py; then
+  exit 0
+else
+  scoped_status=$?
+  if [[ "$scoped_status" != "3" ]]; then
+    exit "$scoped_status"
+  fi
+fi
+
 # Remember staged paths so we can re-add them after auto-format rewrites the worktree.
 # Portable (bash 3.2+): avoid `mapfile` (bash 4+ only).
 STAGED_FILES=()
-while IFS= read -r line; do
+while IFS= read -r -d '' line; do
   [[ -n "$line" ]] && STAGED_FILES+=("$line")
-done < <(git diff --cached --name-only --diff-filter=ACMR || true)
+done < <(git diff --cached --name-only --diff-filter=ACMR -z)
+
+run_validation() {
+  # Git fixture repositories must not inherit the parent commit's index.
+  env -u GIT_DIR -u GIT_WORK_TREE -u GIT_INDEX_FILE -u GIT_COMMON_DIR -u GIT_PREFIX "$@"
+}
 
 echo "[pre-commit] make precommit  (format-all + lint + typecheck + testmon-scoped test)"
-make precommit
+run_validation make precommit
 
 # If format rewrote files that were already staged, refresh the index so the
 # commit includes the formatted content (worktree vs index drift).
@@ -42,7 +55,7 @@ fi
 echo "[pre-commit] dashboard npm run build"
 (
   cd "$ROOT/dashboard"
-  npm run build
+  run_validation npm run build
 )
 
 echo "[pre-commit] all checks passed"

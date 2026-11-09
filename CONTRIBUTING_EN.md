@@ -35,6 +35,35 @@ go test ./internal/groups ./internal/store
 
 Real PostgreSQL tests use a dedicated test database; see the communication service documentation. Tests skipped because no database is configured do not count as real-database acceptance.
 
+### Local commit checks
+
+The repository hook reads the staged candidate. Public documentation changes
+check documentation and expert references without installing the application or
+building the dashboard. The explicitly supported export/acceptance/gate tools
+also run their Ruff and regression checks. Runtime prompts, application files,
+unknown tools and mixed changes retain `make precommit` and the dashboard build;
+that fallback still requires GNU Make and the existing frontend dependencies.
+Required command failures refuse the commit and stop subsequent commands.
+
+Inspect the selection with `uv run --no-project python tools/precommit.py --plan`.
+Partially staged files are refused instead of automatically including unstaged
+edits. Scoped checks record their candidate digest, actual commands, results and
+elapsed time in the worktree's Git administration directory as
+`mosswork-precommit.json`; `requires_full_gate` is a delegation decision, not a
+successful full validation. These local checks do not replace PR CI or release
+acceptance.
+
+In a shared linked worktree, enable the hook for the commit without changing
+other worktrees' Git settings:
+
+```sh
+git -c core.hooksPath=.githooks commit -m "Describe the change"
+```
+
+For a standalone clone, `make install-hooks` remains available. Hooks are checked
+out with LF on Windows, and the scoped dispatcher requires Python and uv rather
+than GNU Make. It does not change test worker counts or validation deadlines.
+
 ## License and releases
 
 Contribute only code and material you have the right to provide. Your changes are submitted under the root MIT license; third-party content must retain its license and provenance, and material with redistribution restrictions must not go into the public source package.
