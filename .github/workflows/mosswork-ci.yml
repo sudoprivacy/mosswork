@@ -15,6 +15,10 @@ on:
       - 'scripts/install-moss-server.sh'
       - 'tools/*public_source.py'
       - 'tools/accept_sudograph_worker.py'
+      - 'tools/precommit.py'
+      - '.githooks/pre-commit'
+      - '.gitattributes'
+      - 'AGENTS.md'
       - 'src/octop/infra/connectors/**'
       - 'tests/unit/deployment/**'
   workflow_dispatch:
@@ -85,7 +89,7 @@ jobs:
             --output "$RUNNER_TEMP/sudograph-acceptance"
       - name: Check connector regressions and portable source exports
         run: |
-          uv run --frozen pytest tests/unit/connectors/test_custom_mcp.py tests/unit/deployment/test_export_public_source.py -q
+          uv run --frozen pytest tests/unit/connectors/test_custom_mcp.py tests/unit/deployment/test_export_public_source.py tests/unit/deployment/test_precommit.py -q
           uv run --frozen pytest tests/integration/test_connectors_api.py -q -k 'patch_custom_mcp_server_default_open_only or shared_custom_mcp_is_visible_with_collision_safe_name or chat_rejects_unknown_mcp or chat_accepts_user_instance_mcp'
           uv run --frozen python tools/export_public_source.py --output "$RUNNER_TEMP/sudograph-public-source"
           uv run --frozen python tools/check_public_source.py --root "$RUNNER_TEMP/sudograph-public-source"
