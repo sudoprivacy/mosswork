@@ -1,0 +1,35 @@
+{
+  "sourceCommit": "d0b84d4c8fd5905d9ec3f7c160f2ce633f535d0d",
+  "sourcePath": "src/server/browser/browserGateway.ts",
+  "sourceSha256": "e302c3414ade134a5addf80d2e412b6e683f0926ee1650b14105c73005a9b28a",
+  "originalFunctionBodySha256": "07f8a5b88779ef269bf857181c448448a255ba721ee61aa9dab6d9cf063e0dfa",
+  "method": "Executed unchanged original browserController body in Node; removed only TypeScript annotations/export wrapper. No network or browser.",
+  "nodeVersion": "v22.21.0",
+  "vectors": [
+    {
+      "orgId": "org",
+      "userId": "member",
+      "controller": "user-f7cf96642a6eba670c996c156dfb442133a85ff41d6e052cb5c23270aa6e6b33"
+    },
+    {
+      "orgId": "org-id",
+      "userId": "member-id",
+      "controller": "user-7c556f75fb77cc91ff4f12817e182a0319871a202e827f305c1d9a8dea3399bf"
+    },
+    {
+      "orgId": "组织-一",
+      "userId": "用户-二",
+      "controller": "user-597507d02eb5729fa23bfe715dafc61e45f5e2f7499f2eab5cfa64ef8dcf1b24"
+    },
+    {
+      "orgId": "org\"quoted\\",
+      "userId": "member-with\nnewline",
+      "controller": "user-2b9105e0f96c1963c9a5ccdde7aec898004d0e0e5e1dd1e9cd48c531389c6051"
+    },
+    {
+      "orgId": "team-😀",
+      "userId": "user-Łódź",
+      "controller": "user-4da76505a4242d6401d8ff392c3a3938e6a6623b121ec572411df68afdf69116"
+    }
+  ]
+}

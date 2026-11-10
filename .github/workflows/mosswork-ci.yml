@@ -32,6 +32,13 @@ on:
       - 'tests/unit/api/test_knowledge_bases.py'
       - 'tests/unit/company_runtime/test_desktop_capacity.py'
       - 'src/octop/infra/sudograph/**'
+      - 'src/octop/infra/native_host/**'
+      - 'src/octop/infra/browser/worker.py'
+      - 'src/octop/infra/db/repos/retained_*.py'
+      - 'tests/unit/native_host/**'
+      - 'tests/unit/db/test_retained_*.py'
+      - 'tests/unit/db/fixtures/retained_*.sql'
+      - 'tools/accept_controller_mailbox.py'
       - 'tests/unit/sudograph/**'
       - 'tests/integration/test_sudograph_client_worker.py'
       - 'tests/unit/deployment/**'
@@ -137,6 +144,12 @@ jobs:
           uv run --frozen mypy src/octop/infra/sudograph --follow-imports=silent
           uv run --frozen pytest tests/unit/sudograph tests/integration/test_sudograph_client_worker.py -q \
             --basetemp "$RUNNER_TEMP/sudograph-domain-client" --junitxml "$RUNNER_TEMP/sudograph-domain-client.xml"
+      - name: Check trusted native-host adapters and original retained stores
+        run: |
+          uv run --frozen ruff check src/octop/infra/native_host src/octop/infra/browser/worker.py src/octop/infra/db/repos/retained_*.py tests/unit/native_host tests/unit/db/test_retained_*.py tools/accept_controller_mailbox.py
+          uv run --frozen mypy src/octop/infra/native_host src/octop/infra/browser/worker.py src/octop/infra/db/repos/retained_*.py --follow-imports=silent
+          uv run --frozen pytest tests/unit/native_host tests/unit/db/test_retained_*.py -q \
+            --junitxml "$RUNNER_TEMP/native-host-adapters.xml"
       - uses: actions/upload-artifact@v4
         if: always()
         with:
@@ -155,6 +168,7 @@ jobs:
             ${{ runner.temp }}/fixed-json.xml
             ${{ runner.temp }}/shared-fixtures.xml
             ${{ runner.temp }}/shared-isolation.xml
+            ${{ runner.temp }}/native-host-adapters.xml
             ${{ runner.temp }}/sudograph-domain-client/**/domain-client-receipt.json
             ${{ runner.temp }}/sudograph-domain-client/**/fixed-json-client-receipt.json
             ${{ runner.temp }}/sudograph-domain-client/**/write-outcome-receipt.json

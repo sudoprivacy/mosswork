@@ -13,10 +13,11 @@ from PIL import Image
 from octop.infra.company_runtime.local import ProjectBackend, windows_python_command
 
 
-def test_windows_image_inspection_keeps_python_code_and_paths_intact():
+@pytest.mark.parametrize("python_options", ["", "-u "])
+def test_windows_image_inspection_keeps_python_code_and_paths_intact(python_options):
     executable = r"C:\Users\HooToo\.mosswork\company-runtime\tools\hash\runtime\python.exe"
     code = "from PIL import Image; im=Image.open(r'D:\\work\\mosswork\\generated\\cat_test.png'); print(im.size, im.format)"
-    assert windows_python_command(f'"{executable}" -c "{code}"') == [
+    assert windows_python_command(f'"{executable}" {python_options}-c "{code}"') == [
         executable,
         "-X",
         "utf8",
@@ -25,7 +26,10 @@ def test_windows_image_inspection_keeps_python_code_and_paths_intact():
         code,
     ]
     spaced = r"C:\Program Files\工作目录\python.exe"
-    assert windows_python_command(f'"{spaced}" -c "print(\'中文 📝\')"')[-1] == "print('中文 📝')"
+    assert (
+        windows_python_command(f'"{spaced}" {python_options}-c "print(\'中文 📝\')"')[-1]
+        == "print('中文 📝')"
+    )
 
 
 @pytest.mark.parametrize(
@@ -47,9 +51,10 @@ async def test_tool_stdin_is_eof_while_worker_protocol_pipe_stays_open(tmp_path)
     project.mkdir()
     script = """import asyncio,json,sys
 from pathlib import Path
-from octop.infra.company_runtime.local import ProjectBackend
+from octop.infra.company_runtime.processes import ProjectProcesses
+assert not any(name == 'deepagents' or name == 'moss_harness' for name in sys.modules)
 async def run():
-    backend=ProjectBackend(Path(sys.argv[1]),Path(sys.argv[2]),lambda event:None,tool_path=str(Path(sys.executable).parent))
+    backend=ProjectProcesses(Path(sys.argv[1]),Path(sys.argv[2]),lambda event:None,tool_path=str(Path(sys.executable).parent))
     result=await backend.aexecute('"'+sys.executable+'" -c "import sys; print(len(sys.stdin.read()))"',timeout=1)
     print(json.dumps({'exit':result.exit_code,'output':result.output}),flush=True)
 asyncio.run(run())
@@ -157,7 +162,7 @@ async def test_timeout_returns_even_when_an_orphan_retains_output_pipe(tmp_path,
 
 @pytest.mark.asyncio
 async def test_cancel_during_log_setup_stops_the_already_started_process(tmp_path, monkeypatch):
-    import octop.infra.company_runtime.local as local
+    import octop.infra.company_runtime.processes as local
 
     original = local.offload
     entered = asyncio.Event()

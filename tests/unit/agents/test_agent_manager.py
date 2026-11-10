@@ -6,7 +6,7 @@ import asyncio
 import json
 import os
 import threading
-from collections.abc import AsyncIterator
+from collections.abc import AsyncIterator, Iterator
 from pathlib import Path
 from types import SimpleNamespace
 from typing import Any
@@ -51,13 +51,19 @@ def _expected_default_backend(manager: AgentManager, agent_id: str) -> dict[str,
 
 
 @pytest.fixture
-def manager(tmp_path: Path) -> AgentManager:
+def manager(tmp_path: Path) -> Iterator[AgentManager]:
+    from moss_harness.plugins import PluginRegistry
+
+    PluginRegistry.reset()
     paths = PathLayout(tmp_path / ".mosswork")
     paths.ensure_root()
     db = SqlitePool(paths.db)
     run_migrations(db)
     services = build_shared_services(db=db, paths=paths, config=MossworkConfig())
-    return AgentManager(repos=services.repos, paths=services.paths)
+    try:
+        yield AgentManager(repos=services.repos, paths=services.paths)
+    finally:
+        PluginRegistry.reset()
 
 
 def _seed_test_provider(manager: AgentManager) -> None:
