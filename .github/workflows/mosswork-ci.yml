@@ -24,6 +24,7 @@ on:
       - '.githooks/pre-commit'
       - '.gitattributes'
       - 'AGENTS.md'
+      - 'Makefile'
       - 'pyproject.toml'
       - 'uv.lock'
       - 'src/octop/infra/connectors/**'

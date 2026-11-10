@@ -1067,8 +1067,8 @@ nvtx = [
 
 [[package]]
 name = "deepagents"
-version = "0.7.16.post1"
-source = { url = "https://github.com/sudoprivacy/deepagents/releases/download/v0.7.16.post1/deepagents-0.7.16.post1-py3-none-any.whl" }
+version = "0.7.16.post2"
+source = { url = "https://github.com/sudoprivacy/deepagents/releases/download/v0.7.16.post2/deepagents-0.7.16.post2-py3-none-any.whl" }
 dependencies = [
     { name = "langchain" },
     { name = "langchain-anthropic" },
@@ -1079,7 +1079,7 @@ dependencies = [
     { name = "wcmatch" },
 ]
 wheels = [
-    { url = "https://github.com/sudoprivacy/deepagents/releases/download/v0.7.16.post1/deepagents-0.7.16.post1-py3-none-any.whl", hash = "sha256:3bedb7353210ee14df358d16f899547fb51730b15d00c66c29864104d5dde24a" },
+    { url = "https://github.com/sudoprivacy/deepagents/releases/download/v0.7.16.post2/deepagents-0.7.16.post2-py3-none-any.whl", hash = "sha256:491e4f4eae7c3e55f8313fd2a00c04439b33beecb06697be8d1094ac7f896ac8" },
 ]
 
 [package.metadata]
@@ -3023,7 +3023,7 @@ requires-dist = [
     { name = "click", marker = "extra == 'cli'", specifier = ">=8.1" },
     { name = "cos-python-sdk-v5", marker = "extra == 'all'", specifier = ">=1.9" },
     { name = "cos-python-sdk-v5", marker = "extra == 'object-storage'", specifier = ">=1.9" },
-    { name = "deepagents", url = "https://github.com/sudoprivacy/deepagents/releases/download/v0.7.16.post1/deepagents-0.7.16.post1-py3-none-any.whl" },
+    { name = "deepagents", url = "https://github.com/sudoprivacy/deepagents/releases/download/v0.7.16.post2/deepagents-0.7.16.post2-py3-none-any.whl" },
     { name = "deepagents-backends", marker = "python_full_version >= '3.12' and extra == 'all'", specifier = ">=0.2" },
     { name = "deepagents-backends", marker = "python_full_version >= '3.12' and extra == 'remote-backends'", specifier = ">=0.2" },
     { name = "docker", marker = "extra == 'all'", specifier = ">=7.0" },

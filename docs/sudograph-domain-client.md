@@ -98,6 +98,9 @@ mandatory current assertion from trusted host composition. Requests are copied
 before resolver waits; descriptor discovery, current checks after DNS/TLS and
 the original relative `review` URL rule remain enforced. MCP `isError`, task
 cancellation and uncertain writes are preserved without automatic replay.
+Once the official MCP tool invocation starts, a failed background HTTP task or
+output validation also preserves possible-write recovery before a `ToolResult`
+exists. Failed discovery does not claim that the model write was attempted.
 The host still checks the entire model binding and review-v2 envelope, records
 durable audit, and supplies independent execution or human review grants.
 

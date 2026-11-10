@@ -228,6 +228,8 @@ class ToolDescriptor:
 class ToolProtocol:
     def __init__(self, session: ClientSession, version: str, current: DispatchAssertion) -> None:
         self.session, self.version, self.current = session, version, current
+        # Local effect observation, never authorization or cleanup completion.
+        self.call_started = False
 
     async def _current(self) -> None:
         await assert_dispatch_current(self.current)
@@ -265,6 +267,7 @@ class ToolProtocol:
         raise ToolProtocolError("TOOL_DISCOVERY_LIMIT")
 
     async def call_reviewed(self, reviewed: ToolDescriptor, arguments: object) -> dict[str, Any]:
+        self.call_started = False
         # No caller-owned mapping survives an authorization/discovery await.
         args = snapshot_arguments(arguments)
         expected = copy.deepcopy(reviewed)
@@ -281,6 +284,7 @@ class ToolProtocol:
         ):
             raise ToolProtocolError("TOOL_DESCRIPTOR_CHANGED")
         await self._current()
+        self.call_started = True
         try:
             result = await self.session.call_tool(expected.tool["name"], args)
             await self._current()

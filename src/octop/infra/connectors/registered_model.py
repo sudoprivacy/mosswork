@@ -28,10 +28,16 @@ from .fixed_json import (
     FixedJsonTransport,
     assert_dispatch_current,
 )
-from .tool_protocol import ToolConnection, ToolDescriptor, ToolProtocolError, open_tool_protocol
+from .tool_protocol import (
+    ToolConnection,
+    ToolDescriptor,
+    ToolProtocol,
+    ToolProtocolError,
+    open_tool_protocol,
+)
 
 
-def _failure(error: Exception, *, write_started: bool) -> Exception:
+def _failure(error: Exception) -> Exception:
     # Official MCP task groups can wrap transport failures. Keep their fixed
     # diagnostics without exposing provider text or losing possible effects.
     pending, leaves = [error], []
@@ -41,14 +47,6 @@ def _failure(error: Exception, *, write_started: bool) -> Exception:
             pending.extend(item.exceptions)
         else:
             leaves.append(item)
-    if write_started and any(
-        isinstance(item, ToolProtocolError)
-        and str(item) in ("TOOL_EXECUTION_UNCONFIRMED", "TOOL_OUTPUT_UNSUPPORTED")
-        or isinstance(item, FixedJsonError)
-        and item.code == "EXECUTION_UNCONFIRMED"
-        for item in leaves
-    ):
-        return write_unconfirmed()
     if len(leaves) == 1:
         item = leaves[0]
         if isinstance(item, ToolProtocolError):
@@ -62,7 +60,7 @@ def _failure(error: Exception, *, write_started: bool) -> Exception:
     return SudographError(
         "MODEL_OPERATION_UNAVAILABLE",
         "Registered model operation unavailable",
-        "Check the bound worker; recover interrupted writes with their original operation_id.",
+        "Check the bound worker and current authorization.",
     )
 
 
@@ -98,20 +96,24 @@ class RegisteredModelTransport[Registration]:
         reviewed = copy.deepcopy(descriptor)
         if reviewed.tool.get("name") != name:
             raise ToolProtocolError("TOOL_DESCRIPTOR_CHANGED")
-        write_started = False
-        possible_write_reply = False
+        protocol: ToolProtocol | None = None
+        compiler_refused = False
         try:
             async with open_tool_protocol(connection, check_current=current) as protocol:
-                write_started = name == "sudograph_model_apply"
                 result = await protocol.call_reviewed(reviewed, args)
-                possible_write_reply = write_started and result.get("isError") is not True
+                compiler_refused = result.get("isError") is True
                 reply = ToolResult(result["content"], result.get("isError", False))
             await assert_dispatch_current(current)
             return reply
         except Exception as error:
-            if possible_write_reply:
+            if (
+                name == "sudograph_model_apply"
+                and protocol is not None
+                and protocol.call_started
+                and not compiler_refused
+            ):
                 raise write_unconfirmed() from None
-            raise _failure(error, write_started=write_started) from None
+            raise _failure(error) from None
 
     async def read_review(
         self, registered: Registration, request: dict[str, Any]
@@ -184,4 +186,4 @@ class RegisteredModelTransport[Registration]:
                 )
             return result
         except Exception as error:
-            raise _failure(error, write_started=False) from None
+            raise _failure(error) from None
