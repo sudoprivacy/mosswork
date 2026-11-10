@@ -17,6 +17,7 @@ from .protocol import (
     envelope,
     review_request,
     tool_request,
+    write_unconfirmed,
 )
 
 Operation = Literal[
@@ -51,7 +52,13 @@ class HostPorts(Protocol):
 
     async def call_tool(
         self, binding: ModelBinding, name: Operation, arguments: dict[str, Any]
-    ) -> ToolResult: ...
+    ) -> ToolResult:
+        """Preserve write_unconfirmed() if a host fails after a possible write.
+
+        A post-effect grant refusal must not become a pre-effect access denial.
+        The host retains its actual I/O/effect fence and original operation ID.
+        """
+        ...
 
     async def read_review(
         self, binding: ModelBinding, request: dict[str, Any]
@@ -145,6 +152,7 @@ class SudographClient:
         )
         status: Literal["success", "error"] = "error"
         cancelled: asyncio.CancelledError | None = None
+        write_may_have_completed = False
         try:
             await _require_completion(ports.authorize(binding, operation))
             if operation == "review":
@@ -156,16 +164,32 @@ class SudographClient:
                 if arguments["operation"] == "document":
                     ReviewDocument.from_worker(binding, arguments["endpoint"], result["result"])
             else:
-                result = (await ports.call_tool(binding, operation, arguments)).decode()
+                reply = await ports.call_tool(binding, operation, arguments)
+                write_may_have_completed = operation == "sudograph_model_apply" and (
+                    not isinstance(reply, ToolResult) or reply.is_error is not True
+                )
+                try:
+                    result = reply.decode()
+                except Exception:
+                    if write_may_have_completed:
+                        raise write_unconfirmed() from None
+                    raise
                 if operation == "sudograph_context":
                     result = context(envelope(result, binding, review=False)["context"])
-            await _require_completion(ports.authorize(binding, operation))
+            try:
+                await _require_completion(ports.authorize(binding, operation))
+            except Exception:
+                if write_may_have_completed:
+                    raise write_unconfirmed() from None
+                raise
             status = "success"
             return result
         except asyncio.CancelledError as error:
             cancelled = error
             raise
-        except SudographError:
+        except SudographError as error:
+            if operation == "sudograph_model_apply" and error.code == "MODEL_WRITE_UNCONFIRMED":
+                write_may_have_completed = True
             raise
         except PermissionError:
             raise SudographError(
@@ -190,5 +214,7 @@ class SudographClient:
                 raise SudographError(
                     "AUDIT_UNAVAILABLE",
                     "Canonical model audit unavailable",
-                    "Ask the host operator.",
+                    write_unconfirmed().recovery
+                    if write_may_have_completed
+                    else "Ask the host operator.",
                 ) from None

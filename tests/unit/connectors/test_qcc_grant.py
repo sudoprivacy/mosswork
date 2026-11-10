@@ -95,7 +95,8 @@ def mcp_http(monkeypatch: pytest.MonkeyPatch):
     qcc.clear_metadata_cache()
     monkeypatch.setattr(qcc, "safe_request", metadata)
     monkeypatch.setattr(qcc.httpx, "AsyncClient", factory)
-    return calls
+    yield calls
+    qcc.clear_metadata_cache()
 
 
 @pytest.mark.asyncio

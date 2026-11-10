@@ -5,9 +5,19 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
+import pytest
+from moss_harness.plugins import PluginRegistry
+
 from octop.infra.agents.plugins.bundled import default_bundled_plugins_root
 from octop.infra.agents.plugins.manager import PluginManager
 from octop.infra.agents.plugins.seed import seed_bundled_plugins
+
+
+@pytest.fixture(autouse=True)
+def _reset_registry():
+    PluginRegistry.reset()
+    yield
+    PluginRegistry.reset()
 
 
 def _catalog_ids() -> set[str]:

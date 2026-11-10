@@ -25,8 +25,10 @@ not satisfy this assertion contract.
 system prompt and caches no text. The trusted host must fence the exact logical
 and native session before and after the callback; the bridge owns the
 `appendSystemPrompt` RPC envelope. Engine capability, current owner mTLS,
-durable load and native cleanup remain host/runtime checks. The first selected
-cohost path does not require a new child bootstrap; a selected child engine does.
+durable load and native cleanup remain host/runtime checks. The selected
+integration route is `nexusd-cluster` with `spawn_spec scode`, strict ACP and
+`serve_managed`; authenticated child activation must be qualified by the host.
+Existing cohost production behavior remains in place until replacement acceptance.
 
 Human review requires its own full-model read authorization. Context access is
 insufficient. The client inserts the rendering resource from the binding,
@@ -71,12 +73,33 @@ replacement ID or cancels another conversation. Compiler diagnostics retain
 their repair guidance. Unexpected transport errors omit upstream exception
 text. The HTTP/product adapter must map domain codes through the existing
 localized error layer, rather than display private transport exceptions.
+After a successful model-write reply, any failed authorization recheck returns
+`MODEL_WRITE_UNCONFIRMED` and withholds the result. Hosts must likewise raise
+`protocol.write_unconfirmed()` when their own post-effect checks fail before
+returning a tool result. If audit also fails, `AUDIT_UNAVAILABLE` retains the
+possible-write recovery instruction and original `operation_id`. A current
+grant must authorize recovery; a denied result does not undo the write or
+permit allocating a replacement ID. Pre-dispatch denial and read-only failures
+keep their existing diagnostics.
+A malformed non-error write reply also retains possible-write recovery before
+decoding, including when audit fails. An explicit compiler error remains a
+compiler refusal and keeps its original diagnostic under a working audit.
 Cancellation stays observable as `CancelledError` even when the audit also
 fails. In that case the exception carries a fixed `AUDIT_UNAVAILABLE` note;
 the host must retain that failure evidence without reporting successful audit
 or replaying the original operation.
 
 ## Qualification boundary
+
+`infra.connectors.registered_model.RegisteredModelTransport` connects the host's
+`resolve_tool` and `resolve_review` tuples to the maintained MCP and fixed JSON
+clients. Supply the original immutable registration, reviewed descriptor and
+mandatory current assertion from trusted host composition. Requests are copied
+before resolver waits; descriptor discovery, current checks after DNS/TLS and
+the original relative `review` URL rule remain enforced. MCP `isError`, task
+cancellation and uncertain writes are preserved without automatic replay.
+The host still checks the entire model binding and review-v2 envelope, records
+durable audit, and supplies independent execution or human review grants.
 
 The module is not wired into a production host. The accepted trusted caller,
 grant adapter and durable existing-session comment ingress are still required.
