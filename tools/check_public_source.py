@@ -105,7 +105,7 @@ def check_distribution(root: Path) -> list[str]:
             continue
         if "/tests/" in name:
             continue  # Regression fixtures intentionally contain forbidden examples.
-        text = path.read_text()
+        text = path.read_text(encoding="utf-8")
         if name in INHERITED_INSTALLERS:
             if disabled_installer(name, text):
                 continue
@@ -117,7 +117,7 @@ def check_distribution(root: Path) -> list[str]:
 
 
 def anchors(path: Path) -> set[str]:
-    text = FENCE.sub("", path.read_text())
+    text = FENCE.sub("", path.read_text(encoding="utf-8"))
     result = set(re.findall(r'<a\s+(?:id|name)=["\']([^"\']+)', text))
     counts: dict[str, int] = {}
     for heading in re.findall(r"^#{1,6}\s+(.+?)\s*#*\s*$", text, re.MULTILINE):
@@ -135,7 +135,7 @@ def check(root: Path) -> list[str]:
     errors = check_distribution(root)
     manifest_path = root / "PUBLIC_SOURCE.json"
     if manifest_path.is_file():
-        manifest = json.loads(manifest_path.read_text())
+        manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
         expected = {item["path"]: item for item in manifest["files"]}
         actual = {
             path.relative_to(root).as_posix()
@@ -157,7 +157,15 @@ def check(root: Path) -> list[str]:
     else:
         errors.append("PUBLIC_SOURCE.json missing; run against an exported source snapshot")
 
-    docs = set(root.glob("*.md")) | set((root / "docs").glob("*.md"))
+    errors.extend(check_references(root))
+    return errors
+
+
+def check_references(root: Path, extra_docs: tuple[Path, ...] = ()) -> list[str]:
+    """Check live documentation and expert references without an export manifest."""
+    root = root.resolve()
+    errors: list[str] = []
+    docs = set(root.glob("*.md")) | set((root / "docs").glob("*.md")) | set(extra_docs)
     docs |= {
         root / name
         for name in (
@@ -175,7 +183,7 @@ def check(root: Path) -> list[str]:
     for path in sorted(docs):
         if not path.is_file():
             continue
-        text = FENCE.sub("", path.read_text())
+        text = FENCE.sub("", path.read_text(encoding="utf-8"))
         for match in LINK.finditer(text):
             target = urlsplit(match.group(1).strip("<>"))
             if target.scheme or target.netloc:
@@ -192,14 +200,14 @@ def check(root: Path) -> list[str]:
 
     library = root / LIBRARY
     for path in sorted(library.glob("*/manifest.json")):
-        manifest = json.loads(path.read_text())
+        manifest = json.loads(path.read_text(encoding="utf-8"))
         for name in manifest.get("prompt_files", []):
             target = (path.parent / name).resolve()
             if not target.is_relative_to(path.parent.resolve()) or not target.is_file():
                 errors.append(f"missing expert prompt: {path.parent.name}/{name}")
     for path in sorted(library.rglob("*.md")):
         for expert_id in re.findall(
-            r"mosswork agent from-expert\s+([a-z][a-z0-9-]*)", path.read_text()
+            r"mosswork agent from-expert\s+([a-z][a-z0-9-]*)", path.read_text(encoding="utf-8")
         ):
             if not (library / expert_id / "manifest.json").is_file():
                 errors.append(f"missing example expert: {path.relative_to(root)} -> {expert_id}")

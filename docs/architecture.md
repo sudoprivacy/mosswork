@@ -155,6 +155,56 @@ entry points. mosswork's `GlobalProcessor` implements the
 checkpoint and are pushed to the dashboard / IM channel by
 `on_reply`.
 
+## 7. Sudograph worker interoperability acceptance
+
+`tools/accept_sudograph_worker.py` checks the existing Mosswork MCP loading and
+tool-selection path against an installed Sudograph worker and compiler. It
+creates a private SQLite source, canonical model and Mosswork connector database.
+The real `ConnectorService` registers the worker with encrypted credentials;
+another user cannot discover or select the private connector, and disabling it
+prevents new turns from loading its tools. The owner reads real paginated rows,
+applies the compiler's own authoring example, and checks the resulting context
+and review HTML. Invalid references must produce a failed agent-visible
+`ToolMessage` with repair diagnostics and leave the canonical revision unchanged.
+The same operation ID must be idempotent; mixed revision/digest pointers and
+incorrect worker credentials must be refused. Source database bytes remain
+unchanged. No model call or workflow system prompt is involved.
+
+Run this assembly acceptance with previously verified installed artifacts and
+a new private output directory:
+
+```sh
+uv run --no-default-groups --frozen python tools/accept_sudograph_worker.py \
+  --worker /installed/bin/sudograph-context-worker.mjs \
+  --worker-sha256 "$VERIFIED_WORKER_SHA256" \
+  --compiler-python /installed/compiler/bin/python \
+  --output /new-private-directory/sudograph-acceptance
+```
+
+The worker digest must come from the verified installed artifact. The command
+refuses a different digest or an existing output directory, writes a structured
+receipt only after all checks pass, and preserves an incomplete receipt on a
+failed check. It executes the real application initializer, including its
+existing loopback handling for Windows/macOS system proxies.
+
+The `sudograph-interop` job in `mosswork-ci.yml` runs the same acceptance on
+Windows and Linux for pull requests affecting the worker acceptance, connector service, harness or
+release workflow. It verifies the immutable Moss server archive, extracted
+worker and published compiler wheel against fixed SHA-256 digests before
+execution. CI retains structured acceptance receipts; private fixture databases
+and credentials are not uploaded.
+
+This qualifies the connector service and tool/compiler transport boundary. It
+does not register a production connector or qualify the HTTP login/API, frontend,
+comments, SudoCode/Nexus agent management and A2A, or per-user gateway policy.
+Tool visibility is not authorization. The isolated fixture's worker credential
+must not replace the existing production management and authorization authority.
+
+The [Sudograph domain client](sudograph-domain-client.md) adds checked
+context/model/review operations behind required trusted host ports. Its local
+and installed-worker tests do not establish the outstanding production host,
+grant or durable comment-ingress integration.
+
 ## See also
 
 - [AGENTS.md](../AGENTS.md) — module boundaries, hard bans, change workflow

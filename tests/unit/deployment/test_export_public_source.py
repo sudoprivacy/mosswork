@@ -116,15 +116,36 @@ def test_export_preserves_project_ci_and_archives_unknown_workflows(tmp_path: Pa
     _repo(root)
     workflows = root / ".github/workflows"
     workflows.mkdir(parents=True)
-    for name in ("mosswork-ci.yml", "mosswork-release.yml", "auto-tag.yml"):
+    for name in (
+        "mosswork-ci.yml",
+        "mosswork-identity-ci.yml",
+        "mosswork-release.yml",
+        "auto-tag.yml",
+    ):
         (workflows / name).write_text(f"name: {name}\n")
     target = tmp_path / "public"
     exporter.export(root, target)
-    for name in ("mosswork-ci.yml", "mosswork-release.yml"):
+    for name in ("mosswork-ci.yml", "mosswork-identity-ci.yml", "mosswork-release.yml"):
         assert (target / ".github/workflows" / name).is_file()
     assert not (target / ".github/workflows/auto-tag.yml").exists()
     assert (target / ".github/upstream-workflows/auto-tag.yml.disabled").is_file()
     assert checker.check(target) == []
+
+
+def test_export_preserves_utf8_document_links_and_portable_manifest_paths(tmp_path: Path) -> None:
+    root = tmp_path / "repo"
+    _repo(root)
+    (root / "docs").mkdir()
+    (root / "docs/业务.md").write_text("# 业务目录\n", encoding="utf-8")
+    (root / "README.md").write_text("[业务目录](docs/业务.md)\n", encoding="utf-8")
+    target = tmp_path / "public"
+    exporter.export(root, target)
+    assert checker.check(target) == []
+    manifest = json.loads((target / "PUBLIC_SOURCE.json").read_text(encoding="utf-8"))
+    paths = [record["path"] for record in manifest["files"]]
+    assert "docs/业务.md" in paths
+    assert ".github/upstream-workflows/README.md" in paths
+    assert all("\\" not in path for path in paths)
 
 
 def test_export_cannot_target_its_own_repository(tmp_path: Path) -> None:

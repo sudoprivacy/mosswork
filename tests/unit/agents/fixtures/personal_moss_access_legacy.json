@@ -1,0 +1,269 @@
+{
+  "sourceCommit": "59310782774b136ee44c2a3fe7fe334613e0b8fe",
+  "producer": "Exact retained MossAgentAccess service with real Bun SQLite grant rows",
+  "cases": [
+    {
+      "name": "active admin default",
+      "member": {
+        "id": "member-a",
+        "orgId": "org-a",
+        "role": "admin",
+        "status": "active"
+      },
+      "explicitGrant": null,
+      "requestedOrgId": "org-a",
+      "requestedOwnerId": "member-a",
+      "allowed": true,
+      "decision": {
+        "orgId": "org-a",
+        "userId": "member-a",
+        "isGranted": true,
+        "isEnabled": true,
+        "source": "role",
+        "memberStatus": "active"
+      },
+      "agent": {
+        "ref": "moss-agent:operator:WyJvcmctYSIsIm1lbWJlci1hIl0",
+        "agentName": "moss-5f2c08d00704c5c8402b695b4cdabd9b6ca6138cfbed324a3ef513d62d97442b",
+        "displayName": "Moss",
+        "ownerId": "member-a",
+        "orgId": "org-a",
+        "ownerName": "Moss"
+      }
+    },
+    {
+      "name": "explicit admin revocation",
+      "member": {
+        "id": "member-a",
+        "orgId": "org-a",
+        "role": "admin",
+        "status": "active"
+      },
+      "explicitGrant": false,
+      "requestedOrgId": "org-a",
+      "requestedOwnerId": "member-a",
+      "allowed": false,
+      "decision": {
+        "orgId": "org-a",
+        "userId": "member-a",
+        "isGranted": false,
+        "isEnabled": false,
+        "source": "explicit",
+        "memberStatus": "active"
+      },
+      "agent": null
+    },
+    {
+      "name": "ordinary member default",
+      "member": {
+        "id": "member-a",
+        "orgId": "org-a",
+        "role": "user",
+        "status": "active"
+      },
+      "explicitGrant": null,
+      "requestedOrgId": "org-a",
+      "requestedOwnerId": "member-a",
+      "allowed": false,
+      "decision": {
+        "orgId": "org-a",
+        "userId": "member-a",
+        "isGranted": false,
+        "isEnabled": false,
+        "source": "role",
+        "memberStatus": "active"
+      },
+      "agent": null
+    },
+    {
+      "name": "explicit ordinary grant",
+      "member": {
+        "id": "member-a",
+        "orgId": "org-a",
+        "role": "user",
+        "status": "active"
+      },
+      "explicitGrant": true,
+      "requestedOrgId": "org-a",
+      "requestedOwnerId": "member-a",
+      "allowed": true,
+      "decision": {
+        "orgId": "org-a",
+        "userId": "member-a",
+        "isGranted": true,
+        "isEnabled": true,
+        "source": "explicit",
+        "memberStatus": "active"
+      },
+      "agent": {
+        "ref": "moss-agent:operator:WyJvcmctYSIsIm1lbWJlci1hIl0",
+        "agentName": "moss-5f2c08d00704c5c8402b695b4cdabd9b6ca6138cfbed324a3ef513d62d97442b",
+        "displayName": "Moss",
+        "ownerId": "member-a",
+        "orgId": "org-a",
+        "ownerName": "Moss"
+      }
+    },
+    {
+      "name": "inactive member grant",
+      "member": {
+        "id": "member-a",
+        "orgId": "org-a",
+        "role": "user",
+        "status": "disabled"
+      },
+      "explicitGrant": true,
+      "requestedOrgId": "org-a",
+      "requestedOwnerId": "member-a",
+      "allowed": false,
+      "decision": {
+        "orgId": "org-a",
+        "userId": "member-a",
+        "isGranted": true,
+        "isEnabled": false,
+        "source": "explicit",
+        "memberStatus": "disabled"
+      },
+      "agent": null
+    },
+    {
+      "name": "locked admin default",
+      "member": {
+        "id": "member-a",
+        "orgId": "org-a",
+        "role": "admin",
+        "status": "locked"
+      },
+      "explicitGrant": null,
+      "requestedOrgId": "org-a",
+      "requestedOwnerId": "member-a",
+      "allowed": false,
+      "decision": {
+        "orgId": "org-a",
+        "userId": "member-a",
+        "isGranted": true,
+        "isEnabled": false,
+        "source": "role",
+        "memberStatus": "locked"
+      },
+      "agent": null
+    },
+    {
+      "name": "super admin default",
+      "member": {
+        "id": "member-a",
+        "orgId": "org-a",
+        "role": "super_admin",
+        "status": "active"
+      },
+      "explicitGrant": null,
+      "requestedOrgId": "org-a",
+      "requestedOwnerId": "member-a",
+      "allowed": true,
+      "decision": {
+        "orgId": "org-a",
+        "userId": "member-a",
+        "isGranted": true,
+        "isEnabled": true,
+        "source": "role",
+        "memberStatus": "active"
+      },
+      "agent": {
+        "ref": "moss-agent:operator:WyJvcmctYSIsIm1lbWJlci1hIl0",
+        "agentName": "moss-5f2c08d00704c5c8402b695b4cdabd9b6ca6138cfbed324a3ef513d62d97442b",
+        "displayName": "Moss",
+        "ownerId": "member-a",
+        "orgId": "org-a",
+        "ownerName": "Moss"
+      }
+    },
+    {
+      "name": "super admin revocation",
+      "member": {
+        "id": "member-a",
+        "orgId": "org-a",
+        "role": "super_admin",
+        "status": "active"
+      },
+      "explicitGrant": false,
+      "requestedOrgId": "org-a",
+      "requestedOwnerId": "member-a",
+      "allowed": false,
+      "decision": {
+        "orgId": "org-a",
+        "userId": "member-a",
+        "isGranted": false,
+        "isEnabled": false,
+        "source": "explicit",
+        "memberStatus": "active"
+      },
+      "agent": null
+    },
+    {
+      "name": "other organization",
+      "member": {
+        "id": "member-a",
+        "orgId": "org-a",
+        "role": "admin",
+        "status": "active"
+      },
+      "explicitGrant": true,
+      "requestedOrgId": "org-b",
+      "requestedOwnerId": "member-a",
+      "allowed": false,
+      "decision": {
+        "orgId": "org-a",
+        "userId": "member-a",
+        "isGranted": true,
+        "isEnabled": true,
+        "source": "explicit",
+        "memberStatus": "active"
+      },
+      "agent": null
+    },
+    {
+      "name": "other member",
+      "member": {
+        "id": "member-a",
+        "orgId": "org-a",
+        "role": "admin",
+        "status": "active"
+      },
+      "explicitGrant": true,
+      "requestedOrgId": "org-a",
+      "requestedOwnerId": "member-b",
+      "allowed": false,
+      "decision": {
+        "orgId": "org-a",
+        "userId": "member-a",
+        "isGranted": true,
+        "isEnabled": true,
+        "source": "explicit",
+        "memberStatus": "active"
+      },
+      "agent": null
+    },
+    {
+      "name": "custom role no grant",
+      "member": {
+        "id": "member-a",
+        "orgId": "org-a",
+        "role": "company-admin",
+        "status": "active"
+      },
+      "explicitGrant": null,
+      "requestedOrgId": "org-a",
+      "requestedOwnerId": "member-a",
+      "allowed": false,
+      "decision": {
+        "orgId": "org-a",
+        "userId": "member-a",
+        "isGranted": false,
+        "isEnabled": false,
+        "source": "role",
+        "memberStatus": "active"
+      },
+      "agent": null
+    }
+  ]
+}

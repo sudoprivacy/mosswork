@@ -30,9 +30,12 @@ jobs:
         name: Require a tag matching the package version
         run: |
           uv run --no-project python - <<'PY'
-          import os, re, tomllib
+          import json, os, re, tomllib
           from pathlib import Path
           version = tomllib.loads(Path('pyproject.toml').read_text())['project']['version']
+          worker_version = json.loads(Path('packages/sudograph-worker/package.json').read_text())['version']
+          if worker_version != version:
+              raise SystemExit('Sudograph worker version must match the application release version.')
           tag = os.environ['GITHUB_REF_NAME']
           if os.environ['GITHUB_REF_TYPE'] != 'tag' or tag != f'v{version}':
               raise SystemExit('Run on a v<pyproject.toml version> tag; no version is changed automatically.')
@@ -284,9 +287,72 @@ jobs:
           if-no-files-found: error
           retention-days: 7
 
+  sudograph-worker:
+    name: Package the current Sudograph compiler worker
+    needs: source
+    runs-on: ubuntu-24.04
+    env:
+      RELEASE_TAG: ${{ needs.source.outputs.tag }}
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: public-source
+          path: assets
+      - name: Extract verified source
+        run: |
+          mkdir source
+          tar -xzf "assets/mosswork-source-${RELEASE_TAG}.tar.gz" -C source
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22.21.0'
+          cache: npm
+          cache-dependency-path: source/packages/sudograph-worker/npm-shrinkwrap.json
+      - uses: astral-sh/setup-uv@v6
+        with:
+          python-version: '3.12'
+      - name: Build and verify the actual installed package
+        working-directory: source
+        run: |
+          uv run --no-project python tools/package_sudograph_worker.py --output "$RUNNER_TEMP/worker-package"
+          uv run --no-project python - <<'PY'
+          import json, os, shutil
+          from pathlib import Path
+          package = Path(os.environ['RUNNER_TEMP']) / 'worker-package'
+          receipt = json.loads((package / 'receipt.json').read_text())
+          assert receipt['passed'] is True
+          release = Path(os.environ['RUNNER_TEMP']) / 'worker-release'
+          release.mkdir()
+          shutil.copy2(receipt['archive'], release)
+          shutil.copy2(package / 'receipt.json', release / 'sudograph-worker-package.json')
+          shutil.copy2(Path(receipt['worker']).parent / 'manifest.json', release / 'sudograph-worker-build.json')
+          with open(os.environ['GITHUB_ENV'], 'a', encoding='utf-8') as out:
+              out.write(f"SUDOGRAPH_WORKER_PATH={receipt['worker']}\n")
+              out.write(f"SUDOGRAPH_WORKER_SHA256={receipt['worker_sha256']}\n")
+          PY
+      - name: Qualify the package against the installed compiler
+        working-directory: source
+        run: |
+          set -euo pipefail
+          wheel="$RUNNER_TEMP/sudograph_compiler-0.1.0-py3-none-any.whl"
+          curl --fail --location --output "$wheel" https://github.com/sudoprivacy/sudograph/releases/download/v0.1.0/sudograph_compiler-0.1.0-py3-none-any.whl
+          echo "b0fcd5b257b995f9764081968f4c797f00d5a70f1d04b771c11818f5204e6ef2  $wheel" | sha256sum --check
+          uv venv "$RUNNER_TEMP/compiler" --python 3.12
+          uv pip install --python "$RUNNER_TEMP/compiler/bin/python" --only-binary :all: "$wheel"
+          uv run --no-default-groups --frozen python tools/accept_sudograph_worker.py \
+            --worker "$SUDOGRAPH_WORKER_PATH" --worker-sha256 "$SUDOGRAPH_WORKER_SHA256" \
+            --compiler-python "$RUNNER_TEMP/compiler/bin/python" --emit-review-fixture \
+            --output "$RUNNER_TEMP/worker-compiler-acceptance"
+          cp "$RUNNER_TEMP/worker-compiler-acceptance/receipt.json" "$RUNNER_TEMP/worker-release/sudograph-worker-compiler.json"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: sudograph-worker
+          path: ${{ runner.temp }}/worker-release/*
+          if-no-files-found: error
+          retention-days: 7
+
   publish:
     name: Publish server bundles and downloadable clients
-    needs: [source, client, image]
+    needs: [source, client, image, sudograph-worker]
     runs-on: ubuntu-24.04
     permissions:
       contents: write
@@ -319,6 +385,10 @@ jobs:
           for component in harness memory browser gateway; do
             test -s "moss_${component}-${RELEASE_VERSION}-py3-none-any.whl"
           done
+          test -s "sudo-sudograph-worker-${RELEASE_VERSION}.tgz"
+          test -s sudograph-worker-package.json
+          test -s sudograph-worker-build.json
+          test -s sudograph-worker-compiler.json
           # GitHub limits each Release asset to less than 2 GiB.
           python3 - <<'PY'
           import hashlib
@@ -344,6 +414,8 @@ jobs:
           Clients: macOS 13+ ARM64 DMG and Windows x64 EXE only. Both include the local task runtime and FFmpeg. Windows includes offline WebView2. macOS is ad-hoc signed without notarization; Windows is not Authenticode signed.
 
           Components: moss-harness, moss-memory, moss-browser and moss-gateway ${RELEASE_VERSION} are built from packages/ in the attached source; all four wheels are included below.
+
+          Sudograph: the portable compiler worker tarball is built from packages/sudograph-worker with a locked dependency graph, installed-byte manifest and compiler interoperability receipts. This package requires Node.js 22.21 or later and an installed Sudograph compiler; it does not by itself qualify native management, customer grants or comment delivery.
 
           Server: Linux amd64/arm64 image archives attached below include moss-server, moss-server-im and PostgreSQL. The installer detects the host architecture, verifies SHA-256, imports the images with Docker and starts the stack with Compose. No container registry login is needed.
 

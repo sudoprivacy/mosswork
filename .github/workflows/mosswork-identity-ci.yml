@@ -1,0 +1,98 @@
+name: Mosswork canonical identity
+
+on:
+  pull_request:
+    paths:
+      - '.github/workflows/mosswork-identity-ci.yml'
+      - 'src/octop/infra/identity/**'
+      - 'src/octop/infra/agents/personal_moss_*.py'
+      - 'src/octop/infra/gateway/personal_moss_identity.py'
+      - 'src/octop/infra/company_runtime/local.py'
+      - 'src/octop/infra/errors.py'
+      - 'src/octop/i18n/**'
+      - 'packages/moss-gateway/src/moss_gateway/channels/feishu.py'
+      - 'tests/unit/identity/**'
+      - 'tests/unit/agents/test_personal_moss_*.py'
+      - 'tests/unit/agents/fixtures/personal_moss_*.json'
+      - 'tests/unit/gateway/test_personal_moss_im_identity.py'
+      - 'tests/unit/gateway/fixtures/personal_moss_im_legacy.json'
+      - 'tests/unit/company_runtime/test_local_process.py'
+      - 'packages/moss-gateway/tests/channels/test_feishu.py'
+      - 'pyproject.toml'
+      - 'uv.lock'
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/mosswork-identity-ci.yml'
+      - 'src/octop/infra/identity/**'
+      - 'src/octop/infra/agents/personal_moss_*.py'
+      - 'src/octop/infra/gateway/personal_moss_identity.py'
+      - 'src/octop/infra/company_runtime/local.py'
+      - 'src/octop/infra/errors.py'
+      - 'src/octop/i18n/**'
+      - 'packages/moss-gateway/src/moss_gateway/channels/feishu.py'
+      - 'tests/unit/identity/**'
+      - 'tests/unit/agents/test_personal_moss_*.py'
+      - 'tests/unit/agents/fixtures/personal_moss_*.json'
+      - 'tests/unit/gateway/test_personal_moss_im_identity.py'
+      - 'tests/unit/gateway/fixtures/personal_moss_im_legacy.json'
+      - 'tests/unit/company_runtime/test_local_process.py'
+      - 'packages/moss-gateway/tests/channels/test_feishu.py'
+      - 'pyproject.toml'
+      - 'uv.lock'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: mosswork-identity-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  identity:
+    name: Canonical identity (${{ matrix.os }})
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-24.04, windows-2022]
+    runs-on: ${{ matrix.os }}
+    defaults:
+      run:
+        shell: bash
+    env:
+      UV_CONCURRENT_BUILDS: '1'
+      UV_CONCURRENT_DOWNLOADS: '2'
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v6
+        with:
+          python-version: '3.12'
+          enable-cache: true
+      - name: Install locked dependencies
+        run: uv sync --frozen
+      - name: Check canonical identity source
+        run: |
+          uv run --frozen ruff check src tests packages/moss-gateway/src/moss_gateway/channels/feishu.py
+          uv run --frozen ruff format --check src tests packages/moss-gateway/src/moss_gateway/channels/feishu.py
+          uv run --frozen mypy src/octop
+      - name: Verify current membership, revocation and original IM identity
+        run: |
+          uv run --frozen pytest \
+            tests/unit/agents/test_personal_moss_identity.py \
+            tests/unit/agents/test_personal_moss_access.py \
+            tests/unit/identity \
+            tests/unit/gateway/test_personal_moss_im_identity.py \
+            tests/unit/i18n \
+            tests/unit/company_runtime/test_local_process.py \
+            -m 'not integration and not live' -q --junitxml=identity-results.xml
+          uv run --frozen pytest packages/moss-gateway/tests/channels/test_feishu.py \
+            -m 'not integration and not live' -q --junitxml=gateway-feishu-results.xml
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: canonical-identity-${{ runner.os }}
+          path: |
+            identity-results.xml
+            gateway-feishu-results.xml
+          if-no-files-found: ignore
