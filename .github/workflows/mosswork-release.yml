@@ -93,7 +93,7 @@ jobs:
       matrix:
         include:
           - platform: darwin-arm64
-            os: macos-14
+            os: macos-15
             target: darwin
             arch: arm64
           - platform: windows-amd64
