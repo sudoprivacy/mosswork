@@ -13,13 +13,15 @@ import json
 import mimetypes
 import os
 import re
+import socket
 import time
+from contextlib import nullcontext
 from pathlib import Path
 from types import SimpleNamespace
 from urllib.parse import urlsplit
 
-import httpx
 import pytest
+import uvicorn
 from langchain_core.messages import AIMessageChunk, ToolMessage
 from playwright.async_api import Error as PlaywrightError
 from playwright.async_api import async_playwright, expect
@@ -52,7 +54,40 @@ async def env(tmp_mosswork_home):
         yield client, server, await auth_header(client)
 
 
-async def test_built_desktop_chat_reconnect_and_cancel(env_with_agent, tmp_path, monkeypatch):
+@pytest.fixture
+async def company_origin(env_with_agent, monkeypatch):
+    """Use real HTTP so SSE deltas arrive before the model response completes."""
+    client, _, _, _ = env_with_agent
+    with socket.socket() as listener:
+        listener.bind(("127.0.0.1", 0))
+        listener.listen()
+        host, port = listener.getsockname()
+        server = uvicorn.Server(
+            uvicorn.Config(
+                client._mosswork_app,
+                lifespan="off",
+                log_level="warning",
+                access_log=False,
+                timeout_graceful_shutdown=5,
+            )
+        )
+        monkeypatch.setattr(server, "capture_signals", nullcontext)
+        task = asyncio.create_task(server.serve(sockets=[listener]))
+        try:
+            async with asyncio.timeout(10):
+                while not server.started:
+                    if task.done():
+                        task.result()
+                    await asyncio.sleep(0.01)
+            yield f"http://{host}:{port}"
+        finally:
+            server.should_exit = True
+            await asyncio.wait_for(task, 10)
+
+
+async def test_built_desktop_chat_reconnect_and_cancel(
+    env_with_agent, company_origin, tmp_path, monkeypatch
+):
     client, server, auth, agent_id = env_with_agent
     assets = Path(__file__).resolve().parents[2] / "src/octop/dashboard"
     assert (assets / "index.html").is_file(), "Build the dashboard before this acceptance"
@@ -76,11 +111,7 @@ async def test_built_desktop_chat_reconnect_and_cancel(env_with_agent, tmp_path,
         2,
         now,
     )
-    company = CompanyClient(
-        "http://testserver",
-        credential,
-        transport=httpx.ASGITransport(app=client._mosswork_app),
-    )
+    company = CompanyClient(company_origin, credential)
     events = []
     runtime = native_runtime(company, tmp_path, events)
     phase = {"mode": "complete"}
@@ -91,7 +122,8 @@ async def test_built_desktop_chat_reconnect_and_cancel(env_with_agent, tmp_path,
             return self
 
         async def astream(self, messages):
-            if phase["mode"] == "approval":
+            mode = phase["mode"]
+            if mode == "approval":
                 if not any(
                     isinstance(message, ToolMessage)
                     and message.tool_call_id == "browser-approved-remove"
@@ -128,11 +160,12 @@ async def test_built_desktop_chat_reconnect_and_cancel(env_with_agent, tmp_path,
                     ],
                 )
                 return
-            yield AIMessageChunk(content="Native browser stream started. ", id="answer")
-            if phase["mode"] != "complete":
+            answer_id = f"answer-{mode}"
+            yield AIMessageChunk(content=f"Browser {mode} stream started. ", id=answer_id)
+            if mode != "complete":
                 generating.set()
                 await release_generation.wait()
-            yield AIMessageChunk(content="Native browser stream finished.", id="answer")
+            yield AIMessageChunk(content=f"Browser {mode} stream finished.", id=answer_id)
 
     agent = server.app_runtime.agent_registry.get_agent(agent_id)
     agent.model_factory = SimpleNamespace(
@@ -259,7 +292,7 @@ async def test_built_desktop_chat_reconnect_and_cancel(env_with_agent, tmp_path,
             await editor.fill("Create the browser acceptance report")
             await editor.press("Enter")
             await expect(
-                page.get_by_text("Native browser stream finished.", exact=False).first
+                page.get_by_text("Browser complete stream finished.", exact=False).first
             ).to_be_visible(timeout=45000)
             async with asyncio.timeout(20):
                 while runtime.work:
@@ -291,6 +324,13 @@ async def test_built_desktop_chat_reconnect_and_cancel(env_with_agent, tmp_path,
             await page.screenshot(path=str(evidence / "awaiting-runtime-completion.png"))
             release_sync.set()
             await expect(stop).to_have_count(0, timeout=20000)
+            for message in ("Browser complete stream finished.", "Browser reload stream finished."):
+                await expect(page.get_by_text(message, exact=False)).to_have_count(1)
+            await page.reload()
+            await expect(page.locator("textarea").first).to_be_visible(timeout=30000)
+            for message in ("Browser complete stream finished.", "Browser reload stream finished."):
+                await expect(page.get_by_text(message, exact=False)).to_have_count(1)
+            assert calls.count("start") == 2, "Completed history reload must not replay a task"
             phase["mode"] = "cancel"
             generating.clear()
             release_generation.clear()
@@ -298,6 +338,9 @@ async def test_built_desktop_chat_reconnect_and_cancel(env_with_agent, tmp_path,
             await editor.fill("Run the cancellable browser acceptance task")
             await editor.press("Enter")
             await asyncio.wait_for(generating.wait(), 30)
+            await expect(
+                page.get_by_text("Browser cancel stream started.", exact=False)
+            ).to_be_visible()
             await page.get_by_role("button", name=re.compile(r"^(Stop|停止)$")).click()
             async with asyncio.timeout(20):
                 while runtime.work:
@@ -339,6 +382,8 @@ async def test_built_desktop_chat_reconnect_and_cancel(env_with_agent, tmp_path,
                         "native_go_webview_shell": "not exercised; its source is unchanged",
                         "starts": calls.count("start"),
                         "cancelled": True,
+                        "unique_turn_history_reload": True,
+                        "incremental_model_transport": "live loopback HTTP/SSE",
                         "approval_reload": "passed"
                         if os.name == "posix"
                         else "POSIX command fixture not applicable",
