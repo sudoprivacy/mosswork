@@ -1,1 +1,3 @@
 .githooks/* text eol=lf
+# Keep dashboard text consistent with Prettier on every platform.
+dashboard/** text=auto eol=lf
