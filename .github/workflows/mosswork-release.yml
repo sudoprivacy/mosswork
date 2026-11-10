@@ -365,6 +365,7 @@ jobs:
       TENCENT_SECRET_ID: ${{ secrets.TENCENT_SECRET_ID }}
       TENCENT_SECRET_KEY: ${{ secrets.TENCENT_SECRET_KEY }}
     steps:
+      - uses: actions/checkout@v4
       - uses: actions/download-artifact@v4
         with:
           path: release
@@ -445,13 +446,16 @@ jobs:
           gh release upload "$RELEASE_TAG" release/* --clobber
           gh release edit "$RELEASE_TAG" --draft=false --prerelease="$PRERELEASE" --latest="$([[ "$PRERELEASE" == false ]] && echo true || echo false)" --notes-file release-notes.md
       - name: Publish release assets to Tencent COS
-        if: env.TENCENT_SECRET_ID != '' && env.TENCENT_SECRET_KEY != ''
         env:
           COS_BUCKET: sudowork-release-1309794936
           COS_ROOT_PATH: mosswork/release
           COS_PUBLIC_BASE_URL: https://sudowork-release-1309794936.cos.accelerate.myqcloud.com
         run: |
           set -euo pipefail
+          [[ -n "$TENCENT_SECRET_ID" && -n "$TENCENT_SECRET_KEY" ]] || {
+            echo 'TENCENT_SECRET_ID and TENCENT_SECRET_KEY are required.' >&2
+            exit 1
+          }
           python3 -m pip install --disable-pip-version-check --quiet coscmd
           coscmd config -a "$TENCENT_SECRET_ID" -s "$TENCENT_SECRET_KEY" \
             -b "$COS_BUCKET" -e cos.accelerate.myqcloud.com

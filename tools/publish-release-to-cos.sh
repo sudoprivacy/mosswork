@@ -66,6 +66,14 @@ required_files=(
   "mosswork-company-windows-amd64-${VERSION}.exe"
   "SHA256SUMS.txt"
 )
+latest_client_sources=(
+  "mosswork-company-macos-arm64-${VERSION}.dmg"
+  "mosswork-company-windows-amd64-${VERSION}.exe"
+)
+latest_client_aliases=(
+  "mosswork-latest-macos-arm64.dmg"
+  "mosswork-latest-windows-amd64.exe"
+)
 for file_name in "${required_files[@]}"; do
   [[ -f "$ASSETS_DIR/$file_name" ]] || {
     echo "FAIL: missing release asset: $file_name" >&2
@@ -111,18 +119,23 @@ verify_remote_content() {
   rm -f "$downloaded"
 }
 
+verify_remote_size() {
+  local local_file="$1" remote_url="$2" expected_size headers remote_size
+  expected_size="$(wc -c < "$local_file" | tr -d ' ')"
+  headers="$(curl "${CURL_ARGS[@]}" --head "$remote_url")"
+  remote_size="$(printf '%s\n' "$headers" | tr -d '\r' \
+    | awk 'tolower($1) == "content-length:" { value=$2 } END { print value }')"
+  [[ "$remote_size" == "$expected_size" ]] || {
+    echo "FAIL: remote size mismatch for $remote_url: expected $expected_size, got ${remote_size:-missing}" >&2
+    exit 1
+  }
+}
+
 verify_release() {
-  local base_url="$1" file file_name expected_size headers remote_size
+  local base_url="$1" file file_name
   for file in "${asset_files[@]}"; do
     file_name="${file##*/}"
-    expected_size="$(wc -c < "$file" | tr -d ' ')"
-    headers="$(curl "${CURL_ARGS[@]}" --head "$base_url/$file_name")"
-    remote_size="$(printf '%s\n' "$headers" | tr -d '\r' \
-      | awk 'tolower($1) == "content-length:" { value=$2 } END { print value }')"
-    [[ "$remote_size" == "$expected_size" ]] || {
-      echo "FAIL: remote size mismatch for $file_name: expected $expected_size, got ${remote_size:-missing}" >&2
-      exit 1
-    }
+    verify_remote_size "$file" "$base_url/$file_name"
   done
   verify_remote_content "$ASSETS_DIR/SHA256SUMS.txt" "$base_url/SHA256SUMS.txt"
 }
@@ -139,13 +152,21 @@ upload_directory() {
 }
 
 publish_latest() {
+  local index
   verify_release "$RELEASE_URL"
   echo "Publishing latest aliases to $LATEST_URL/"
   for file in "${asset_files[@]}"; do
     file_name="${file##*/}"
     coscmd upload -H "$LATEST_HEADERS" "$file" "$LATEST_PATH/$file_name"
   done
-  verify_remote_content "$ASSETS_DIR/SHA256SUMS.txt" "$LATEST_URL/SHA256SUMS.txt"
+  for index in "${!latest_client_aliases[@]}"; do
+    coscmd upload -H "$LATEST_HEADERS" \
+      "$ASSETS_DIR/${latest_client_sources[$index]}" "$LATEST_PATH/${latest_client_aliases[$index]}"
+  done
+  verify_release "$LATEST_URL"
+  for index in "${!latest_client_aliases[@]}"; do
+    verify_remote_size "$ASSETS_DIR/${latest_client_sources[$index]}" "$LATEST_URL/${latest_client_aliases[$index]}"
+  done
 }
 
 case "$MODE" in
@@ -169,6 +190,9 @@ done
 if [[ "$MODE" == "--all" || "$MODE" == "--latest-only" ]]; then
   echo "COS latest URLs:"
   for file in "${required_files[@]}"; do
+    echo "$LATEST_URL/$file"
+  done
+  for file in "${latest_client_aliases[@]}"; do
     echo "$LATEST_URL/$file"
   done
 fi
