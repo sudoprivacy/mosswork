@@ -53,8 +53,7 @@ docker compose version >/dev/null
 
 case "$(uname -m)" in
   x86_64|amd64) image_arch=amd64 ;;
-  aarch64|arm64) image_arch=arm64 ;;
-  *) echo 'Only Linux amd64 and arm64 are supported.' >&2; exit 1 ;;
+  *) echo 'Only Linux amd64 is supported.' >&2; exit 1 ;;
 esac
 
 if [[ "$release_tag" == @* && -n "$offline_dir" ]]; then

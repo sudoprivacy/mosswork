@@ -4,7 +4,7 @@
 
 ## 一键安装
 
-准备 Linux amd64/arm64 主机、Docker Engine、支持 `up --wait` 的 Compose v2、Bash、tar 和 sha256sum。在线安装还需要 curl 和 GitHub Releases 下载访问；离线安装使用提前复制的附件，无需 curl。服务端、通信服务和 PostgreSQL 镜像均包含在发行包中。默认安装在 `/opt/moss-server`，监听 `0.0.0.0:8088`。
+准备 Linux amd64 主机、Docker Engine、支持 `up --wait` 的 Compose v2、Bash、tar 和 sha256sum。在线安装还需要 curl 和 GitHub Releases 下载访问；离线安装使用提前复制的附件，无需 curl。服务端、通信服务和 PostgreSQL 镜像均包含在发行包中。默认安装在 `/opt/moss-server`，监听 `0.0.0.0:8088`。
 
 安装最新正式版：
 
@@ -15,7 +15,7 @@ curl -fsSL https://github.com/sudoprivacy/mosswork/releases/latest/download/inst
 预发布版本不进入 GitHub 的 `latest` 入口。从对应 Release 复制带 tag 的命令，例如：
 
 ```sh
-curl -fsSL https://github.com/sudoprivacy/mosswork/releases/download/v0.0.5/install-moss-server.sh | sudo bash
+curl -fsSL https://github.com/sudoprivacy/mosswork/releases/download/v0.0.6/install-moss-server.sh | sudo bash
 ```
 
 自定义目录、监听地址和端口：
@@ -91,11 +91,11 @@ curl -fsSL https://github.com/sudoprivacy/mosswork/releases/latest/download/inst
 
 升级保留数据和密钥，先下载、校验并导入镜像，再停止应用和通信服务、执行迁移并启动新版本。只有健康检查通过后才更新 `deployment.env` 和 `current`。失败时保留现场检查日志；数据库迁移可能已经执行，不能只切换旧镜像来回退。需要恢复时，在隔离主机上恢复完整备份并使用对应旧镜像验证，再切换入口。
 
-Release 提供 `moss-server-images-<tag>-linux-amd64.tar.gz` 和 `moss-server-images-<tag>-linux-arm64.tar.gz`，每个包包含对应架构的 `moss-server:<version>`、`moss-server-im:<version>` 和 PostgreSQL 镜像。`moss-server-linux-<arch>-images.json` 记录镜像 ID、标签及架构，`SHA256SUMS.txt` 记录附件摘要。Compose 仅使用本地已导入的镜像，不自动拉取镜像。源码部署与更细的资源规划见[企业部署与恢复](README.md)。
+Release 提供 `moss-server-images-<tag>-linux-amd64.tar.gz`，包含 `moss-server:<version>`、`moss-server-im:<version>` 和 PostgreSQL 镜像。服务端仅支持 Linux amd64；`moss-server-linux-amd64-images.json` 记录镜像 ID、标签及架构，`SHA256SUMS.txt` 记录附件摘要。Compose 仅使用本地已导入的镜像，不自动拉取镜像。源码部署与更细的资源规划见[企业部署与恢复](README.md)。
 
 ## 离线安装与本地镜像
 
-将同一 Release 的 `install-moss-server.sh`、部署包、对应架构的镜像包及 `SHA256SUMS.txt` 提前复制到服务器，例如 `/srv/moss-server-release`。进入该目录执行离线安装：
+将同一 Release 的 `install-moss-server.sh`、部署包、amd64 镜像包及 `SHA256SUMS.txt` 提前复制到 Linux amd64 服务器，例如 `/srv/moss-server-release`。进入该目录执行离线安装：
 
 ```sh
 cd /srv/moss-server-release
@@ -106,7 +106,7 @@ sudo bash install-moss-server.sh --offline
 
 ```sh
 sudo bash /srv/moss-server-release/install-moss-server.sh \
-  --offline-dir /srv/moss-server-release --version v0.0.5
+  --offline-dir /srv/moss-server-release --version v0.0.6
 ```
 
 `--offline` 表示使用当前工作目录，`--local-dir PATH` 与 `--offline-dir PATH` 等价。安装器直接读取本地文件，校验后导入镜像，不下载附件、不查询 GitHub 最新版本，也不会将大镜像包复制到临时目录。源文件会保留，缺文件或校验失败直接报错，不转为在线下载。源码脚本未指定版本时，只在目录内有唯一部署包时推断版本；有多个版本时必须传 `--version`。
@@ -117,18 +117,18 @@ sudo bash /srv/moss-server-release/install-moss-server.sh \
 
 ```sh
 sudo bash install-moss-server.sh --offline-dir /srv/moss-server-release \
-  --version v0.0.5 --install-dir /srv/moss-server --port 18088
+  --version v0.0.6 --install-dir /srv/moss-server --port 18088
 ```
 
 ### 手动导入
 
-也可以直接执行以下手动步骤。镜像已加载时省略 `docker image load`。以下以 amd64 为例；arm64 主机替换镜像包文件名中的架构：
+也可以直接执行以下手动步骤。镜像已加载时省略 `docker image load`：
 
 ```sh
 sha256sum --check --ignore-missing SHA256SUMS.txt
-sudo docker image load --input moss-server-images-v0.0.5-linux-amd64.tar.gz
-tar -xzf moss-server-deploy-v0.0.5.tar.gz
-sudo bash moss-server/deploy.sh --version v0.0.5
+sudo docker image load --input moss-server-images-v0.0.6-linux-amd64.tar.gz
+tar -xzf moss-server-deploy-v0.0.6.tar.gz
+sudo bash moss-server/deploy.sh --version v0.0.6
 ```
 
 导入和启动阶段不需要镜像仓库访问权限。镜像包较大，下载和导入前应预留临时文件与 Docker 镜像的磁盘空间。

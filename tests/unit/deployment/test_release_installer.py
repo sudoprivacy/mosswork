@@ -30,10 +30,9 @@ def installer(tmp_path):
         member.size = len(data)
         member.mode = 0o755
         bundle.addfile(member, io.BytesIO(data))
-    for arch in ("amd64", "arm64"):
-        (downloads / f"moss-server-images-{TAG}-linux-{arch}.tar.gz").write_bytes(
-            b"docker image archive"
-        )
+    (downloads / f"moss-server-images-{TAG}-linux-amd64.tar.gz").write_bytes(
+        b"docker image archive"
+    )
     (downloads / "SHA256SUMS.txt").write_text(
         "".join(
             f"{hashlib.sha256(path.read_bytes()).hexdigest()}  {path.name}\n"
@@ -115,17 +114,17 @@ elif name == 'curl':
     return downloads, script, run
 
 
-@pytest.mark.parametrize(("machine", "arch"), [("x86_64", "amd64"), ("aarch64", "arm64")])
+@pytest.mark.parametrize("machine", ["x86_64"])
 @pytest.mark.parametrize("offline", [False, True])
 @pytest.mark.parametrize(
     "failure", [None, "deployment", "images", "missing-checksum", "load", "unsupported-arch"]
 )
 def test_installer_verifies_architecture_and_payloads_before_loading(
-    installer, tmp_path, machine, arch, offline, failure
+    installer, tmp_path, machine, offline, failure
 ):
     downloads, _, run = installer
     archive = downloads / DEPLOY
-    images = downloads / f"moss-server-images-{TAG}-linux-{arch}.tar.gz"
+    images = downloads / f"moss-server-images-{TAG}-linux-amd64.tar.gz"
     if failure == "deployment":
         archive.write_bytes(archive.read_bytes() + b"tampered")
     elif failure == "images":
@@ -147,7 +146,7 @@ def test_installer_verifies_architecture_and_payloads_before_loading(
         assert result.returncode != 0
         expected = {
             "load": "Image import failed",
-            "unsupported-arch": "Only Linux amd64 and arm64 are supported",
+            "unsupported-arch": "Only Linux amd64 is supported",
         }.get(failure, "checksum mismatch")
         assert expected in result.stderr
         assert not (tmp_path / "deployed.args").exists()
@@ -178,6 +177,16 @@ def test_installer_verifies_architecture_and_payloads_before_loading(
             "SHA256SUMS.txt",
         }
         assert all(f"/releases/download/{TAG}/" in url for url in urls)
+
+
+@pytest.mark.parametrize("machine", ["aarch64", "arm64", "ppc64le"])
+def test_installer_rejects_non_amd64_hosts(installer, tmp_path, machine):
+    _, _, run = installer
+    result = run("--offline", machine=machine)
+    assert result.returncode != 0
+    assert "Only Linux amd64 is supported" in result.stderr
+    assert not (tmp_path / "loaded.txt").exists()
+    assert not (tmp_path / "deployed.args").exists()
 
 
 @pytest.mark.parametrize("option", ["--offline", "--offline-dir", "--local-dir"])

@@ -2,7 +2,7 @@
 
 [中文](open-source-release.md)
 
-This document is for maintainers and describes source export, verification and release requirements for [mosswork](https://github.com/sudoprivacy/mosswork). The current source version is `0.0.5`; the main project and own communication module use MIT.
+This document is for maintainers and describes source export, verification and release requirements for [mosswork](https://github.com/sudoprivacy/mosswork). The current source version is `0.0.6`; the main project and own communication module use MIT.
 
 This repository provides source code; server images and Windows/macOS enterprise clients are generated according to the corresponding build documents. Release material is distributed through [this repository's Releases](https://github.com/sudoprivacy/mosswork/releases); binary installers require separate target-platform verification and records of signing and notarization status.
 
@@ -19,11 +19,11 @@ This repository provides source code; server images and Windows/macOS enterprise
 
 ## Tag releases
 
-Push a tag exactly matching `v<pyproject.toml version>` after exporting, checking and committing the complete public source. The current version corresponds to `v0.0.5`. The workflow never bumps versions or creates tags; manual runs must select an existing version tag.
+Push a tag exactly matching `v<pyproject.toml version>` after exporting, checking and committing the complete public source. The current version corresponds to `v0.0.6`. The workflow never bumps versions or creates tags; manual runs must select an existing version tag.
 
 The release includes only two client installers: a macOS 13+ ARM64 DMG and a Windows amd64 EXE. Both include the offline local runtime, document tools and checksum-pinned FFmpeg from the public Sudowork mirror. Native runners exercise the packaged runtime before assembly. Windows includes Microsoft's signed offline WebView2 installer. macOS uses ad-hoc signing without notarization; the Windows client is not Authenticode signed.
 
-Server images are distributed as `moss-server-images-<tag>-linux-<arch>.tar.gz` Release assets for Linux amd64 and arm64. Each archive includes moss-server, moss-server-im and PostgreSQL. The installer verifies checksums and imports the images with Docker; Compose uses only local images. GitHub Release publication waits for both clients and both server architectures. Prereleases do not update `latest`; published releases cannot be overwritten. Public source, deployment assets, build records, image IDs and SHA-256 checksums are attached to the same release.
+Server images are distributed as `moss-server-images-<tag>-linux-amd64.tar.gz`. The archive includes moss-server, moss-server-im and PostgreSQL; moss-server supports Linux amd64 only. The installer verifies checksums and imports the images with Docker; Compose uses only local images. GitHub Release publication waits for both clients and the amd64 server image. Prereleases do not update `latest`; published releases cannot be overwritten. Public source, deployment assets, build records, image IDs and SHA-256 checksums are attached to the same release.
 
 `moss-harness` is maintained in `packages/moss-harness` and built into both server and client runtimes. Its `moss_harness-<version>-py3-none-any.whl` is also attached to the release.
 

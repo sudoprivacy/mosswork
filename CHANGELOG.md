@@ -13,6 +13,12 @@
 
 These components require trusted host authorization, transport and persistence providers; they do not enable a new product route or authenticate comment delivery by themselves.
 
+## [0.0.6] - 2026-11-10
+
+### 部署
+- moss-server release 仅构建和分发 Linux amd64 镜像；安装器在其他架构上直接拒绝运行。
+- 稳定版客户端通过 COS `latest` 固定别名下载，发布 CI 同时更新 GitHub Release 和腾讯云 COS。
+
 ## [0.0.5] - 2026-11-02
 
 ### 新增

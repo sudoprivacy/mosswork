@@ -29,7 +29,7 @@ while [ "$#" -gt 0 ]; do
   esac
 done
 if [[ ! "$version" =~ ^v[0-9]+\.[0-9]+\.[0-9]+[A-Za-z0-9._-]*$ ]]; then
-  echo 'Use a release tag such as v0.0.5' >&2
+  echo 'Use a release tag such as v0.0.6' >&2
   exit 1
 fi
 

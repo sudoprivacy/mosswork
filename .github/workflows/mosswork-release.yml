@@ -206,8 +206,6 @@ jobs:
         include:
           - arch: amd64
             os: ubuntu-24.04
-          - arch: arm64
-            os: ubuntu-24.04-arm
     env:
       RELEASE_TAG: ${{ needs.source.outputs.tag }}
       RELEASE_VERSION: ${{ needs.source.outputs.version }}
@@ -377,10 +375,8 @@ jobs:
           test -s "mosswork-company-macos-arm64-${RELEASE_VERSION}.dmg"
           test -s "mosswork-company-windows-amd64-${RELEASE_VERSION}.exe"
           test "$(find . -maxdepth 1 \( -name '*.dmg' -o -name '*.exe' \) | wc -l)" -eq 2
-          for arch in amd64 arm64; do
-            test -s "moss-server-images-${RELEASE_TAG}-linux-${arch}.tar.gz"
-            test -s "moss-server-linux-${arch}-images.json"
-          done
+          test -s "moss-server-images-${RELEASE_TAG}-linux-amd64.tar.gz"
+          test -s "moss-server-linux-amd64-images.json"
           test -s "moss-server-deploy-${RELEASE_TAG}.tar.gz"
           test -s install-moss-server.sh
           for component in harness memory browser gateway; do
@@ -418,7 +414,7 @@ jobs:
 
           Sudograph: the portable compiler worker tarball is built from packages/sudograph-worker with a locked dependency graph, installed-byte manifest and compiler interoperability receipts. This package requires Node.js 22.21 or later and an installed Sudograph compiler; it does not by itself qualify native management, customer grants or comment delivery.
 
-          Server: Linux amd64/arm64 image archives attached below include moss-server, moss-server-im and PostgreSQL. The installer detects the host architecture, verifies SHA-256, imports the images with Docker and starts the stack with Compose. No container registry login is needed.
+          Server: Linux amd64 image archive attached below includes moss-server, moss-server-im and PostgreSQL. The installer verifies SHA-256, imports the images with Docker and starts the stack with Compose. No container registry login is needed.
 
           Install on a Linux Docker host with shell tools, curl and Compose v2; Python is not required:
 

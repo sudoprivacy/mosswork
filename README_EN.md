@@ -12,7 +12,7 @@
 <p><strong>AI runs on employee devices. Accounts, models and permissions stay with IT.</strong></p>
 
 <p>
-  <a href="desktop/README.md"><img alt="Version 0.0.5" src="https://img.shields.io/badge/version-0.0.5-F5453A?style=flat-square"></a>
+  <a href="desktop/README.md"><img alt="Version 0.0.6" src="https://img.shields.io/badge/version-0.0.6-F5453A?style=flat-square"></a>
   <a href="LICENSE"><img alt="License: MIT" src="https://img.shields.io/badge/license-MIT-17996B?style=flat-square"></a>
   <a href="docker/enterprise/README_EN.md"><img alt="Self-hosted" src="https://img.shields.io/badge/self--hosted-121417?style=flat-square"></a>
   <a href="docker/enterprise/README_EN.md"><img alt="Server: Linux + Docker" src="https://img.shields.io/badge/server-Linux%20%2B%20Docker-3B5BDB?style=flat-square"></a>
@@ -66,7 +66,7 @@ Server extensions (scheduled tasks, multi-platform IM channels, connectors, plug
 
 ## Getting started
 
-Current version: **0.0.5**. Download the mosswork client from [Releases](https://github.com/sudoprivacy/mosswork/releases): macOS ARM64 DMG or Windows x64 EXE. Deploy the moss-server Docker images with the [one-command deployment guide](docker/enterprise/INSTALL.md) (Chinese). Source builds are covered in the [desktop build guide](desktop/README.md).
+Current version: **0.0.6**. Download the mosswork client from [Releases](https://github.com/sudoprivacy/mosswork/releases): macOS ARM64 DMG or Windows x64 EXE. The moss-server supports Linux amd64 only; deploy its Docker image with the [one-command deployment guide](docker/enterprise/INSTALL.md) (Chinese). Source builds are covered in the [desktop build guide](desktop/README.md).
 
 If GitHub downloads are slow, use the [Quark Drive mirror](https://pan.quark.cn/s/6da75d82a576) and choose the client version matching your server.
 
