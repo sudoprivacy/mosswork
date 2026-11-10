@@ -5,6 +5,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from pathlib import Path
 from types import SimpleNamespace
+from unittest.mock import AsyncMock, Mock
 
 import pytest
 from starlette.datastructures import Headers, UploadFile
@@ -63,9 +64,28 @@ class _Document:
     updated_at: int = 1
 
 
+@pytest.fixture
+def embedding_dependencies_ready(monkeypatch: pytest.MonkeyPatch) -> AsyncMock:
+    from octop.api.routers import knowledge_bases
+    from octop.infra.agents.providers import onnx_service
+
+    # Exercise the adapter with absent optional packages without modifying the
+    # interpreter environment or invalidating testmon's dependency baseline.
+    monkeypatch.setattr(onnx_service, "local_embedding_deps_available", lambda: False)
+    monkeypatch.setattr(
+        onnx_service,
+        "install_packages",
+        Mock(side_effect=AssertionError("Adapter unit tests must not install runtime packages")),
+    )
+    ready = AsyncMock(return_value="ready")
+    monkeypatch.setattr(knowledge_bases, "ensure_local_embedding_deps_async", ready)
+    return ready
+
+
 @pytest.mark.asyncio
 async def test_enabling_without_model_maps_prerequisite_error(
     monkeypatch: pytest.MonkeyPatch,
+    embedding_dependencies_ready: AsyncMock,
 ) -> None:
     from octop.api.routers import knowledge_bases
 
@@ -85,11 +105,13 @@ async def test_enabling_without_model_maps_prerequisite_error(
         )
 
     assert raised.value.code == ErrorCode.KNOWLEDGE_PREREQUISITES_FAILED
+    embedding_dependencies_ready.assert_awaited_once_with(allow_install=True)
 
 
 @pytest.mark.asyncio
 async def test_enabling_reindexes_documents_when_model_changes(
     monkeypatch: pytest.MonkeyPatch,
+    embedding_dependencies_ready: AsyncMock,
 ) -> None:
     from octop.api.routers import knowledge_bases
 
@@ -146,6 +168,7 @@ async def test_enabling_reindexes_documents_when_model_changes(
     )
 
     assert calls == [(server.services, "new-model")]
+    embedding_dependencies_ready.assert_awaited_once_with(allow_install=True)
 
 
 @pytest.mark.asyncio
