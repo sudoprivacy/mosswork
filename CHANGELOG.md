@@ -4,6 +4,15 @@
 
 格式遵循 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/)，版本号遵循 [语义化版本规范](https://semver.org/spec/v2.0.0.html)。
 
+## [Unreleased]
+
+### Added
+
+- A portable Sudograph compiler worker package built from current source with locked dependencies, installed-byte verification and compiler interoperability receipts.
+- A host-bound client for Sudograph context, model edits and review, with current authorization checks, audit completion and cancellation-preserving failures. Review documents retain their original model, revision and digest for exact recovery after edits.
+
+These components require trusted host authorization, transport and persistence providers; they do not enable a new product route or authenticate comment delivery by themselves.
+
 ## [0.0.5] - 2026-11-02
 
 ### 新增

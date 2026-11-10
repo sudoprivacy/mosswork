@@ -1,0 +1,41 @@
+{
+  "name": "@sudo/sudograph-worker",
+  "version": "0.0.5",
+  "private": true,
+  "description": "Host-bound portable Sudograph compiler MCP and review worker",
+  "type": "module",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/sudoprivacy/mosswork.git",
+    "directory": "packages/sudograph-worker"
+  },
+  "engines": {
+    "node": ">=22.21.0"
+  },
+  "files": [
+    "dist",
+    "npm-shrinkwrap.json",
+    "README.md",
+    "SOURCE.json",
+    "LICENSE"
+  ],
+  "exports": {
+    ".": "./dist/compilerContextWorker.js",
+    "./configuration": "./dist/compilerWorkerConfig.js"
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.json && node tools/artifact.mjs",
+    "test": "node --test test/*.test.mjs",
+    "prepack": "npm run build"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "1.30.0",
+    "@sudowork/sudograph-runtime": "https://github.com/sudoprivacy/sudowork/releases/download/sudograph-runtime-v0.1.4/sudowork-sudograph-runtime-0.1.4.tgz",
+    "zod": "4.6.7"
+  },
+  "devDependencies": {
+    "@types/node": "22.20.3",
+    "typescript": "5.8.3"
+  }
+}
