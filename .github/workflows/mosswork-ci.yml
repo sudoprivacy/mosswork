@@ -13,6 +13,8 @@ on:
       - 'tests/unit/infra/test_local_harness.py'
       - 'tests/unit/infra/test_local_components.py'
       - 'tests/unit/infra/test_harness_config_imports.py'
+      - 'tests/unit/test_bundled_plugins_layout.py'
+      - 'tests/unit/test_cli_main.py'
       - 'scripts/install-moss-server.sh'
       - 'tools/publish-release-to-cos.sh'
       - 'tools/*public_source.py'
