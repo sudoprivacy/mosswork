@@ -140,8 +140,28 @@ def test_partial_docs_and_unknown_source_have_distinct_failure_codes(repo: Path)
     stage(repo, "src/config.py", "value = 1\n")
     result = invoke_dispatcher(repo)
     assert result.returncode == gate.FULL_CHECKS
+    assert "make precommit, then (cd dashboard && npm run build)" in result.stdout
+    assert "missing or changed data may select the full suite" in result.stdout
+    assert "recordings from make test/make all are reused automatically" in result.stdout
     receipt = json.loads((repo / ".git/mosswork-precommit.json").read_text(encoding="utf-8"))
     assert receipt["passed"] is None and receipt["delegated_to_full_gate"] is True
+    assert receipt["delegated_commands"] == [
+        {"cwd": ".", "argv": ["make", "precommit"]},
+        {"cwd": "dashboard", "argv": ["npm", "run", "build"]},
+    ]
+    assert receipt["test_selection"]["mode"] == "pytest-testmon"
+    assert receipt["test_selection"]["recorded_by"] == ["make test", "make all"]
+    planned = subprocess.run(
+        [sys.executable, str(repo / "tools/precommit.py"), "--plan"],
+        cwd=repo,
+        capture_output=True,
+        text=True,
+        check=True,
+    )
+    plan = json.loads(planned.stdout)
+    assert plan["delegated_commands"] == receipt["delegated_commands"]
+    assert plan["test_selection"] == receipt["test_selection"]
+    assert not plan.get("passed")
 
 
 def test_failed_real_validator_stops_later_processes_and_keeps_parent_index(

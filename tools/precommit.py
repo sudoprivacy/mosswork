@@ -174,6 +174,16 @@ def main() -> int:
     changed = staged_paths(root)
     selected = profile(root, changed)
     plan = {"profile": selected, "paths": changed, "commands": commands(selected)}
+    if selected == "full":
+        plan["delegated_commands"] = [
+            {"cwd": ".", "argv": ["make", "precommit"]},
+            {"cwd": "dashboard", "argv": ["npm", "run", "build"]},
+        ]
+        plan["test_selection"] = {
+            "mode": "pytest-testmon",
+            "recorded_by": ["make test", "make all"],
+            "scope": "This worktree's real dependency graph; missing or changed data may select the full suite",
+        }
     if args.plan:
         print(json.dumps(plan, ensure_ascii=True))
         return 0
@@ -186,7 +196,16 @@ def main() -> int:
     try:
         assert_staged_content(root, changed)
         if selected == "full":
-            print("[pre-commit] Full make/frontend gate required for these paths", flush=True)
+            print(
+                "[pre-commit] Application gate: make precommit, then (cd dashboard && npm run build)",
+                flush=True,
+            )
+            print(
+                "[pre-commit] pytest-testmon evaluates this worktree's real dependency graph; "
+                "missing or changed data may select the full suite. Existing same-environment "
+                "recordings from make test/make all are reused automatically.",
+                flush=True,
+            )
             result["delegated_to_full_gate"] = True
             result["passed"] = None
             result["status"] = "requires_full_gate"
