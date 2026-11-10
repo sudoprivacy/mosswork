@@ -12,6 +12,7 @@ on:
       - 'desktop/portable/**'
       - 'tests/unit/infra/test_local_harness.py'
       - 'tests/unit/infra/test_local_components.py'
+      - 'tests/unit/infra/test_harness_config_imports.py'
       - 'scripts/install-moss-server.sh'
       - 'tools/publish-release-to-cos.sh'
       - 'tools/*public_source.py'
@@ -64,13 +65,16 @@ jobs:
           key: sudograph-compiler-${{ runner.os }}-b0fcd5b257b995f9764081968f4c797f00d5a70f1d04b771c11818f5204e6ef2
       - name: Check registered JSON HTTP, TLS and MCP boundaries
         run: |
-          uv run --frozen ruff check src/octop/infra/connectors/{fixed_json,tool_protocol}.py tests/unit/connectors/test_fixed_json.py
-          uv run --frozen ruff format --check src/octop/infra/connectors/{fixed_json,tool_protocol}.py tests/unit/connectors/test_fixed_json.py
-          uv run --frozen mypy --strict src/octop/infra/connectors/{fixed_json,tool_protocol}.py
-          uv run --frozen pytest tests/unit/connectors/test_fixed_json.py -q --junitxml "$RUNNER_TEMP/fixed-json.xml"
+          uv run --frozen ruff check src/octop/infra/connectors/{fixed_json,tool_protocol,registered_model}.py tests/unit/connectors/test_{fixed_json,registered_model}.py
+          uv run --frozen ruff format --check src/octop/infra/connectors/{fixed_json,tool_protocol,registered_model}.py tests/unit/connectors/test_{fixed_json,registered_model}.py
+          uv run --frozen mypy --strict src/octop/infra/connectors/{fixed_json,tool_protocol,registered_model}.py
+          uv run --frozen pytest tests/unit/connectors/test_fixed_json.py tests/unit/connectors/test_registered_model.py -q --junitxml "$RUNNER_TEMP/fixed-json.xml"
+      - name: Check shared fixture and cold CLI isolation
+        run: |
+          uv run --frozen pytest tests/unit/connectors/test_qcc_grant.py tests/unit/connectors/test_qcc_oauth_grant.py tests/unit/test_bundled_plugins_layout.py tests/unit/test_cli_main.py tests/unit/agents/test_memory_slim.py tests/unit/agents/test_agent_manager.py -q --junitxml "$RUNNER_TEMP/shared-isolation.xml"
       - name: Check isolated dependencies and live worker fixtures
         run: |
-          uv run --frozen pytest tests/unit/api/test_knowledge_bases.py tests/unit/company_runtime/test_desktop_capacity.py tests/unit/company_runtime/test_local_process.py -q --junitxml "$RUNNER_TEMP/shared-fixtures.xml"
+          uv run --frozen pytest tests/unit/api/test_knowledge_bases.py tests/unit/company_runtime/test_desktop_capacity.py tests/unit/company_runtime/test_local_process.py tests/unit/infra/test_harness_config_imports.py -q --junitxml "$RUNNER_TEMP/shared-fixtures.xml"
           uv run --frozen pytest tests/unit/db/test_execution.py -q -k 'lease_expiry_never_releases_workspace_or_replays or device_generation_and_sent_operation_are_not_replayed'
       - name: Build, test and verify the installed current-source worker
         run: |
@@ -147,8 +151,10 @@ jobs:
             ${{ runner.temp }}/sudograph-domain-client.xml
             ${{ runner.temp }}/fixed-json.xml
             ${{ runner.temp }}/shared-fixtures.xml
+            ${{ runner.temp }}/shared-isolation.xml
             ${{ runner.temp }}/sudograph-domain-client/**/domain-client-receipt.json
             ${{ runner.temp }}/sudograph-domain-client/**/fixed-json-client-receipt.json
+            ${{ runner.temp }}/sudograph-domain-client/**/write-outcome-receipt.json
           if-no-files-found: ignore
   release-checks:
     runs-on: ubuntu-24.04

@@ -26,7 +26,7 @@ import pytest
 import yaml
 from moss_harness.mcp import aload_mcp_tools
 
-from octop.infra.connectors.fixed_json import FixedJsonTransport
+from octop.infra.connectors.registered_model import RegisteredModelTransport
 from octop.infra.connectors.tool_protocol import ToolConnection, open_tool_protocol
 from octop.infra.sudograph.client import Operation, SudographClient
 from octop.infra.sudograph.protocol import (
@@ -178,29 +178,30 @@ def test_fixed_json_protocol_with_real_installed_worker(installed_worker: Instal
                     stale_result["content"], is_error=stale_result.get("isError", False)
                 ).decode()
             assert stale.value.code == "CONTEXT_STALE"
-        async with httpx.AsyncClient(
-            transport=FixedJsonTransport(
-                installed_worker.endpoint + "/review",
-                profile="review",
-                before_dispatch=fixture_current,
-            ),
-            headers=dict(connection.headers),
-            trust_env=False,
-            follow_redirects=False,
-        ) as http:
-            response = await http.post(
-                installed_worker.endpoint + "/review",
-                json={
-                    "resource": binding.resource_ref,
-                    "operation": "document",
-                    "endpoint": "/review/" + uuid.uuid4().hex + "/v1",
-                },
-            )
-            response.raise_for_status()
-            document = envelope(response.json(), binding, review=True)["result"]
-            assert document["revision"] == initial["revision"]
-            assert document["context_digest"] == initial["context_digest"]
-            assert "<html" in document["html"].lower()
+
+        async def resolve_review(registered, request):
+            assert registered is binding
+            assert request["resource"] == binding.resource_ref
+            return connection, fixture_current
+
+        async def unused_tool(registered, name):
+            raise AssertionError("Review transport must not call a compiler tool")
+
+        transport = RegisteredModelTransport(
+            resolve_tool=unused_tool, resolve_review=resolve_review
+        )
+        reviewed_document = await transport.read_review(
+            binding,
+            {
+                "resource": binding.resource_ref,
+                "operation": "document",
+                "endpoint": "/review/" + uuid.uuid4().hex + "/v1",
+            },
+        )
+        document = envelope(reviewed_document, binding, review=True)["result"]
+        assert document["revision"] == initial["revision"]
+        assert document["context_digest"] == initial["context_digest"]
+        assert "<html" in document["html"].lower()
         (installed_worker.output / "fixed-json-client-receipt.json").write_text(
             json.dumps(
                 {
@@ -211,12 +212,131 @@ def test_fixed_json_protocol_with_real_installed_worker(installed_worker: Instal
                     "revision": initial["revision"],
                     "context_digest": initial["context_digest"],
                     "current_assertions": assertions,
+                    "registered_review_transport": True,
                     "scope": "Installed worker/compiler via bounded official MCP and review HTTP; synthetic source and fixture assertions, not production grants/native execution/comments/model acceptance.",
                 },
                 indent=2,
             ),
             encoding="utf-8",
         )
+
+    asyncio.run(exercise())
+
+
+def test_committed_write_with_revoked_result_keeps_original_recovery(
+    installed_worker: InstalledWorker,
+) -> None:
+    """Real commit and explicit same-ID recovery; grants remain test fixtures."""
+
+    async def exercise() -> None:
+        async def fixture_current() -> None:
+            return None
+
+        connection = ToolConnection(
+            installed_worker.endpoint + "/mcp",
+            (("Authorization", "Bearer " + installed_worker.token),),
+            timeout_ms=15000,
+        )
+        binding = ModelBinding(
+            "fixture-authority", "fixture", "fixture-review", ("fixture-source",)
+        )
+        async with open_tool_protocol(connection, check_current=fixture_current) as protocol:
+            descriptors = {d.tool["name"]: d for d in await protocol.descriptors()}
+            writes: list[dict[str, Any]] = []
+            audits: list[tuple[Operation, str]] = []
+
+            class FixturePorts:
+                enabled = True
+                revoke_next_write = True
+
+                async def authorize(self, current: ModelBinding, operation: Operation) -> None:
+                    if current != binding or not self.enabled:
+                        raise PermissionError("Fixture grant revoked after compiler commit")
+
+                async def call_tool(
+                    self, current: ModelBinding, name: Operation, arguments: dict[str, Any]
+                ) -> ToolResult:
+                    assert current == binding
+                    if name == "sudograph_model_apply":
+                        writes.append(copy.deepcopy(arguments))
+                    result = await transport.call_tool(current, name, arguments)
+                    if name == "sudograph_model_apply" and self.revoke_next_write:
+                        self.revoke_next_write = False
+                        self.enabled = False
+                    return result
+
+                async def read_review(
+                    self, current: ModelBinding, request: dict[str, Any]
+                ) -> dict[str, Any]:
+                    raise AssertionError(
+                        "Recovery must not use a review or latest-context fallback"
+                    )
+
+                async def audit(
+                    self, current: ModelBinding, operation: Operation, status: str
+                ) -> None:
+                    assert current == binding
+                    audits.append((operation, status))
+
+            ports = FixturePorts()
+
+            async def resolve_tool(registered, name):
+                assert registered is binding
+                await ports.authorize(binding, name)
+
+                async def dispatch_current():
+                    await ports.authorize(binding, name)
+
+                return connection, descriptors[name], dispatch_current
+
+            async def unused_review(registered, request):
+                raise AssertionError("Write recovery must not read review or latest context")
+
+            transport = RegisteredModelTransport(
+                resolve_tool=resolve_tool, resolve_review=unused_review
+            )
+            client = SudographClient(binding, ports)
+            original = await client.contract()
+            change = {
+                "base_revision": original["revision"],
+                "operation_id": uuid.uuid4().hex,
+                "model": yaml.safe_dump(
+                    original["write"]["document_schema"]["examples"][0], sort_keys=False
+                ),
+            }
+            with pytest.raises(SudographError) as withheld:
+                await client.apply(change)
+            assert withheld.value.code == "MODEL_WRITE_UNCONFIRMED"
+            assert "original operation_id" in withheld.value.recovery
+            assert writes == [change]
+            assert audits[-1] == ("sudograph_model_apply", "error")
+
+            # Explicit fixture reauthorization and recovery, never an automatic retry.
+            ports.enabled = True
+            current = await client.contract()
+            assert current["revision"] != original["revision"]
+            recovered = await client.apply(change)
+            assert recovered["revision"] == current["revision"]
+            assert writes == [change, change]
+            assert (await client.contract())["revision"] == current["revision"]
+            (installed_worker.output / "write-outcome-receipt.json").write_text(
+                json.dumps(
+                    {
+                        "passed": True,
+                        "withheld_error": withheld.value.code,
+                        "original_revision": original["revision"],
+                        "committed_revision": current["revision"],
+                        "original_operation_id": change["operation_id"],
+                        "write_calls_before_explicit_recovery": 1,
+                        "explicit_same_id_recovery": True,
+                        "registered_model_transport": True,
+                        "audit": audits,
+                        "scope": "Actual installed compiler/worker and maintained MCP client; fixture grant revocation and explicit reauthorization only, no production grant/native/model/rollout acceptance.",
+                    },
+                    indent=2,
+                ),
+                encoding="utf-8",
+            )
 
     asyncio.run(exercise())
 

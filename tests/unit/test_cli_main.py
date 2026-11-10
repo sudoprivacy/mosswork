@@ -166,21 +166,30 @@ def test_user_list_json_emits_dump(monkeypatch) -> None:
 
 def test_root_help_does_not_import_subcommand_modules() -> None:
     """`mosswork --help` must not import individual command modules eagerly."""
-    import importlib
+    import subprocess
     import sys
+    import textwrap
 
-    for mod in list(sys.modules):
-        if mod.startswith("octop.cli.commands."):
-            del sys.modules[mod]
-    importlib.invalidate_caches()
-    # Force re-import of main itself so the lazy group is fresh.
-    if "octop.cli.main" in sys.modules:
-        del sys.modules["octop.cli.main"]
-    from octop.cli.main import cli as fresh_cli
+    # A partial sys.modules reset leaves command attributes on the parent
+    # package stale and disconnects later tests' mocks from the invoked command.
+    result = subprocess.run(
+        [
+            sys.executable,
+            "-c",
+            textwrap.dedent("""
+                import sys
+                from click.testing import CliRunner
+                from octop.cli.main import cli
 
-    runner = CliRunner()
-    result = runner.invoke(fresh_cli, ["--help"])
-    assert result.exit_code == 0
-
-    leaked = [m for m in sys.modules if m.startswith("octop.cli.commands.")]
-    assert leaked == [], f"Lazy loader leaked imports: {leaked}"
+                runner = CliRunner()
+                result = runner.invoke(cli, ["--help"])
+                assert result.exit_code == 0
+                leaked = [m for m in sys.modules if m.startswith("octop.cli.commands.")]
+                assert leaked == [], f"Lazy loader leaked imports: {leaked}"
+                """),
+        ],
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    assert result.returncode == 0, result.stdout + result.stderr

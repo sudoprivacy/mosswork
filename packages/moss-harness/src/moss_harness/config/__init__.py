@@ -34,7 +34,7 @@ from dataclasses import InitVar, dataclass, field, fields
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, Literal
 
-from deepagents import SubAgent
+import deepagents
 
 from moss_harness.acp.models import ACPRunnerConfig, default_acp_runners
 
@@ -637,7 +637,7 @@ class HarnessAgentConfig:
 
     # —— Subagents / system prompt ——
     system_prompt: str | None = None
-    subagents: list[SubAgent] | None = None
+    subagents: list[deepagents.SubAgent] | None = None
 
     # —— Bootstrap ——
     # When enabled, ``bootstrap_file`` content replaces the system prompt on
@@ -1329,7 +1329,7 @@ def _skills_dir_to_jsonable(value: str | Path | Sequence[str | Path] | None) -> 
     return _path_dirs_to_jsonable(value)
 
 
-def _subagents_to_jsonable(subagents: list[SubAgent] | None) -> Any:
+def _subagents_to_jsonable(subagents: list[deepagents.SubAgent] | None) -> Any:
     if subagents is None:
         return None
     out: list[dict[str, Any]] = []
@@ -1349,13 +1349,13 @@ def _subagents_to_jsonable(subagents: list[SubAgent] | None) -> Any:
     return out
 
 
-def _subagent_from_dict(data: dict[str, Any]) -> SubAgent:
+def _subagent_from_dict(data: dict[str, Any]) -> deepagents.SubAgent:
     required = ("name", "description", "system_prompt")
     for key in required:
         if key not in data:
             msg = f"subagent spec missing required field {key!r}"
             raise ValueError(msg)
-    spec: SubAgent = {
+    spec: deepagents.SubAgent = {
         "name": str(data["name"]),
         "description": str(data["description"]),
         "system_prompt": str(data["system_prompt"]),

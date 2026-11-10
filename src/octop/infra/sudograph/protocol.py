@@ -32,6 +32,16 @@ def invalid() -> SudographError:
     )
 
 
+def write_unconfirmed() -> SudographError:
+    """Withhold a result without treating a possible committed write as absent."""
+    return SudographError(
+        "MODEL_WRITE_UNCONFIRMED",
+        "Model write outcome requires recovery",
+        "The model write may have completed. Recover the original operation_id under current "
+        "authorization; do not submit a new operation ID.",
+    )
+
+
 @dataclass(frozen=True, slots=True)
 class ModelBinding:
     """Host-resolved references, NOT a grant, session identity or credential."""

@@ -17,6 +17,7 @@ from octop.infra.sudograph.protocol import (
     ReviewDocument,
     SudographError,
     ToolResult,
+    write_unconfirmed,
 )
 
 BINDING = ModelBinding("authority", "model", "project", ("source-b", "source-a", "source-a"))
@@ -548,6 +549,77 @@ def test_audit_failure_is_a_failure_not_a_successful_read() -> None:
     assert "private" not in str(failure.value)
 
 
+@pytest.mark.parametrize("refusal", ["denied", "malformed", "unavailable"])
+def test_post_write_authorization_failure_retains_uncertain_outcome(refusal: str) -> None:
+    ports = Ports()
+    request = {"base_revision": "r", "operation_id": "original-write", "model": "yaml"}
+
+    def revoke_after_write() -> None:
+        if len(ports.authorizations) != 2:
+            return
+        if refusal == "denied":
+            ports.deny_at = 2
+        elif refusal == "malformed":
+            ports.authorization_result = True
+        else:
+            raise RuntimeError("private authority diagnostic")
+
+    ports.on_authorize = revoke_after_write
+    with pytest.raises(SudographError) as failure:
+        asyncio.run(SudographClient(BINDING, ports).apply(request))
+    assert failure.value.code == "MODEL_WRITE_UNCONFIRMED"
+    assert "original operation_id" in failure.value.recovery
+    assert "private" not in "".join(traceback.format_exception(failure.value))
+    assert ports.calls == [("sudograph_model_apply", request)]
+    assert ports.audits == [("sudograph_model_apply", "error")]
+
+
+@pytest.mark.parametrize("revoke", [False, True])
+def test_audit_failure_after_write_retains_original_operation_recovery(revoke: bool) -> None:
+    ports = Ports()
+    ports.audit_error = True
+    ports.deny_at = 2 if revoke else 0
+    request = {"base_revision": "r", "operation_id": "original-write", "model": "yaml"}
+    with pytest.raises(SudographError) as failure:
+        asyncio.run(SudographClient(BINDING, ports).apply(request))
+    assert failure.value.code == "AUDIT_UNAVAILABLE"
+    assert "original operation_id" in failure.value.recovery
+    assert "may have completed" in failure.value.recovery
+    assert "private" not in "".join(traceback.format_exception(failure.value))
+    assert ports.calls == [("sudograph_model_apply", request)]
+
+
+def test_pre_write_authorization_failure_does_not_claim_an_attempted_write() -> None:
+    ports = Ports()
+    ports.deny_at = 1
+    with pytest.raises(SudographError) as failure:
+        asyncio.run(
+            SudographClient(BINDING, ports).apply(
+                {"base_revision": "r", "operation_id": "original-write", "model": "yaml"}
+            )
+        )
+    assert failure.value.code == "ACCESS_DENIED"
+    assert ports.calls == []
+    assert ports.audits == [("sudograph_model_apply", "error")]
+
+
+@pytest.mark.parametrize("audit_fails", [False, True])
+def test_host_reported_possible_write_survives_result_and_audit_boundaries(
+    audit_fails: bool,
+) -> None:
+    ports = Ports()
+    ports.error = write_unconfirmed()
+    ports.audit_error = audit_fails
+    request = {"base_revision": "r", "operation_id": "original-write", "model": "yaml"}
+    with pytest.raises(SudographError) as failure:
+        asyncio.run(SudographClient(BINDING, ports).apply(request))
+    assert failure.value.code == ("AUDIT_UNAVAILABLE" if audit_fails else "MODEL_WRITE_UNCONFIRMED")
+    assert "original operation_id" in failure.value.recovery
+    assert "may have completed" in failure.value.recovery
+    assert ports.calls == [("sudograph_model_apply", request)]
+    assert ports.audits == [("sudograph_model_apply", "error")]
+
+
 @pytest.mark.parametrize(
     "content",
     ["not json", "[]", [], [7], [{"type": "image"}], [{"type": "text", "text": "{}"}] * 2],
@@ -555,3 +627,51 @@ def test_audit_failure_is_a_failure_not_a_successful_read() -> None:
 def test_malformed_tool_payload_is_refused(content: Any) -> None:
     with pytest.raises(SudographError):
         ToolResult(content).decode()
+
+
+@pytest.mark.parametrize("content", ["not json", "[]", [{"type": "image"}]])
+@pytest.mark.parametrize("audit_fails", [False, True])
+def test_malformed_returned_write_retains_recovery_before_decoding(
+    content: Any, audit_fails: bool
+) -> None:
+    ports = Ports()
+    ports.result = ToolResult(content)
+    ports.audit_error = audit_fails
+    request = {"base_revision": "r", "operation_id": "original-write", "model": "yaml"}
+    with pytest.raises(SudographError) as failure:
+        asyncio.run(SudographClient(BINDING, ports).apply(request))
+    assert failure.value.code == ("AUDIT_UNAVAILABLE" if audit_fails else "MODEL_WRITE_UNCONFIRMED")
+    assert "original operation_id" in failure.value.recovery
+    assert "may have completed" in failure.value.recovery
+    assert ports.calls == [("sudograph_model_apply", request)]
+    assert ports.audits == [("sudograph_model_apply", "error")]
+
+
+@pytest.mark.parametrize("audit_fails", [False, True])
+def test_known_compiler_refusal_does_not_claim_a_possible_commit(audit_fails: bool) -> None:
+    ports = Ports()
+    ports.result = ToolResult(
+        json.dumps({"code": "MODEL_INVALID", "reason": "Invalid model", "recovery": "Fix model"}),
+        is_error=True,
+    )
+    ports.audit_error = audit_fails
+    request = {"base_revision": "r", "operation_id": "original-write", "model": "yaml"}
+    with pytest.raises(SudographError) as failure:
+        asyncio.run(SudographClient(BINDING, ports).apply(request))
+    assert failure.value.code == ("AUDIT_UNAVAILABLE" if audit_fails else "MODEL_INVALID")
+    assert "may have completed" not in failure.value.recovery
+    assert ports.calls == [("sudograph_model_apply", request)]
+    assert ports.audits == [("sudograph_model_apply", "error")]
+
+
+@pytest.mark.parametrize("audit_fails", [False, True])
+def test_malformed_read_does_not_claim_a_possible_write(audit_fails: bool) -> None:
+    ports = Ports()
+    ports.result = ToolResult("not json")
+    ports.audit_error = audit_fails
+    with pytest.raises(SudographError) as failure:
+        asyncio.run(SudographClient(BINDING, ports).contract())
+    assert failure.value.code == ("AUDIT_UNAVAILABLE" if audit_fails else "WORKER_CONTRACT")
+    assert "may have completed" not in failure.value.recovery
+    assert ports.calls == [("sudograph_model_contract", {})]
+    assert ports.audits == [("sudograph_model_contract", "error")]

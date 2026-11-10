@@ -1,5 +1,5 @@
 version = 1
-revision = 3
+revision = 5
 requires-python = ">=3.12"
 resolution-markers = [
     "python_full_version >= '3.15'",
@@ -1067,8 +1067,8 @@ nvtx = [
 
 [[package]]
 name = "deepagents"
-version = "0.7.16"
-source = { registry = "https://pypi.org/simple" }
+version = "0.7.16.post1"
+source = { url = "https://github.com/sudoprivacy/deepagents/releases/download/v0.7.16.post1/deepagents-0.7.16.post1-py3-none-any.whl" }
 dependencies = [
     { name = "langchain" },
     { name = "langchain-anthropic" },
@@ -1078,10 +1078,25 @@ dependencies = [
     { name = "packaging" },
     { name = "wcmatch" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/a1/fd/64fcca7a8e06cdc068abd76ae0dc31c1f5be1afa2de4b33f91fb39a1410a/deepagents-0.7.16.tar.gz", hash = "sha256:ea4aa49dbe424d427dc6aa660150f15f5fafe68a679fa8e1fdda55b2e93472a8", size = 301535, upload-time = "2026-09-21T13:29:56.998Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/20/f4/38c5efe057abf895158d4232b8a6f93d4841b7a4692a85c8f65e245bc4be/deepagents-0.7.16-py3-none-any.whl", hash = "sha256:384bd824303f6654f7d1ad38190ac25104de05419407d5b26c242365e3fda0ba", size = 328598, upload-time = "2026-09-21T13:29:55.613Z" },
+    { url = "https://github.com/sudoprivacy/deepagents/releases/download/v0.7.16.post1/deepagents-0.7.16.post1-py3-none-any.whl", hash = "sha256:3bedb7353210ee14df358d16f899547fb51730b15d00c66c29864104d5dde24a" },
 ]
+
+[package.metadata]
+requires-dist = [
+    { name = "av", marker = "extra == 'video'", specifier = ">=18.0.0,<19.0.0" },
+    { name = "langchain", specifier = ">=1.4.2,<2.0.0" },
+    { name = "langchain-anthropic", specifier = ">=1.7.2,<2.0.0" },
+    { name = "langchain-aws", marker = "extra == 'aws'", specifier = ">=1.7.8,<2.0.0" },
+    { name = "langchain-core", specifier = ">=1.6.3,<2.0.0" },
+    { name = "langchain-google-genai", specifier = ">=4.4.0,<5.0.0" },
+    { name = "langchain-quickjs", marker = "extra == 'quickjs'", specifier = ">=0.3.7" },
+    { name = "langsmith", specifier = ">=0.13.0" },
+    { name = "packaging", specifier = ">=23.2" },
+    { name = "pillow", marker = "extra == 'video'", specifier = ">=12.3.0,<13.0.0" },
+    { name = "wcmatch", specifier = ">=11.0" },
+]
+provides-extras = ["aws", "quickjs", "video"]
 
 [[package]]
 name = "deepagents-backends"
@@ -3008,7 +3023,7 @@ requires-dist = [
     { name = "click", marker = "extra == 'cli'", specifier = ">=8.1" },
     { name = "cos-python-sdk-v5", marker = "extra == 'all'", specifier = ">=1.9" },
     { name = "cos-python-sdk-v5", marker = "extra == 'object-storage'", specifier = ">=1.9" },
-    { name = "deepagents", specifier = ">=0.7.16,<0.8" },
+    { name = "deepagents", url = "https://github.com/sudoprivacy/deepagents/releases/download/v0.7.16.post1/deepagents-0.7.16.post1-py3-none-any.whl" },
     { name = "deepagents-backends", marker = "python_full_version >= '3.12' and extra == 'all'", specifier = ">=0.2" },
     { name = "deepagents-backends", marker = "python_full_version >= '3.12' and extra == 'remote-backends'", specifier = ">=0.2" },
     { name = "docker", marker = "extra == 'all'", specifier = ">=7.0" },
