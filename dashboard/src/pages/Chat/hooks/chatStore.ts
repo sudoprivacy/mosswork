@@ -6,6 +6,7 @@ import {
   isCompanyDesktop,
   createRuntimeTaskId,
   requireDesktopRuntime,
+  matchesRuntimeTask,
   runLocalTurn,
   type LocalArtifact,
   type RuntimeEvent,
@@ -923,9 +924,8 @@ export async function editLocalMessage(
         };
         const unsubscribe = runtime.subscribe((event) => {
           if (
-            event.thread_id === sessionId &&
             event.event === "done" &&
-            (!event.task_id || event.task_id === task.task_id)
+            matchesRuntimeTask(event, sessionId, task.task_id)
           ) {
             finish(
               event.status === "unknown"
@@ -1383,6 +1383,7 @@ function handleHarnessChunk(
   state: SessionStreamState,
   chunk: HarnessChunk,
   sessionId?: string,
+  runtimeOwnsCompletion = false,
 ): void {
   const speaker = chunkSpeakerId(chunk, sessionHostAgentId(state, sessionId));
   if (sessionId && (state.isStreaming || speaker)) {
@@ -1458,7 +1459,7 @@ function handleHarnessChunk(
       // active, keep isStreaming / activeTurnId so 排队 stays available and
       // local follow-up flush does not race the server continuation.
       if (!speaker || (!hasStreamingMessages(state) && state.isStreaming)) {
-        if (state.activeTurnId) {
+        if (state.activeTurnId || runtimeOwnsCompletion) {
           if (sessionId) touchStreamActivity(sessionId);
         } else {
           clearStreamingFlags(state);
@@ -2561,9 +2562,12 @@ async function attachLocalRuntime(
   const controller = new AbortController();
   let closed = false;
   let observing = false;
+  let taskId: string | undefined;
+  let pendingEvents: RuntimeEvent[] | undefined = [];
   const finish = (announce = true) => {
     if (closed) return;
     closed = true;
+    pendingEvents = undefined;
     unsubscribe();
     controller.signal.removeEventListener("abort", cancel);
     localStreams.delete(sessionId);
@@ -2592,7 +2596,30 @@ async function attachLocalRuntime(
   const cancel = () => {
     void bridge.cancel({ thread_id: threadId }).catch(() => {});
   };
+  const applyEvent = (event: RuntimeEvent) => {
+    if (closed || !matchesRuntimeTask(event, threadId, taskId)) return;
+    if (event.event === "process_output") {
+      applyLocalProcessOutput(state, event);
+      notifyStream(state);
+      markActive();
+    }
+    if (event.event === "chunk" && event.data) {
+      markActive();
+      handleHarnessChunk(state, event.data, sessionId, true);
+    }
+    if (event.event === "done") {
+      if (event.error)
+        appendErrorBubble(state, event.error, "local_runtime_error");
+      finish();
+    }
+  };
+  const flushPendingEvents = () => {
+    const events = pendingEvents ?? [];
+    pendingEvents = undefined;
+    for (const event of events) applyEvent(event);
+  };
   const unsubscribe = bridge.subscribe((event) => {
+    if (closed) return;
     if (event.event === "runtime_exit") {
       if (observing)
         appendErrorBubble(
@@ -2604,21 +2631,10 @@ async function attachLocalRuntime(
       return;
     }
     if (event.thread_id !== threadId) return;
-    if (event.event === "process_output") {
-      applyLocalProcessOutput(state, event);
-      notifyStream(state);
-      markActive();
-    }
-    if (event.event === "chunk" && event.data) {
-      markActive();
-      handleHarnessChunk(state, event.data, sessionId);
-      notify(state);
-    }
-    if (event.event === "done") {
-      if (event.error)
-        appendErrorBubble(state, event.error, "local_runtime_error");
-      finish();
-    }
+    // Status identifies the current task. Retain event references only until
+    // that initial reply so late output cannot select an older task instead.
+    if (pendingEvents) pendingEvents.push(event);
+    else applyEvent(event);
   });
   controller.signal.addEventListener("abort", cancel, { once: true });
   // Reserve observation before the asynchronous cold-start status request.
@@ -2633,14 +2649,18 @@ async function attachLocalRuntime(
     const task = status.active_tasks.find(
       (item) => item.thread_id === threadId,
     );
+    taskId = task?.task_id;
     if (task && ["running", "cancel_requested"].includes(task.status ?? "")) {
       markActive();
       if (task.pending_approval) {
         handleHitlRequired(state, { ...task.pending_approval });
         notify(state);
       }
+      flushPendingEvents();
       return;
     }
+    flushPendingEvents();
+    if (closed) return;
     if (
       task?.status === "unknown" &&
       !reportedUnknownLocalTasks.has(task.task_id)
@@ -2654,6 +2674,7 @@ async function attachLocalRuntime(
       notify(state);
     }
   } catch {
+    flushPendingEvents();
     // Once live events prove a task is running, keep observing even if the
     // separate diagnostic request fails. Historical reads remain independent.
     if (observing) return;
@@ -3455,14 +3476,9 @@ export async function sendTurn(
             notify(state);
           }
           if (event.event === "chunk" && event.data) {
-            handleHarnessChunk(state, event.data, sessionId);
             // The harness may finish before company history/artifacts are
             // acknowledged. Only the native lifecycle event unlocks the turn.
-            if (!state.isStreaming && event.data.type !== "hitl_required") {
-              state.isStreaming = true;
-              notifyStream(state);
-            }
-            if (event.data.type === "hitl_required") notify(state);
+            handleHarnessChunk(state, event.data, sessionId, true);
           }
           if (event.event === "done" && event.artifacts?.length) {
             const previous = localArtifactHistory.get(state) ?? [];

@@ -829,6 +829,199 @@ it("reattaches to a native task after a page reload without replaying start", as
   expect(websocket).not.toHaveBeenCalled();
 });
 
+it("keeps a reattached task active when an older task emits late output and completion", async () => {
+  vi.mocked(bridge.status).mockResolvedValue({
+    active_tasks: [
+      { task_id: "current-task", thread_id: "local-thread", status: "running" },
+    ],
+  });
+  await store.attachThread("local-thread", "expert", "local-thread");
+  listener?.({
+    event: "chunk",
+    thread_id: "local-thread",
+    task_id: "old-task",
+    data: { type: "token", content: "stale output" },
+  });
+  listener?.({
+    event: "done",
+    thread_id: "local-thread",
+    task_id: "old-task",
+    status: "cancelled",
+  });
+  expect(store.getSnapshot("local-thread").isStreaming).toBe(true);
+  expect(store.getSnapshot("local-thread").messages).toEqual([]);
+  listener?.({
+    event: "chunk",
+    thread_id: "local-thread",
+    task_id: "current-task",
+    data: { type: "token", content: "current output" },
+  });
+  listener?.({
+    event: "done",
+    thread_id: "local-thread",
+    task_id: "current-task",
+    status: "completed",
+  });
+  expect(store.getSnapshot("local-thread").isStreaming).toBe(false);
+  expect(
+    store.getSnapshot("local-thread").messages.map((m) => m.content),
+  ).toEqual(["current output"]);
+  expect(bridge.start).not.toHaveBeenCalled();
+  expect(websocket).not.toHaveBeenCalled();
+});
+
+it("binds buffered reattach events to the status task before applying any output", async () => {
+  let resolveStatus!: (
+    value: Awaited<ReturnType<DesktopRuntimeBridge["status"]>>,
+  ) => void;
+  vi.mocked(bridge.status).mockReturnValue(
+    new Promise((resolve) => {
+      resolveStatus = resolve;
+    }),
+  );
+  const attach = store.attachThread("local-thread", "expert", "local-thread");
+  for (const taskId of ["old-task", "current-task"]) {
+    listener?.({
+      event: "chunk",
+      thread_id: "local-thread",
+      task_id: taskId,
+      data: { type: "token", content: taskId },
+    });
+    listener?.({
+      event: "done",
+      thread_id: "local-thread",
+      task_id: taskId,
+      status: "completed",
+    });
+  }
+  expect(store.getSnapshot("local-thread").messages).toEqual([]);
+  resolveStatus({
+    active_tasks: [
+      {
+        task_id: "current-task",
+        thread_id: "local-thread",
+        status: "completed",
+      },
+    ],
+  });
+  await attach;
+  expect(
+    store.getSnapshot("local-thread").messages.map((m) => m.content),
+  ).toEqual(["current-task"]);
+  expect(store.getSnapshot("local-thread").isStreaming).toBe(false);
+  expect(listener).toBeUndefined();
+  expect(bridge.start).not.toHaveBeenCalled();
+});
+
+it("keeps a fresh native approval paused after the initial status snapshot", async () => {
+  vi.mocked(bridge.status).mockImplementation(async () => {
+    listener?.({
+      event: "chunk",
+      thread_id: "local-thread",
+      task_id: "current-task",
+      data: {
+        type: "hitl_required",
+        request: {
+          pending_id: "fresh-approval",
+          action_requests: [
+            { name: "execute", args: { command: "rm fixture" } },
+          ],
+        },
+      },
+    });
+    return {
+      active_tasks: [
+        {
+          task_id: "current-task",
+          thread_id: "local-thread",
+          status: "running",
+        },
+      ],
+    };
+  });
+  await store.attachThread("local-thread", "expert", "local-thread");
+  expect(store.getSnapshot("local-thread").isStreaming).toBe(false);
+  expect(
+    store.getSnapshot("local-thread").messages.at(-1)?.hitlData?.pending_id,
+  ).toBe("fresh-approval");
+  listener?.({
+    event: "done",
+    thread_id: "local-thread",
+    task_id: "current-task",
+    status: "cancelled",
+  });
+});
+
+it.each(["new", "reattached"])(
+  "coalesces %s native token bursts and waits for the runtime terminal event",
+  async (mode) => {
+    const frames = new Map<number, FrameRequestCallback>();
+    let nextFrame = 0;
+    vi.stubGlobal("requestAnimationFrame", (callback: FrameRequestCallback) => {
+      frames.set(++nextFrame, callback);
+      return nextFrame;
+    });
+    vi.stubGlobal("cancelAnimationFrame", (frame: number) =>
+      frames.delete(frame),
+    );
+    vi.mocked(bridge.status).mockResolvedValue({
+      active_tasks: [
+        {
+          task_id: "current-task",
+          thread_id: "local-thread",
+          status: "running",
+        },
+      ],
+    });
+    let turn: Promise<void> | undefined;
+    let taskId = "current-task";
+    if (mode === "new") {
+      turn = store.sendTurn("local-thread", "run commands", "expert", "key");
+      taskId = vi.mocked(bridge.start).mock.calls[0][0].task_id;
+      await Promise.resolve();
+    } else {
+      await store.attachThread("local-thread", "expert", "local-thread");
+    }
+    const changed = vi.fn();
+    const unsubscribe = store.subscribe("local-thread", changed);
+    const deltas = Array.from({ length: 1000 }, (_, index) => `[${index}]`);
+    for (const content of deltas)
+      listener?.({
+        event: "chunk",
+        thread_id: "local-thread",
+        task_id: taskId,
+        data: { type: "token", content },
+      });
+    expect(changed).not.toHaveBeenCalled();
+    expect(frames.size).toBe(1);
+    expect(store.getSnapshot("local-thread").messages.at(-1)?.content).toBe(
+      deltas.join(""),
+    );
+    const callbacks = [...frames.values()];
+    frames.clear();
+    callbacks.forEach((callback) => callback(0));
+    expect(changed).toHaveBeenCalledOnce();
+    listener?.({
+      event: "chunk",
+      thread_id: "local-thread",
+      task_id: taskId,
+      data: { type: "done" },
+    });
+    // Harness output can finish before the runtime's cleanup and receipt sync.
+    expect(store.getSnapshot("local-thread").isStreaming).toBe(true);
+    listener?.({
+      event: "done",
+      thread_id: "local-thread",
+      task_id: taskId,
+      status: "completed",
+    });
+    await turn;
+    expect(store.getSnapshot("local-thread").isStreaming).toBe(false);
+    expect(listener).toBeUndefined();
+    unsubscribe();
+  },
+);
+
 it("does not resume a legacy server approval from a company desktop", async () => {
   const fetch = vi.fn();
   vi.stubGlobal("fetch", fetch);

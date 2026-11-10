@@ -1,4 +1,9 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
+
+// These tests exercise markdown helpers, not browser-only file rendering.
+vi.mock("../../Workspace/components/FileViewer", () => ({
+  default: () => null,
+}));
 import {
   buildSkillMarkdown,
   isValidSkillName,

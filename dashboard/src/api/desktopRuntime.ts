@@ -150,6 +150,18 @@ export function requireDesktopRuntime(): DesktopRuntimeBridge {
   return runtime;
 }
 
+/** Preserve task ownership when a thread is reused for another native turn. */
+export function matchesRuntimeTask(
+  event: RuntimeEvent,
+  threadId: string,
+  taskId?: string,
+): boolean {
+  return (
+    event.thread_id === threadId &&
+    (!taskId || !event.task_id || event.task_id === taskId)
+  );
+}
+
 /** Subscribe before starting: a short task may complete before its start reply. */
 export async function runLocalTurn(
   params: RuntimeStart,
@@ -177,8 +189,7 @@ export async function runLocalTurn(
         );
         return;
       }
-      if (event.thread_id !== params.thread_id) return;
-      if (event.task_id && event.task_id !== params.task_id) return;
+      if (!matchesRuntimeTask(event, params.thread_id, params.task_id)) return;
       onEvent(event);
       if (event.event === "done") {
         finish(

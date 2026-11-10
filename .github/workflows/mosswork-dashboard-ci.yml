@@ -1,0 +1,99 @@
+name: Dashboard checks
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - 'dashboard/**'
+      - 'src/octop/infra/company_runtime/**'
+      - 'tests/integration/test_desktop_reconnect_browser.py'
+      - 'tests/support/**'
+      - 'tests/conftest.py'
+      - 'tests/integration/conftest.py'
+      - 'tests/unit/company_runtime/**'
+      - '.github/workflows/mosswork-dashboard-ci.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  dashboard:
+    name: Dashboard and local runtime journey (${{ matrix.os }})
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-24.04, windows-2022]
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 30
+    defaults:
+      run:
+        shell: bash
+    env:
+      PLAYWRIGHT_BROWSERS_PATH: ${{ github.workspace }}/.playwright-browsers
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: npm
+          cache-dependency-path: dashboard/package-lock.json
+      - uses: astral-sh/setup-uv@v6
+        with:
+          python-version: '3.12'
+          enable-cache: true
+      - name: Install locked dashboard dependencies
+        working-directory: dashboard
+        run: npm ci
+      - name: Check changed frontend files
+        if: github.event_name == 'pull_request'
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+        run: |
+          python - <<'PY'
+          import os, subprocess
+          changed = subprocess.check_output([
+              "git", "diff", "--name-only", "--diff-filter=ACMR",
+              os.environ["BASE_SHA"], "HEAD", "--", "dashboard/",
+          ], text=True).splitlines()
+          sources = [path.removeprefix("dashboard/") for path in changed
+                     if path.endswith((".ts", ".tsx"))]
+          formatted = [path.removeprefix("dashboard/") for path in changed
+                       if path.endswith((".ts", ".tsx", ".json", ".less", ".css"))]
+          npx = "npx.cmd" if os.name == "nt" else "npx"
+          if sources:
+              subprocess.run([npx, "eslint", *sources], cwd="dashboard", check=True)
+          if formatted:
+              subprocess.run([npx, "prettier", "--check", *formatted], cwd="dashboard", check=True)
+          PY
+      - name: Run dashboard regressions
+        working-directory: dashboard
+        run: npm test -- --maxWorkers=2
+      - name: Build the actual desktop dashboard and check TypeScript
+        working-directory: dashboard
+        env:
+          VITE_DESKTOP_BUNDLE: '1'
+          VITE_STATIC_CDN_BASE: ''
+          NODE_OPTIONS: --max-old-space-size=4096
+        run: npm run build
+      - name: Install the matching Chromium
+        run: uv run --locked playwright install --with-deps chromium
+      - name: Check the built browser to local runtime journey
+        env:
+          MOSSWORK_RUN_BROWSER_ACCEPTANCE: '1'
+          MOSSWORK_BROWSER_EVIDENCE: ${{ runner.temp }}/desktop-chat-browser
+        run: |
+          uv run --locked ruff check tests/integration/test_desktop_reconnect_browser.py
+          uv run --locked ruff format --check tests/integration/test_desktop_reconnect_browser.py
+          uv run --locked pytest tests/integration/test_desktop_reconnect_browser.py -q --junitxml "$RUNNER_TEMP/desktop-chat-browser.xml"
+      - name: Retain browser acceptance evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: desktop-chat-browser-${{ runner.os }}
+          path: |
+            ${{ runner.temp }}/desktop-chat-browser/
+            ${{ runner.temp }}/desktop-chat-browser.xml
+          if-no-files-found: ignore

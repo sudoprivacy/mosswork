@@ -71,6 +71,9 @@ vi.mock("../../components/PrivateExpertBoundary", () => ({
   default: ({ children }: { children: ReactNode }) => children,
 }));
 vi.mock("../../components/PwaUpdatePrompt", () => ({ default: () => null }));
+vi.mock("../../components/ClientConfigUpdatePrompt", () => ({
+  default: () => null,
+}));
 vi.mock("../../components/PwaInstallPrompt", () => ({
   PwaAutoPrompt: () => null,
 }));
@@ -98,6 +101,7 @@ vi.mock("../../pages/Chat/components/ChatSidebarPanel", () => ({
 }));
 vi.mock("../../hooks/useCurrentUser", () => ({
   useCurrentUser: () => ({ id: identity.id, role: "admin" }),
+  useSetCurrentUser: () => vi.fn(),
 }));
 vi.mock("../../pages/Messaging/hooks/CommunicationContext", () => ({
   useCommunication: () => ({
