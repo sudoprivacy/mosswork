@@ -199,8 +199,8 @@ typecheck:
 
 .PHONY: test
 test:
-	@echo "[test] pytest (not live, -n $(PYTEST_JOBS))..."
-	$(RUN) pytest -n $(PYTEST_JOBS) -m "not live"
+	@echo "[test] full non-live suite; recording dependencies for the commit hook (-n $(PYTEST_JOBS))..."
+	$(RUN) pytest --testmon-noselect -n $(PYTEST_JOBS) -m "not live"
 
 .PHONY: test-fast
 test-fast:

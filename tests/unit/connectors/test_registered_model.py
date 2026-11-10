@@ -132,6 +132,68 @@ async def test_actual_post_write_revocation_is_uncertain_without_replay():
         ]
 
 
+@pytest.mark.parametrize("failure", ["nontext", "too-many-parts", "http-failure"])
+async def test_lower_refusal_before_tool_result_preserves_possible_original_write(failure):
+    name = "sudograph_model_apply"
+    reviewed = descriptor(name)
+    state = {
+        "tool": reviewed.tool,
+        "result": {
+            "content": (
+                [{"type": "image", "data": "AA==", "mimeType": "image/png"}]
+                if failure == "nontext"
+                else [{"type": "text", "text": "part"}]
+                * (129 if failure == "too-many-parts" else 1)
+            ),
+        },
+    }
+    original = reviewed_server(state)
+
+    def respond(request):
+        reply = original(request)
+        if (
+            request["line"].startswith("POST")
+            and json.loads(request["body"]).get("method") == "tools/call"
+            and failure == "http-failure"
+        ):
+            return 503, {"Content-Type": "application/json"}, b"{}"
+        return reply
+
+    async with server(respond) as (port, _):
+        client = adapter(ToolConnection(f"http://127.0.0.1:{port}/mcp", ()), reviewed)
+        try:
+            with pytest.raises(SudographError) as failed:
+                await client.call_tool(REGISTRATION, name, OPERATIONS[name])
+            assert failed.value.code == "MODEL_WRITE_UNCONFIRMED"
+            assert "original operation_id" in failed.value.recovery
+        finally:
+            assert state["calls"] == [{"name": name, "arguments": OPERATIONS[name]}]
+
+
+async def test_failed_discovery_does_not_claim_a_model_write_attempt():
+    name = "sudograph_model_apply"
+    reviewed = descriptor(name)
+    state = {"tool": reviewed.tool}
+    original = reviewed_server(state)
+
+    def respond(request):
+        reply = original(request)
+        if (
+            request["line"].startswith("POST")
+            and json.loads(request["body"]).get("method") == "tools/list"
+        ):
+            return 503, {"Content-Type": "application/json"}, b"{}"
+        return reply
+
+    async with server(respond) as (port, _):
+        client = adapter(ToolConnection(f"http://127.0.0.1:{port}/mcp", ()), reviewed)
+        with pytest.raises(SudographError) as failed:
+            await client.call_tool(REGISTRATION, name, OPERATIONS[name])
+        assert failed.value.code != "MODEL_WRITE_UNCONFIRMED"
+        assert "original operation_id" not in failed.value.recovery
+        assert state.get("calls", []) == []
+
+
 async def test_revocation_during_transport_close_withholds_original_write_reply():
     reviewed = descriptor("sudograph_model_apply")
     state = {"tool": reviewed.tool}
