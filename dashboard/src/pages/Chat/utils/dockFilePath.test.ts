@@ -255,7 +255,7 @@ describe("dockFilePath", () => {
         ],
       },
       {
-        name: "src / mosswork",
+        name: "src / octop",
         path: "src/octop",
         isDir: true,
         children: [
