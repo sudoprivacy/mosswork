@@ -208,3 +208,89 @@ async def test_close_has_no_agent_cancel_or_join_receipt_and_preserves_first_err
     assert streams.failure is original
     assert sdk.operations[-1] == ("close", "")
     assert not any("cancel" in op[0] for op in sdk.operations)
+
+
+@pytest.mark.parametrize("close_failure", [None, "error", "cancelled"])
+async def test_socket_allocation_failure_closes_open_mailbox_and_preserves_primary(
+    monkeypatch, close_failure
+) -> None:
+    import octop.infra.native_host.mailbox as mailbox
+
+    sdk = Sdk()
+    operation = sdk.session_operation
+    original = OSError("fixture socket allocation failed")
+
+    async def dispatch(name, payload=""):
+        value = await operation(name, payload)
+        if name == "close":
+            if close_failure == "error":
+                raise ControllerSdkError("OUTCOME_UNKNOWN", is_outcome_uncertain=True)
+            if close_failure == "cancelled":
+                raise asyncio.CancelledError("secondary cleanup cancellation")
+        return value
+
+    def unavailable(*args, **kwargs):
+        raise original
+
+    monkeypatch.setattr(sdk, "session_operation", dispatch)
+    monkeypatch.setattr(mailbox.socket, "socketpair", unavailable)
+    with pytest.raises(OSError) as failure:
+        await ControllerMailboxStreams.attach(sdk.connection, ENDPOINT, check_attachment=allowed)
+    assert failure.value is original
+    assert [op[0] for op in sdk.operations] == ["open", "close"]
+
+
+@pytest.mark.parametrize("cancel", [False, True])
+async def test_partial_socket_setup_releases_acquired_resources_and_original_failure(
+    monkeypatch, cancel
+) -> None:
+    import octop.infra.native_host.mailbox as mailbox
+
+    sdk = Sdk()
+    original_pair, original_open = mailbox.socket.socketpair, asyncio.open_connection
+    operation = sdk.session_operation
+    pairs, writers = [], []
+    entered = asyncio.Event()
+    original = OSError("fixture second stream failed")
+
+    def pair(*args, **kwargs):
+        acquired = original_pair(*args, **kwargs)
+        pairs.extend(acquired)
+        return acquired
+
+    async def open_stream(*args, **kwargs):
+        if not writers:
+            result = await original_open(*args, **kwargs)
+            writers.append(result[1])
+            return result
+        entered.set()
+        if cancel:
+            await asyncio.Future()
+        raise original
+
+    async def dispatch(name, payload=""):
+        result = await operation(name, payload)
+        if cancel and name == "close":
+            raise asyncio.CancelledError("secondary cleanup cancellation")
+        return result
+
+    monkeypatch.setattr(mailbox.socket, "socketpair", pair)
+    monkeypatch.setattr(asyncio, "open_connection", open_stream)
+    monkeypatch.setattr(sdk, "session_operation", dispatch)
+    task = asyncio.create_task(
+        ControllerMailboxStreams.attach(sdk.connection, ENDPOINT, check_attachment=allowed)
+    )
+    await asyncio.wait_for(entered.wait(), 5)
+    if cancel:
+        task.cancel("original attachment cancellation")
+        with pytest.raises(asyncio.CancelledError) as failure:
+            await task
+        assert task.cancelled()
+        assert failure.value.args == ("original attachment cancellation",)
+    else:
+        with pytest.raises(OSError) as failure:
+            await task
+        assert failure.value is original
+    assert [op[0] for op in sdk.operations] == ["open", "close"]
+    assert len(writers) == 1 and writers[0].is_closing()
+    assert len(pairs) == 2 and all(local.fileno() == -1 for local in pairs)

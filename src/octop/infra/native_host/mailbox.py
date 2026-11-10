@@ -87,9 +87,10 @@ class ControllerMailboxStreams:
         selected = json.dumps({"protocol": "acp-mailbox/1", **asdict(endpoint)})
         await _require_completion(check_attachment())
         await connection.session_operation("open", selected)
-        pair = socket.socketpair()
+        pair: tuple[socket.socket, socket.socket] | None = None
         writers: list[asyncio.StreamWriter] = []
         try:
+            pair = socket.socketpair()
             reader, writer = await asyncio.open_connection(sock=pair[0], limit=_MAX_MESSAGE_BYTES)
             writers.append(writer)
             incoming, outgoing = await asyncio.open_connection(
@@ -106,14 +107,16 @@ class ControllerMailboxStreams:
         except BaseException:
             # Preserve the original failure/cancellation. Mailbox close is a
             # transport cleanup attempt, never a joined native writer receipt.
-            with contextlib.suppress(Exception):
+            with contextlib.suppress(Exception, asyncio.CancelledError):
                 await connection.session_operation("close")
             for writer in writers:
-                writer.close()
-                with contextlib.suppress(Exception):
+                with contextlib.suppress(Exception, asyncio.CancelledError):
+                    writer.close()
                     await writer.wait_closed()
-            for local in pair:
-                local.close()
+            if pair is not None:
+                for local in pair:
+                    with contextlib.suppress(Exception):
+                        local.close()
             raise
 
     @property

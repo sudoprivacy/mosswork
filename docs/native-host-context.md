@@ -1,9 +1,15 @@
 # Trusted native host context
 
 `octop.infra.native_host.context` implements the application consumer for current
-host bindings and operation authorization. The production authority adapters,
-native transport, application wiring and review dispatcher are still required.
+host bindings and operation authorization. Actual current-grant/native providers,
+their production installation and the review dispatcher are still required.
 The unit fixtures do not qualify a production grant, runtime or deployment.
+
+Production integration targets `nexusd-cluster` with `spawn_spec` scode,
+strict ACP and `serve_managed`. Its authenticated child activation/bootstrap
+and matched unified runtime artifacts must be qualified. Existing cohost
+adapters preserve current production and safety work until replacement acceptance;
+their presence does not select a cohost fallback for the new product.
 
 ## Callable interface
 
@@ -11,8 +17,13 @@ The unit fixtures do not qualify a production grant, runtime or deployment.
 host = await resolve_trusted_host(authenticated_principal, selection, authority)
 await host.authorize(operation, registered_resource_ref)
 await host.check_ready(operation, registered_resource_ref)
-resolve_context = host.host_context_resolver(registered_resource_ref, read_context)
+resolve_context = ports.host_context_resolver(record_context)
 ```
+
+Here `ports` is the registered Sudograph consumer described below. Its mandatory
+`record_context` captures the actual original executing input, persists the one
+validated pointer before returning the same context text, and rechecks custody.
+The generic text wrapper alone does not supply this recording contract.
 
 `HostSelection(agent_id, thread_id)` selects product resources. `HostAuthority`
 resolves the current explicit mapping; a local numeric user ID, decoded personal
