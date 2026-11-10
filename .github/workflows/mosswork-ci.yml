@@ -13,6 +13,7 @@ on:
       - 'tests/unit/infra/test_local_harness.py'
       - 'tests/unit/infra/test_local_components.py'
       - 'scripts/install-moss-server.sh'
+      - 'tools/publish-release-to-cos.sh'
       - 'tools/*public_source.py'
       - 'tests/unit/deployment/**'
   workflow_dispatch:
@@ -34,8 +35,9 @@ jobs:
       - name: Check shell and workflow syntax
         run: |
           bash -n scripts/install-moss-server.sh docker/deploy/*.sh docker/enterprise/{prepare.sh,deploy.sh,start.sh,stop.sh}
-          shellcheck scripts/install-moss-server.sh docker/deploy/*.sh docker/enterprise/{prepare.sh,deploy.sh,start.sh,stop.sh}
-          go run github.com/rhysd/actionlint/cmd/actionlint@v1.7.7 .github/workflows/mosswork-ci.yml .github/workflows/mosswork-release.yml
+          bash -n tools/publish-release-to-cos.sh
+          shellcheck scripts/install-moss-server.sh tools/publish-release-to-cos.sh docker/deploy/*.sh docker/enterprise/{prepare.sh,deploy.sh,start.sh,stop.sh}
+          go run github.com/rhysd/actionlint/cmd/actionlint@v1.7.7 .github/workflows/mosswork-ci.yml .github/workflows/mosswork-release.yml .github/workflows/mosswork-cos-publish.yml
       - name: Validate public source export
         run: |
           python3 tools/export_public_source.py --output "$RUNNER_TEMP/mosswork-source"

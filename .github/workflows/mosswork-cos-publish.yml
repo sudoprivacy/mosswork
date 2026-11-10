@@ -1,0 +1,56 @@
+name: mosswork COS mirror
+
+on:
+  workflow_dispatch:
+    inputs:
+      release_tag:
+        description: 'Existing GitHub Release tag to mirror, for example v0.0.5'
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+jobs:
+  publish:
+    name: Mirror ${{ inputs.release_tag }} to Tencent COS
+    runs-on: ubuntu-24.04
+    env:
+      GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      RELEASE_TAG: ${{ inputs.release_tag }}
+      TENCENT_SECRET_ID: ${{ secrets.TENCENT_SECRET_ID }}
+      TENCENT_SECRET_KEY: ${{ secrets.TENCENT_SECRET_KEY }}
+      COS_BUCKET: sudowork-release-1309794936
+      COS_ROOT_PATH: mosswork/release
+      COS_PUBLIC_BASE_URL: https://sudowork-release-1309794936.cos.accelerate.myqcloud.com
+    steps:
+      - uses: actions/checkout@v4
+      - name: Download and validate GitHub Release assets
+        run: |
+          set -euo pipefail
+          [[ "$RELEASE_TAG" =~ ^v[0-9]+\.[0-9]+\.[0-9]+[A-Za-z0-9._-]*$ ]] || {
+            echo "Invalid release tag: $RELEASE_TAG" >&2
+            exit 1
+          }
+          mkdir -p release
+          gh release download "$RELEASE_TAG" --repo "$GITHUB_REPOSITORY" --dir release
+      - name: Publish assets to Tencent COS
+        run: |
+          set -euo pipefail
+          [[ -n "$TENCENT_SECRET_ID" && -n "$TENCENT_SECRET_KEY" ]] || {
+            echo 'TENCENT_SECRET_ID and TENCENT_SECRET_KEY are required.' >&2
+            exit 1
+          }
+          python3 -m pip install --disable-pip-version-check --quiet coscmd
+          coscmd config -a "$TENCENT_SECRET_ID" -s "$TENCENT_SECRET_KEY" \
+            -b "$COS_BUCKET" -e cos.accelerate.myqcloud.com
+          mode=--release-only
+          if [[ "$RELEASE_TAG" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+            mode=--all
+          fi
+          bash tools/publish-release-to-cos.sh release "$RELEASE_TAG" "$mode" | tee cos-download-urls.txt
+          {
+            echo '## Tencent COS downloads'
+            echo
+            sed -n '/^COS download URLs:/,$p' cos-download-urls.txt
+          } >> "$GITHUB_STEP_SUMMARY"
