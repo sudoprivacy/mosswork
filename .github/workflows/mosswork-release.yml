@@ -362,6 +362,8 @@ jobs:
       RELEASE_TAG: ${{ needs.source.outputs.tag }}
       RELEASE_VERSION: ${{ needs.source.outputs.version }}
       PRERELEASE: ${{ needs.source.outputs.prerelease }}
+      TENCENT_SECRET_ID: ${{ secrets.TENCENT_SECRET_ID }}
+      TENCENT_SECRET_KEY: ${{ secrets.TENCENT_SECRET_KEY }}
     steps:
       - uses: actions/download-artifact@v4
         with:
@@ -442,3 +444,24 @@ jobs:
           fi
           gh release upload "$RELEASE_TAG" release/* --clobber
           gh release edit "$RELEASE_TAG" --draft=false --prerelease="$PRERELEASE" --latest="$([[ "$PRERELEASE" == false ]] && echo true || echo false)" --notes-file release-notes.md
+      - name: Publish release assets to Tencent COS
+        if: env.TENCENT_SECRET_ID != '' && env.TENCENT_SECRET_KEY != ''
+        env:
+          COS_BUCKET: sudowork-release-1309794936
+          COS_ROOT_PATH: mosswork/release
+          COS_PUBLIC_BASE_URL: https://sudowork-release-1309794936.cos.accelerate.myqcloud.com
+        run: |
+          set -euo pipefail
+          python3 -m pip install --disable-pip-version-check --quiet coscmd
+          coscmd config -a "$TENCENT_SECRET_ID" -s "$TENCENT_SECRET_KEY" \
+            -b "$COS_BUCKET" -e cos.accelerate.myqcloud.com
+          mode=--release-only
+          if [[ "$PRERELEASE" == false ]]; then
+            mode=--all
+          fi
+          bash tools/publish-release-to-cos.sh release "$RELEASE_TAG" "$mode" | tee cos-download-urls.txt
+          {
+            echo '## Tencent COS downloads'
+            echo
+            sed -n '/^COS download URLs:/,$p' cos-download-urls.txt
+          } >> "$GITHUB_STEP_SUMMARY"
