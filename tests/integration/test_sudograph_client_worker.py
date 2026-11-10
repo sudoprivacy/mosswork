@@ -26,6 +26,8 @@ import pytest
 import yaml
 from moss_harness.mcp import aload_mcp_tools
 
+from octop.infra.connectors.fixed_json import FixedJsonTransport
+from octop.infra.connectors.tool_protocol import ToolConnection, open_tool_protocol
 from octop.infra.sudograph.client import Operation, SudographClient
 from octop.infra.sudograph.protocol import (
     ModelBinding,
@@ -33,6 +35,8 @@ from octop.infra.sudograph.protocol import (
     ReviewDocument,
     SudographError,
     ToolResult,
+    context,
+    envelope,
 )
 
 
@@ -108,6 +112,113 @@ def installed_worker(tmp_path: Path) -> Iterator[InstalledWorker]:
                 except subprocess.TimeoutExpired:
                     process.kill()
                     process.wait(timeout=5)
+
+
+def test_fixed_json_protocol_with_real_installed_worker(installed_worker: InstalledWorker) -> None:
+    """New transport against installed producer bytes, with explicit fixture grants."""
+
+    async def exercise() -> None:
+        assertions = 0
+
+        async def fixture_current() -> None:
+            nonlocal assertions
+            assertions += 1
+
+        connection = ToolConnection(
+            installed_worker.endpoint + "/mcp",
+            (("Authorization", "Bearer " + installed_worker.token),),
+            timeout_ms=15000,
+        )
+        binding = ModelBinding(
+            "fixture-authority", "fixture", "fixture-review", ("fixture-source",)
+        )
+        async with open_tool_protocol(connection, check_current=fixture_current) as protocol:
+            descriptors = {d.tool["name"]: d for d in await protocol.descriptors()}
+            assert set(descriptors) == {
+                "sudograph_context",
+                "sudograph_context_read",
+                "sudograph_model_contract",
+                "sudograph_model_apply",
+            }
+            result = await protocol.call_reviewed(descriptors["sudograph_context"], {})
+            packet = ToolResult(result["content"], is_error=result.get("isError", False)).decode()
+            initial = context(envelope(packet, binding, review=False)["context"])
+            assert "row-only-sentinel" not in initial["text"]
+            result = await protocol.call_reviewed(
+                descriptors["sudograph_context_read"],
+                {
+                    "revision": initial["revision"],
+                    "context_digest": initial["context_digest"],
+                    "id": "catalog",
+                },
+            )
+            catalogue = ToolResult(
+                result["content"], is_error=result.get("isError", False)
+            ).decode()
+            assert any(
+                obj["name"] == "widgets"
+                for source in catalogue["sources"]
+                for obj in source["objects"]
+            )
+            # Exact-read results are compiler products, not review envelopes.
+            # Prove the supplied pointer is enforced with the original error.
+            wrong_digest = ("0" if initial["context_digest"][0] != "0" else "1") + initial[
+                "context_digest"
+            ][1:]
+            stale_result = await protocol.call_reviewed(
+                descriptors["sudograph_context_read"],
+                {
+                    "revision": initial["revision"],
+                    "context_digest": wrong_digest,
+                    "id": "catalog",
+                },
+            )
+            with pytest.raises(SudographError) as stale:
+                ToolResult(
+                    stale_result["content"], is_error=stale_result.get("isError", False)
+                ).decode()
+            assert stale.value.code == "CONTEXT_STALE"
+        async with httpx.AsyncClient(
+            transport=FixedJsonTransport(
+                installed_worker.endpoint + "/review",
+                profile="review",
+                before_dispatch=fixture_current,
+            ),
+            headers=dict(connection.headers),
+            trust_env=False,
+            follow_redirects=False,
+        ) as http:
+            response = await http.post(
+                installed_worker.endpoint + "/review",
+                json={
+                    "resource": binding.resource_ref,
+                    "operation": "document",
+                    "endpoint": "/review/" + uuid.uuid4().hex + "/v1",
+                },
+            )
+            response.raise_for_status()
+            document = envelope(response.json(), binding, review=True)["result"]
+            assert document["revision"] == initial["revision"]
+            assert document["context_digest"] == initial["context_digest"]
+            assert "<html" in document["html"].lower()
+        (installed_worker.output / "fixed-json-client-receipt.json").write_text(
+            json.dumps(
+                {
+                    "passed": True,
+                    "worker_sha256": os.environ["MOSSWORK_TEST_SUDOGRAPH_WORKER_SHA256"],
+                    "protocol": protocol.version,
+                    "descriptor_digests": {name: d.digest for name, d in descriptors.items()},
+                    "revision": initial["revision"],
+                    "context_digest": initial["context_digest"],
+                    "current_assertions": assertions,
+                    "scope": "Installed worker/compiler via bounded official MCP and review HTTP; synthetic source and fixture assertions, not production grants/native execution/comments/model acceptance.",
+                },
+                indent=2,
+            ),
+            encoding="utf-8",
+        )
+
+    asyncio.run(exercise())
 
 
 def test_domain_client_with_real_installed_compiler_and_worker(

@@ -4,6 +4,7 @@ import asyncio
 import hashlib
 import json
 import time
+from contextlib import AsyncExitStack
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, Mock
 
@@ -22,10 +23,17 @@ from tests.unit.users.test_employee_resources import prepare, save, selection
 from tests.unit.users.test_employee_resources import resources as resources
 
 
+@pytest.fixture
+async def worker_lifecycles(resources):
+    # Keep database-backed services alive until every worker has drained.
+    async with AsyncExitStack() as lifecycle:
+        yield lifecycle
+
+
 @pytest.mark.asyncio
 @pytest.mark.parametrize("employee_count,model_limit", [(30, 4), (100, 0)])
 async def test_employees_use_six_experts_without_server_sandboxes(
-    resources, employee_count, model_limit
+    resources, worker_lifecycles, employee_count, model_limit
 ):
     e = resources
     for i in range(employee_count - len(e.employees)):
@@ -81,11 +89,12 @@ async def test_employees_use_six_experts_without_server_sandboxes(
 
     factory = SimpleNamespace(list_refs=lambda: ["test/model"], get_chat_model=lambda _: Model())
     for node in ("worker", "worker2"):
-        repo.register(node, "boot", "worker", container_id=node)
         registry = AgentManager(repos=e.services.repos, paths=e.services.paths)
         server = SimpleNamespace(
             role="worker",
-            execution=ExecutionService(repo, node=node, incarnation="boot", role="worker"),
+            execution=ExecutionService(
+                repo, node=node, incarnation="boot", role="worker", container_id=node
+            ),
             services=e.services,
             communication=e.server.communication,
             management_io=BoundedIO(),
@@ -105,6 +114,9 @@ async def test_employees_use_six_experts_without_server_sandboxes(
         registry.desktop_context_workspace = AsyncMock(
             return_value=SimpleNamespace(aread_text=AsyncMock(return_value=None))
         )
+        worker_lifecycles.push_async_callback(server.management_io.drain)
+        worker_lifecycles.push_async_callback(server.execution.close)
+        await server.execution.start_lease()
         servers[node] = server
 
     async def browse(uid):
@@ -223,4 +235,3 @@ async def test_employees_use_six_experts_without_server_sandboxes(
         registry._start_agent.assert_not_awaited()
         registry._backend_workspace_for_row.assert_not_called()
         registry.get_agent.assert_not_called()
-        await server.execution.close()
