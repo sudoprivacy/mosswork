@@ -15,6 +15,7 @@ from typing import Any
 import pytest
 from moss_harness.acp.models import ACPConfig, ACPRunnerConfig
 from moss_harness.acp.service import ACPService
+from tests.support.acp_status_gate import gate_prefix
 
 pytestmark = pytest.mark.skipif(
     os.environ.get("MOSSWORK_ACP_RUNTIME_E2E") != "1",
@@ -146,6 +147,11 @@ async def test_actual_connections_remain_distinct_and_queryable_during_quiet_wor
                 trusted=True,
                 command=sys.executable,
                 args=[
+                    # A real launcher keeps the transport PID different from
+                    # the forwarder's PID on every platform, including POSIX.
+                    "-c",
+                    "import subprocess\nimport sys\nraise SystemExit(subprocess.call(sys.argv[1:]))\n",
+                    sys.executable,
                     str(Path(__file__).resolve().parents[2] / "support" / "acp_status_gate.py"),
                     str(Path(binary).resolve()),
                     "--auth",
@@ -220,14 +226,14 @@ async def test_actual_connections_remain_distinct_and_queryable_during_quiet_wor
             # Hold an actual engine reply after it observed running. Readers
             # must leave at their budget, without queuing another wire request
             # or cancelling the independently progressing native operation.
-            gate = gates / str(first.process.pid)
-            counter = Path(str(gate) + ".requests")
+            gate = gate_prefix(gates, first.acp_session_id)
+            counter = gate.with_suffix(".requests")
             original_requests = counter.stat().st_size
-            Path(str(gate) + ".hold").write_text("hold", encoding="utf-8")
+            gate.with_suffix(".hold").write_text("hold", encoding="utf-8")
             timed_out = await observation("first")
             assert timed_out.availability == "unavailable"
             assert timed_out.snapshot is None
-            await wait_for_file(Path(str(gate) + ".held-response"))
+            await wait_for_file(gate.with_suffix(".held-response"))
             again = await observation("first")
             assert again.availability == "unavailable"
             assert again.snapshot is None
@@ -235,7 +241,7 @@ async def test_actual_connections_remain_distinct_and_queryable_during_quiet_wor
 
             (workspace / "hook-release").write_text("release", encoding="utf-8")
             await wait_for_file(workspace / "hook-finished")
-            Path(str(gate) + ".release").write_text("release", encoding="utf-8")
+            gate.with_suffix(".release").write_text("release", encoding="utf-8")
             assert first.runtime_status_task is not None
             stale = await first.runtime_status_task
             assert stale["foreground"]["state"] == "running"
