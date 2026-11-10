@@ -627,3 +627,42 @@ original host. It does not qualify standalone human graph/record review while
 execution is absent. That human-only reader must use current full model/source/
 document grants without creating an Agent/transcript or borrowing an execution
 Ready result. Its actual factory/provider remains a distinct unfinished seam.
+
+## Original reviewed MCP resolution
+
+`RetainedReviewedMcpRepo` reads the original `mcp_servers`, `mcp_policies`,
+`agent_tool_reviews`, active account/member and department rows in one read-only
+transaction. `ReviewedModelResolvers.resolve_tool(registered, operation)` returns
+the approved `ToolConnection`, independently reviewed `ToolDescriptor`, and a
+mandatory current assertion for the registered transport. `resolve_review`
+requires the original `moss/host-review-profile` and returns the approved MCP
+connection plus that assertion; the transport derives its fixed review endpoint.
+
+Each current assertion rechecks the original registration, current member,
+review revision/digests, policy, credential definition and resolved credential
+values. The transport must run it after DNS/TLS and before HTTP bytes. It never
+substitutes remote annotations, administrator role or LLM billing facts for the
+separate full graph/action/native/DLP grant supplied through `check_access`.
+Confirmation-required writes and task/skill-restricted host registrations refuse.
+
+System secret references use the existing organization-scoped ConfigItem,
+`org:{org}:system:{pinyin}` namespace and `system:moss:{org}` subject. An actual
+authorized Nexus `listSecrets` capability is required for those values. The
+session SDK has no corresponding secret API; session file Read and controller
+credentials do not supply it. No fallback credential is constructed.
+
+These resolvers do not install the product factory, create human authentication,
+provide native effect fencing, or implement comment/input persistence. The
+execution composition still supplies real current native/full-model assertions;
+the independent human reader supplies its actual human/document/source grant.
+
+After a model-apply reply, `RegisteredSudographPorts` withholds the result as
+`MODEL_WRITE_UNCONFIRMED` if reply validation, snapshotting or current admission
+fails. This preserves possible commit and recovery with the original operation
+ID; it does not authorize replay or a replacement operation. Known compiler
+`isError` results retain their classification, and cancellation stays task
+cancellation. A subsequent audit failure retains the same recovery instruction.
+
+Non-error apply replies pass through the existing `ToolResult.decode()` inside
+this guard, so malformed payloads also retain possible-write recovery before
+the result reaches the domain caller.

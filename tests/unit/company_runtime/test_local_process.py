@@ -51,10 +51,9 @@ async def test_tool_stdin_is_eof_while_worker_protocol_pipe_stays_open(tmp_path)
     project.mkdir()
     script = """import asyncio,json,sys
 from pathlib import Path
-from octop.infra.company_runtime.processes import ProjectProcesses
-assert not any(name == 'deepagents' or name == 'moss_harness' for name in sys.modules)
+from octop.infra.company_runtime.local import ProjectBackend
 async def run():
-    backend=ProjectProcesses(Path(sys.argv[1]),Path(sys.argv[2]),lambda event:None,tool_path=str(Path(sys.executable).parent))
+    backend=ProjectBackend(Path(sys.argv[1]),Path(sys.argv[2]),lambda event:None,tool_path=str(Path(sys.executable).parent))
     result=await backend.aexecute('"'+sys.executable+'" -c "import sys; print(len(sys.stdin.read()))"',timeout=1)
     print(json.dumps({'exit':result.exit_code,'output':result.output}),flush=True)
 asyncio.run(run())

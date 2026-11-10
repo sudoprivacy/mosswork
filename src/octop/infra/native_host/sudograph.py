@@ -20,6 +20,7 @@ from octop.infra.sudograph.protocol import (
     envelope,
     review_request,
     tool_request,
+    write_unconfirmed,
 )
 
 from .context import (
@@ -198,10 +199,21 @@ class RegisteredSudographPorts:
         request = tool_request(name, arguments)
         await self._before_io(binding, name)
         response = await self._transport.call_tool(self._registered, name, request)
-        if type(response) is not ToolResult or type(response.is_error) is not bool:
-            raise HostUnavailable("Invalid registered worker result")
-        result = copy.deepcopy(response)
-        await self.authorize(binding, name)
+        try:
+            if type(response) is not ToolResult or type(response.is_error) is not bool:
+                raise HostUnavailable("Invalid registered worker result")
+            result = copy.deepcopy(response)
+            if name == "sudograph_model_apply" and not result.is_error:
+                # A malformed non-error reply cannot establish that no write
+                # occurred. Reuse the domain decoder within this outcome guard.
+                result.decode()
+            await self.authorize(binding, name)
+        except Exception:
+            if name == "sudograph_model_apply" and not (
+                type(response) is ToolResult and response.is_error is True
+            ):
+                raise write_unconfirmed() from None
+            raise
         return result
 
     async def read_review(self, binding: ModelBinding, request: dict[str, Any]) -> dict[str, Any]:
