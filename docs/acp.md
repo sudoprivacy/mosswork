@@ -65,6 +65,27 @@ Permission prompts from the external agent appear in chat; pick an option or ins
 
 After changing global runners, mosswork reloads your agents automatically. Changing only `tool_enabled` reloads that agent.
 
+### Runtime observations
+
+`action=list` and `action=status` also read runtime facts when an existing
+connection advertises SudoCode's runtime-status extension v1. They preserve
+`idle`, `running`, or `awaiting_input` foreground state, the input reason
+(`permission` or `question`), and the engine's separate background task counts.
+Reading status starts no session or model turn and remains available while the
+agent is working.
+
+Each observation identifies its ACP connection instance and session. Reopening a
+connection creates a new instance identity. The scope is
+`moss-owned-acp-connections`, with `is_complete=false`: it describes this MossWork
+agent's connections, rather than an inventory of all machines or agents.
+`unsupported`, `unavailable`, and `disconnected` observations have no snapshot.
+An open connection or old conversation history cannot supply an idle state.
+Lists share a two-second query budget, with at most four concurrent reads.
+Timing out a status read does not cancel the agent's turn.
+Each connection has at most one outstanding status request. Once a slow request
+drains, the next read asks the engine again; late results are not cached as fresh
+facts.
+
 ---
 
 ## CLI: inbound — expose mosswork as an ACP server

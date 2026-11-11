@@ -10,6 +10,7 @@ from langchain_core.tools import tool
 from langgraph.config import get_config
 
 from moss_harness.acp.models import ACPConfig
+from moss_harness.acp.runtime_status import RuntimeObservation
 from moss_harness.acp.service import ACPService, get_acp_service, init_acp_service
 from moss_harness.acp.tool_adapter import (
     format_close_response,
@@ -45,6 +46,11 @@ def build_acp_runner_tool(*, service_key: str, config: ACPConfig, workspace_dir:
         4. When ``[permission_required]`` appears, ask the user which option to pick,
            then ``action='respond', runner='...', message='<exact option id>'``.
         5. ``action='close', runner='...'`` — close the session.
+
+        List/status query negotiated engine facts on this agent's existing ACP
+        connections. Foreground input waits and background counts are separate.
+        Unsupported, unavailable or disconnected observations contain no state;
+        an open transport alone does not imply that an agent is idle.
 
         Args:
             action: One of list, status, start, message, respond, close.
@@ -172,6 +178,9 @@ async def _format_runner_list(config: ACPConfig, service_key: str) -> str:
     except ValueError:
         thread_id = ""
     service = _get_service(service_key, config) if thread_id else None
+    observations = (
+        await service.get_runtime_observations(thread_id=thread_id, runners=runners) if service is not None else {}
+    )
     lines = ["Available external ACP runners:"]
     for name in runners:
         details: list[str] = []
@@ -182,8 +191,15 @@ async def _format_runner_list(config: ACPConfig, service_key: str) -> str:
             pending = await service.get_pending_permission(thread_id=thread_id, runner=name)
             if pending is not None:
                 details.append("task: permission_required")
+            observation = observations[name]
+            if observation.instance_id is not None:
+                details.append(_format_runtime_observation(observation))
         lines.append(f"- {name}" + (f" ({', '.join(details)})" if details else ""))
     return "\n".join(lines)
+
+
+def _format_runtime_observation(observation: RuntimeObservation) -> str:
+    return "runtime: " + observation.model_dump_json(exclude_none=True)
 
 
 async def _format_status(config: ACPConfig, service_key: str, runner_name: str) -> str:
@@ -207,6 +223,8 @@ async def _format_status(config: ACPConfig, service_key: str, runner_name: str) 
     if session is not None and session.process.returncode is None:
         state = "waiting_for_permission" if pending is not None else "open"
     lines = [f"runner: {runner_name}", f"session: {state}"]
+    observation = await service.get_runtime_observation(thread_id=thread_id, runner=runner_name)
+    lines.append(_format_runtime_observation(observation))
     if pending is not None:
         lines.append("")
         lines.append(format_permission_required(pending))

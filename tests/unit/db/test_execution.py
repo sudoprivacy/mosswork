@@ -28,7 +28,15 @@ def seed_execution(pool):
 
 
 @pytest.fixture
-def execution(tmp_path):
+def execution_clock(monkeypatch):
+    """Keep capacity journeys independent of elapsed machine/SQLite time."""
+    clock = [1_700_000_000]
+    monkeypatch.setattr(ExecutionRepo, "_now", lambda _repo, _conn: clock[0])
+    return clock
+
+
+@pytest.fixture
+def execution(tmp_path, execution_clock):
     pool = SqlitePool(tmp_path / "execution.db")
     run_migrations(pool)
     repo, user = seed_execution(pool)
@@ -301,6 +309,21 @@ def test_lease_expiry_never_releases_workspace_or_replays(execution):
     assert other["token"] == run["token"] + 1
     assert other["thread_id"] == "two"
     assert repo.get(run["run_id"])["state"] == "unknown"
+
+
+def test_registered_executor_is_fenced_at_its_exact_lease_deadline(execution, execution_clock):
+    _, repo, user = execution
+    submit(repo, user)
+    run = claim(repo)
+    execution_clock[0] += 29
+    assert repo.expire_nodes() == 0
+    repo.append(*fence(run), key="before-expiry", payload={"text": "admitted"})
+    execution_clock[0] += 1
+    assert repo.expire_nodes() == 2
+    assert repo.get(run["run_id"])["state"] == "unknown"
+    assert repo.active("one")
+    with pytest.raises(ExecutionConflict, match="fenced"):
+        repo.append(*fence(run), key="at-expiry", payload={"text": "refused"})
 
 
 def test_cancel_and_approval_are_persistent_and_single_decision(execution):

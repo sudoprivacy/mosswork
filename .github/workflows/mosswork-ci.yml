@@ -35,12 +35,51 @@ on:
       - 'tests/unit/sudograph/**'
       - 'tests/integration/test_sudograph_client_worker.py'
       - 'tests/unit/deployment/**'
+      - 'pyproject.toml'
+      - 'uv.lock'
+      - 'tools/fetch_acp_test_engine.py'
+      - 'tests/unit/acp/**'
+      - 'tests/unit/db/test_execution.py'
+      - 'tests/unit/agents/test_acp_settings.py'
+      - 'tests/integration/test_acp_api.py'
+      - 'tests/support/acp_*'
   workflow_dispatch:
 
 permissions:
   contents: read
 
 jobs:
+  acp-runtime-observations:
+    name: ACP runtime observations (${{ matrix.os }})
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-24.04, windows-2022, macos-15]
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v6
+        with:
+          python-version: '3.12'
+          enable-cache: true
+      - name: Install the locked workspace
+        run: uv sync --locked
+      - name: Check the ACP implementation and contract tests
+        run: |
+          uv run --locked ruff check packages/moss-harness/src/moss_harness/acp/runtime_status.py packages/moss-harness/src/moss_harness/acp/service.py packages/moss-harness/src/moss_harness/builtin/tools/acp_runner.py tests/unit/acp tests/support/acp_status_gate.py tools/fetch_acp_test_engine.py
+          uv run --locked ruff format --check packages/moss-harness/src/moss_harness/acp/runtime_status.py packages/moss-harness/src/moss_harness/acp/service.py packages/moss-harness/src/moss_harness/builtin/tools/acp_runner.py tests/unit/acp tests/support/acp_status_gate.py tools/fetch_acp_test_engine.py
+          uv run --locked mypy --config-file packages/moss-harness/pyproject.toml --follow-imports=silent packages/moss-harness/src/moss_harness/acp/runtime_status.py packages/moss-harness/src/moss_harness/acp/service.py packages/moss-harness/src/moss_harness/builtin/tools/acp_runner.py
+      - name: Fetch the digest-pinned native test engine
+        shell: bash
+        run: |
+          SCODE_BIN="$(uv run --locked python tools/fetch_acp_test_engine.py --output "$RUNNER_TEMP/acp-test-engine")"
+          echo "SCODE_BIN=$SCODE_BIN" >> "$GITHUB_ENV"
+      - name: Exercise the shared service and actual native process
+        env:
+          MOSSWORK_ACP_RUNTIME_E2E: '1'
+        run: uv run --locked pytest tests/unit/acp tests/unit/agents/test_acp_settings.py tests/integration/test_acp_api.py -q
+
   sudograph-interop:
     name: Packaged Sudograph connector interoperability
     strategy:
@@ -78,7 +117,7 @@ jobs:
       - name: Check isolated dependencies and live worker fixtures
         run: |
           uv run --frozen pytest tests/unit/api/test_knowledge_bases.py tests/unit/company_runtime/test_desktop_capacity.py tests/unit/company_runtime/test_local_process.py tests/unit/infra/test_harness_config_imports.py -q --junitxml "$RUNNER_TEMP/shared-fixtures.xml"
-          uv run --frozen pytest tests/unit/db/test_execution.py -q -k 'lease_expiry_never_releases_workspace_or_replays or device_generation_and_sent_operation_are_not_replayed'
+          uv run --frozen pytest tests/unit/db/test_execution.py -q
       - name: Build, test and verify the installed current-source worker
         run: |
           uv run --no-project python tools/package_sudograph_worker.py --output "$RUNNER_TEMP/sudograph-worker-package"

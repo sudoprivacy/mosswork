@@ -1,0 +1,22 @@
+{
+  "repository": "sudoprivacy/sudocode",
+  "version": "0.2.41",
+  "assets": {
+    "linux-x64": {
+      "name": "scode-linux-x64.tar.gz",
+      "sha256": "f58cfc7e5ee01f8f0677c64e1b3d22fba641d087f73752bd432c253e3e9ccf89"
+    },
+    "darwin-x64": {
+      "name": "scode-macos-x64.tar.gz",
+      "sha256": "0d1a19d667eff8505e00de47710b23dab402e98c564ec76ef36d78b182c0288d"
+    },
+    "darwin-arm64": {
+      "name": "scode-macos-arm64.tar.gz",
+      "sha256": "508071326ca756f1e906d559f7aaa2811b2804c3c157c62e538ec88892326480"
+    },
+    "win32-x64": {
+      "name": "scode-windows-x64.zip",
+      "sha256": "e752926942df53dc51ded657591061856f074b8e7903625437c1df71f49235ff"
+    }
+  }
+}

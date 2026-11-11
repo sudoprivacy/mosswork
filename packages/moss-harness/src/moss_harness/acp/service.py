@@ -8,15 +8,33 @@ import contextlib
 import os
 from collections.abc import Awaitable, Callable
 from contextlib import AsyncExitStack
-from dataclasses import dataclass
-from typing import Any
+from dataclasses import dataclass, field
+from typing import Any, TypedDict
+from uuid import uuid4
 
 from moss_harness.acp.client import ACPHostedClient
 from moss_harness.acp.models import ACPConfig, ACPConfigurationError, ACPRunnerConfig, ACPSessionError
+from moss_harness.acp.runtime_status import (
+    RUNTIME_STATUS_BUDGET_SECONDS,
+    RuntimeObservation,
+    RuntimeSnapshot,
+    supports_runtime_status,
+)
 from moss_harness.backends.utils import ASYNC_DEFENSIVE_OP_ERRORS
 from moss_harness.runtime_env import load_dotenv_path, overlay_env
 
 MessageHandler = Callable[[dict[str, Any], bool], Awaitable[None]]
+
+
+class _RuntimeIdentity(TypedDict):
+    instance_id: str
+    session_id: str
+
+
+def _finish_runtime_query(task: asyncio.Task[Any]) -> None:
+    """Observe failures even when every bounded reader has already left."""
+    if not task.cancelled():
+        task.exception()
 
 
 def _kill_process_tree(pid: int) -> None:
@@ -46,6 +64,10 @@ class _Conversation:
     client: ACPHostedClient
     exit_stack: AsyncExitStack
     turn_lock: asyncio.Lock
+    instance_id: str = field(default_factory=lambda: uuid4().hex)
+    runtime_status_supported: bool = False
+    runtime_status_task: asyncio.Task[Any] | None = None
+    runtime_status_deadline: float = 0.0
     prompt_task: asyncio.Task[Any] | None = None
 
 
@@ -138,6 +160,74 @@ class ACPService:
         if conversation is None:
             return None
         return conversation.client.pending_permission
+
+    async def get_runtime_observation(self, *, thread_id: str, runner: str) -> RuntimeObservation:
+        """Read this connection's engine without acquiring its in-flight turn lock."""
+        conversation = await self.get_session(thread_id, runner)
+        deadline = asyncio.get_running_loop().time() + RUNTIME_STATUS_BUDGET_SECONDS
+        return await self._observe_runtime(conversation, deadline)
+
+    async def get_runtime_observations(self, *, thread_id: str, runners: list[str]) -> dict[str, RuntimeObservation]:
+        """Query existing connections with one deadline and four concurrent reads."""
+        async with self._lock:
+            conversations = [self._sessions.get((thread_id, runner)) for runner in runners]
+        deadline = asyncio.get_running_loop().time() + RUNTIME_STATUS_BUDGET_SECONDS
+        slots = asyncio.Semaphore(4)
+
+        async def observe(conversation: _Conversation | None) -> RuntimeObservation:
+            async with slots:
+                return await self._observe_runtime(conversation, deadline)
+
+        values = await asyncio.gather(*(observe(conversation) for conversation in conversations))
+        return dict(zip(runners, values, strict=True))
+
+    async def _observe_runtime(self, conversation: _Conversation | None, deadline: float) -> RuntimeObservation:
+        if conversation is None:
+            return RuntimeObservation(availability="disconnected")
+        identity: _RuntimeIdentity = {
+            "instance_id": conversation.instance_id,
+            "session_id": conversation.acp_session_id,
+        }
+        if conversation.process.returncode is not None:
+            return RuntimeObservation(**identity, availability="disconnected")
+        if not conversation.runtime_status_supported:
+            return RuntimeObservation(**identity, availability="unsupported")
+        if asyncio.get_running_loop().time() >= deadline:
+            return RuntimeObservation(**identity, availability="unavailable")
+
+        from acp import RequestError
+
+        task = conversation.runtime_status_task
+        if task is None or task.done():
+            # Keep one wire request per connection, including when the SDK
+            # sender stalls. Readers leave at their deadline; the request
+            # drains before another can be sent. Completed facts are not cached.
+            task = asyncio.create_task(
+                conversation.conn.ext_method("sudocode/session/status", {"sessionId": conversation.acp_session_id})
+            )
+            task.add_done_callback(_finish_runtime_query)
+            conversation.runtime_status_task = task
+            conversation.runtime_status_deadline = asyncio.get_running_loop().time() + RUNTIME_STATUS_BUDGET_SECONDS
+        read_deadline = min(deadline, conversation.runtime_status_deadline)
+        if asyncio.get_running_loop().time() >= read_deadline:
+            return RuntimeObservation(**identity, availability="unavailable")
+        try:
+            async with asyncio.timeout_at(read_deadline):
+                # The SDK adds the extension's leading underscore itself.
+                payload = await asyncio.shield(task)
+            if asyncio.get_running_loop().time() >= read_deadline:
+                return RuntimeObservation(**identity, availability="unavailable")
+            snapshot = RuntimeSnapshot.model_validate(payload)
+        except (OSError, RuntimeError, ValueError, RequestError):
+            return RuntimeObservation(**identity, availability="unavailable")
+        current = await self.get_session(conversation.thread_id, conversation.runner)
+        if (
+            current is not conversation
+            or conversation.acp_session_id != identity["session_id"]
+            or conversation.process.returncode is not None
+        ):
+            return RuntimeObservation(**identity, availability="disconnected")
+        return RuntimeObservation(**identity, availability="fresh", snapshot=snapshot)
 
     async def cancel_turn(self, *, thread_id: str, runner: str) -> bool:
         conversation = await self.get_session(thread_id, runner)
@@ -252,6 +342,7 @@ class ACPService:
                 client=client,
                 exit_stack=exit_stack,
                 turn_lock=asyncio.Lock(),
+                runtime_status_supported=supports_runtime_status(initialized.field_meta),
             )
         except ASYNC_DEFENSIVE_OP_ERRORS:
             await exit_stack.aclose()
@@ -316,7 +407,15 @@ class ACPService:
                 )
         finally:
             _kill_process_tree(conversation.process.pid)
-            await conversation.exit_stack.aclose()
+            try:
+                await conversation.exit_stack.aclose()
+            finally:
+                task = conversation.runtime_status_task
+                if task is not None:
+                    if not task.done():
+                        task.cancel()
+                    with contextlib.suppress(Exception, asyncio.CancelledError):
+                        await task
 
     @staticmethod
     def _prompt_blocks_to_models(blocks: list[dict[str, Any]]) -> list[Any]:
