@@ -104,8 +104,8 @@ def snapshot_arguments(value: object) -> dict[str, Any]:
     return copy.deepcopy(value)
 
 
-def validate_arguments(tool: dict[str, Any], arguments: dict[str, Any]) -> None:
-    """Validate the original closed scalar/bounded-record descriptor profile."""
+def _reviewed_schema(tool: dict[str, Any]) -> tuple[dict[str, Any], list[str]]:
+    """Validate the one supported closed scalar/bounded-record schema."""
     schema, meta = tool.get("inputSchema", {}), tool.get("_meta", {})
     if type(schema) is not dict or type(meta) is not dict:
         raise ToolProtocolError("TOOL_SCHEMA_UNSUPPORTED")
@@ -166,6 +166,12 @@ def validate_arguments(tool: dict[str, Any], arguments: dict[str, Any]) -> None:
                 or any(type(v) not in (str, int, float, bool) for v in spec["enum"])
             ):
                 raise ToolProtocolError("TOOL_SCHEMA_UNSUPPORTED")
+    return properties, required
+
+
+def validate_arguments(tool: dict[str, Any], arguments: dict[str, Any]) -> None:
+    """Validate actual invocation arguments against the reviewed descriptor."""
+    properties, required = _reviewed_schema(tool)
     if set(arguments) - properties.keys() or any(key not in arguments for key in required):
         raise ToolProtocolError("INVALID_TOOL_ARGUMENTS")
     for key, value in arguments.items():
@@ -198,6 +204,21 @@ def validate_arguments(tool: dict[str, Any], arguments: dict[str, Any]) -> None:
             )
         ):
             raise ToolProtocolError("INVALID_TOOL_ARGUMENTS")
+
+
+def validate_host_read_arguments(
+    tool: dict[str, Any], arguments: dict[str, Any] | None = None
+) -> None:
+    """Validate a reviewed host read without inventing MCP invocation arguments.
+
+    A non-page review checks the supported schema alone. Page reads supply
+    their actual params plus records=True and retain all original argument
+    bounds. This is not a grant or permission to invoke a tool with None.
+    """
+    if arguments is None:
+        _reviewed_schema(tool)
+    else:
+        validate_arguments(tool, snapshot_arguments(arguments))
 
 
 @dataclass(frozen=True, slots=True)
