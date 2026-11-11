@@ -25,10 +25,7 @@ def test_full_make_records_real_baseline_and_preserves_failure(tmp_path: Path) -
     shutil.copyfile(SOURCE / "Makefile", root / "Makefile")
     shutil.copyfile(SOURCE / "tests/support/testmon_staged_changes.py", root / "staged_changes.py")
     (root / "conftest.py").write_text("import staged_changes\n", encoding="utf-8")
-    (root / "pyproject.toml").write_text(
-        '[tool.pytest.ini_options]\nmarkers = ["live: external service"]\n',
-        encoding="utf-8",
-    )
+    shutil.copyfile(SOURCE / "pyproject.toml", root / "pyproject.toml")
     (root / "first.py").write_text("def value():\n    return 1\n", encoding="utf-8")
     (root / "second.py").write_text("def value():\n    return 2\n", encoding="utf-8")
     (root / "test_first.py").write_text(
@@ -67,11 +64,15 @@ def test_full_make_records_real_baseline_and_preserves_failure(tmp_path: Path) -
     ):
         subprocess.run(argv, cwd=root, env=environment, check=True, capture_output=True)
 
-    def run(target: str, label: str) -> tuple[subprocess.CompletedProcess[str], list[str]]:
+    def run(
+        target: str, label: str, *pytest_options: str
+    ) -> tuple[subprocess.CompletedProcess[str], list[str]]:
         report = root / f"{label}.xml"
         child_environment = {
             **environment,
-            "PYTEST_ADDOPTS": environment["PYTEST_ADDOPTS"] + f" --junitxml={label}.xml",
+            "PYTEST_ADDOPTS": environment["PYTEST_ADDOPTS"]
+            + f" --junitxml={label}.xml "
+            + " ".join(pytest_options),
         }
         result = subprocess.run(
             [
@@ -110,7 +111,91 @@ def test_full_make_records_real_baseline_and_preserves_failure(tmp_path: Path) -
     assert full_again.returncode == 0, full_again.stdout + full_again.stderr
     assert sorted(names) == ["test_first", "test_second"]
     (root / "first.py").write_text("def value():\n    return 99\n", encoding="utf-8")
-    failure, names = run("test", "full-failure")
+    failure, names = run("test", "full-failure", "--maxfail=0")
     assert failure.returncode != 0, failure.stdout + failure.stderr
     assert sorted(names) == ["test_first", "test_second"]
     assert len(list(ET.parse(root / "full-failure.xml").iter("failure"))) == 1
+
+
+@pytest.mark.parametrize("target", ["test", "test-affected", "pytest"])
+def test_make_stops_failed_work_and_keeps_successful_coverage(tmp_path: Path, target: str) -> None:
+    make = shutil.which("make") or shutil.which("mingw32-make")
+    if make is None and os.name == "nt":
+        pytest.skip("GNU Make is required; the actual Windows publication gate supplies it")
+    assert make is not None, "Install GNU Make to validate the original test recipe"
+    root = tmp_path / "real failure scheduling"
+    root.mkdir()
+    shutil.copyfile(SOURCE / "Makefile", root / "Makefile")
+    shutil.copyfile(SOURCE / "pyproject.toml", root / "pyproject.toml")
+    (root / "test_work.py").write_text(
+        "from pathlib import Path\nimport pytest\n\n"
+        "@pytest.mark.parametrize('case', range(40))\n"
+        "def test_work(case):\n"
+        "    assert not Path('fail').exists(), 'controlled validation failure'\n",
+        encoding="utf-8",
+    )
+    (root / "fail").touch()
+    environment = {
+        key: value
+        for key, value in os.environ.items()
+        if key not in {"PYTEST_ADDOPTS", "PYTEST_CURRENT_TEST", "MAKEFLAGS", "MFLAGS"}
+        and not key.startswith("GIT_")
+    }
+    environment["PYTEST_DISABLE_PLUGIN_AUTOLOAD"] = "1"
+    environment["PYTEST_ADDOPTS"] = "-p testmon.pytest_testmon -p xdist.plugin"
+    for argv in (
+        ["git", "init", "-q"],
+        ["git", "config", "user.name", "Failure Scheduling Test"],
+        ["git", "config", "user.email", "test@example.com"],
+        ["git", "add", "."],
+        ["git", "commit", "-qm", "fixture"],
+    ):
+        subprocess.run(argv, cwd=root, env=environment, check=True, capture_output=True)
+
+    def run(label: str, *pytest_options: str) -> tuple[int, list[ET.Element]]:
+        argv = (
+            [sys.executable, "-m", "pytest", "-n", "2"]
+            if target == "pytest"
+            else [
+                make,
+                target,
+                f"RUN={shlex.quote(Path(sys.executable).as_posix())} -m",
+                "PYTEST_JOBS=2",
+            ]
+        )
+        result = subprocess.run(
+            argv,
+            cwd=root,
+            env={
+                **environment,
+                "PYTEST_ADDOPTS": environment["PYTEST_ADDOPTS"]
+                + f" --junitxml={label}.xml "
+                + " ".join(pytest_options),
+            },
+            capture_output=True,
+            text=True,
+            encoding="utf-8",
+            errors="replace",
+            check=False,
+        )
+        (root / f"{label}.stdout").write_text(result.stdout, encoding="utf-8")
+        (root / f"{label}.stderr").write_text(result.stderr, encoding="utf-8")
+        report = root / f"{label}.xml"
+        assert report.is_file(), result.stdout + result.stderr
+        return result.returncode, list(ET.parse(report).iter("testcase"))
+
+    # An explicit diagnostic override still collects the complete failure set.
+    code, cases = run("all-failures", "--maxfail=0")
+    assert code != 0
+    assert len(cases) == len([case for case in cases if case.find("failure") is not None]) == 40
+
+    code, cases = run("first-failure")
+    assert code != 0
+    assert 1 <= len(cases) <= 8  # Two workers may finish already-dispatched work.
+    assert all(case.find("failure") is not None for case in cases)
+
+    (root / "fail").unlink()
+    code, cases = run("all-successful")
+    assert code == 0
+    assert len(cases) == 40
+    assert all(case.find("failure") is None and case.find("skipped") is None for case in cases)
