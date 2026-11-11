@@ -104,6 +104,16 @@ exists. Failed discovery does not claim that the model write was attempted.
 The host still checks the entire model binding and review-v2 envelope, records
 durable audit, and supplies independent execution or human review grants.
 
+The reviewed resolver must also check the approved host-read argument profile
+before returning a review connection. `validate_host_read_arguments(tool)`
+validates the existing supported schema without fabricating invocation values
+for non-page reads. Page reads pass their actual parameters plus `records=True`
+to the same helper, preserving reviewed record access, scalar bounds and closed
+properties. This helper reuses the MCP argument validator; it grants no model
+access and does not permit a tool invocation with missing arguments. Current
+registration, reviewed descriptor, actor, policy and credentials must still be
+rechecked after waits and before HTTP bytes.
+
 The module is not wired into a production host. The accepted trusted caller,
 grant adapter and durable existing-session comment ingress are still required.
 It does not qualify real model execution, customer access, durable audit/inbox,

@@ -34,6 +34,7 @@ from octop.infra.connectors.tool_protocol import (
     open_tool_protocol,
     snapshot_arguments,
     validate_arguments,
+    validate_host_read_arguments,
 )
 
 
@@ -738,3 +739,118 @@ def test_descriptor_digest_matches_original_javascript_stable_json():
         check=True,
     )
     assert [content_digest(v) for v in vectors] == json.loads(result.stdout)
+
+
+def _review_read_tool():
+    return {
+        "name": "sudograph_context_read",
+        "inputSchema": {
+            "type": "object",
+            "additionalProperties": False,
+            "properties": {
+                "id": {"type": "string"},
+                "records": {"type": "boolean", "enum": [True]},
+                "limit": {"type": "integer", "minimum": 1, "maximum": 1},
+            },
+            "required": ["id"],
+        },
+        "_meta": {"moss/host-review-profile": "sudograph-worker-review/v2"},
+    }
+
+
+def test_nonpage_host_read_checks_schema_without_fabricating_required_arguments():
+    tool = _review_read_tool()
+    before = copy.deepcopy(tool)
+    assert validate_host_read_arguments(tool) is None
+    assert tool == before
+    with pytest.raises(ToolProtocolError, match="INVALID_TOOL_ARGUMENTS"):
+        validate_arguments(tool, {})
+    with pytest.raises(ToolProtocolError, match="INVALID_TOOL_ARGUMENTS"):
+        validate_host_read_arguments(tool, {})
+
+
+@pytest.mark.parametrize(
+    "params",
+    [
+        {"id": "object", "records": False, "limit": 1},
+        {"id": "object", "records": True, "limit": 2},
+        {"id": "object", "records": True, "limit": True},
+        {"id": "object", "records": True, "limit": 1, "unreviewed": "source"},
+    ],
+)
+def test_page_host_read_retains_exact_reviewed_record_and_scalar_bounds(params):
+    with pytest.raises(ToolProtocolError, match="INVALID_TOOL_ARGUMENTS"):
+        validate_host_read_arguments(_review_read_tool(), params)
+
+
+def test_page_host_read_accepts_only_original_approved_params_without_mutation():
+    tool = _review_read_tool()
+    params = {"id": "object", "records": True, "limit": 1}
+    before = copy.deepcopy((tool, params))
+    assert validate_host_read_arguments(tool, params) is None
+    assert (tool, params) == before
+    tool["inputSchema"]["properties"]["records"]["enum"] = [False]
+    with pytest.raises(ToolProtocolError, match="INVALID_TOOL_ARGUMENTS"):
+        validate_host_read_arguments(tool, params)
+
+
+@pytest.mark.parametrize(
+    "patch",
+    [
+        {"additionalProperties": True},
+        {"properties": None},
+        {"required": ["unreviewed"]},
+        {"required": "id"},
+        {"oneOf": []},
+        {"properties": {"id": {"type": "object"}}},
+        {"properties": {"id": {"type": "string", "enum": []}}},
+        {"properties": {"id": {"type": "string", "maxLength": float("inf")}}},
+    ],
+)
+def test_nonpage_host_read_refuses_unsupported_review_schema(patch):
+    tool = _review_read_tool()
+    tool["inputSchema"].update(patch)
+    for check in (
+        lambda: validate_host_read_arguments(tool),
+        lambda: validate_arguments(tool, {"id": "object"}),
+    ):
+        with pytest.raises(ToolProtocolError, match="TOOL_SCHEMA_UNSUPPORTED"):
+            check()
+
+
+def test_host_read_bounded_record_profile_uses_the_original_value_validation():
+    tool = {
+        "name": "tool",
+        "inputSchema": {
+            "type": "object",
+            "additionalProperties": False,
+            "properties": {"record": {"type": "object", "additionalProperties": {}}},
+            "required": ["record"],
+        },
+        "_meta": {"moss/input-profile": "bounded-record-v1"},
+    }
+    assert validate_host_read_arguments(tool) is None
+    assert validate_host_read_arguments(tool, {"record": {"field": "value"}}) is None
+    with pytest.raises(ToolProtocolError, match="INVALID_TOOL_ARGUMENTS"):
+        validate_host_read_arguments(tool, {"record": {"constructor": "value"}})
+
+
+@pytest.mark.parametrize("metadata", [None, {"moss/input-profile": "unreviewed-profile"}])
+def test_host_read_malformed_or_unsupported_profile_refuses(metadata):
+    tool = _review_read_tool()
+    tool["_meta"] = metadata
+    with pytest.raises(ToolProtocolError):
+        validate_host_read_arguments(tool)
+
+
+async def test_schema_only_host_read_does_not_allow_a_tool_invocation_with_none():
+    state = {"tool": _review_read_tool()}
+    async with server(reviewed_server(state)) as (port, _):
+        connection = ToolConnection(f"http://127.0.0.1:{port}/mcp", ())
+        async with open_tool_protocol(connection, check_current=current) as protocol:
+            descriptor = (await protocol.descriptors())[0]
+            assert validate_host_read_arguments(descriptor.tool) is None
+            with pytest.raises(ToolProtocolError, match="INVALID_TOOL_ARGUMENTS"):
+                await protocol.call_reviewed(descriptor, None)
+            assert protocol.call_started is False
+            assert state.get("calls", []) == []
