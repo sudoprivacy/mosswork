@@ -90,8 +90,9 @@ CURL_ARGS=(
   --silent --show-error --fail --location --retry 6 --retry-delay 2
   --retry-all-errors --connect-timeout 15 --max-time 180
 )
-IMMUTABLE_HEADERS='{"Cache-Control":"public, max-age=31536000, immutable"}'
-LATEST_HEADERS='{"Cache-Control":"no-cache, no-store, must-revalidate"}'
+DOWNLOAD_HEADERS='"Content-Type":"application/octet-stream","Content-Disposition":"attachment"'
+IMMUTABLE_HEADERS="{${DOWNLOAD_HEADERS},\"Cache-Control\":\"public, max-age=31536000, immutable\"}"
+LATEST_HEADERS="{${DOWNLOAD_HEADERS},\"Cache-Control\":\"no-cache, no-store, must-revalidate\"}"
 
 asset_files=()
 while IFS= read -r -d '' file; do
@@ -118,7 +119,7 @@ verify_remote_content() {
 }
 
 verify_remote_size() {
-  local local_file="$1" remote_url="$2" expected_size headers remote_size
+  local local_file="$1" remote_url="$2" expected_size headers remote_size content_type disposition
   expected_size="$(wc -c < "$local_file" | tr -d ' ')"
   headers="$(curl "${CURL_ARGS[@]}" --head "$remote_url")"
   remote_size="$(printf '%s\n' "$headers" | tr -d '\r' \
@@ -127,6 +128,16 @@ verify_remote_size() {
     echo "FAIL: remote size mismatch for $remote_url: expected $expected_size, got ${remote_size:-missing}" >&2
     exit 1
   }
+  if [[ "${3:-}" == --download ]]; then
+    content_type="$(printf '%s\n' "$headers" | tr -d '\r' \
+      | awk 'tolower($1) == "content-type:" { value=tolower($2) } END { print value }')"
+    disposition="$(printf '%s\n' "$headers" | tr -d '\r' \
+      | awk 'tolower($1) == "content-disposition:" { value=tolower($2) } END { print value }')"
+    [[ "${content_type%%;*}" == application/octet-stream && "${disposition%%;*}" == attachment ]] || {
+      echo "FAIL: invalid download headers for $remote_url: $content_type / $disposition" >&2
+      exit 1
+    }
+  fi
 }
 
 verify_release() {
@@ -163,7 +174,7 @@ publish_latest() {
   done
   verify_release "$LATEST_URL"
   for index in "${!latest_client_aliases[@]}"; do
-    verify_remote_size "$ASSETS_DIR/${latest_client_sources[$index]}" "$LATEST_URL/${latest_client_aliases[$index]}"
+    verify_remote_size "$ASSETS_DIR/${latest_client_sources[$index]}" "$LATEST_URL/${latest_client_aliases[$index]}" --download
   done
 }
 
