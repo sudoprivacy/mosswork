@@ -15,7 +15,7 @@ curl -fsSL https://github.com/sudoprivacy/mosswork/releases/latest/download/inst
 预发布版本不进入 GitHub 的 `latest` 入口。从对应 Release 复制带 tag 的命令，例如：
 
 ```sh
-curl -fsSL https://github.com/sudoprivacy/mosswork/releases/download/v0.0.6/install-moss-server.sh | sudo bash
+curl -fsSL https://github.com/sudoprivacy/mosswork/releases/download/v0.0.7/install-moss-server.sh | sudo bash
 ```
 
 自定义目录、监听地址和端口：
@@ -106,7 +106,7 @@ sudo bash install-moss-server.sh --offline
 
 ```sh
 sudo bash /srv/moss-server-release/install-moss-server.sh \
-  --offline-dir /srv/moss-server-release --version v0.0.6
+  --offline-dir /srv/moss-server-release --version v0.0.7
 ```
 
 `--offline` 表示使用当前工作目录，`--local-dir PATH` 与 `--offline-dir PATH` 等价。安装器直接读取本地文件，校验后导入镜像，不下载附件、不查询 GitHub 最新版本，也不会将大镜像包复制到临时目录。源文件会保留，缺文件或校验失败直接报错，不转为在线下载。源码脚本未指定版本时，只在目录内有唯一部署包时推断版本；有多个版本时必须传 `--version`。
@@ -117,7 +117,7 @@ sudo bash /srv/moss-server-release/install-moss-server.sh \
 
 ```sh
 sudo bash install-moss-server.sh --offline-dir /srv/moss-server-release \
-  --version v0.0.6 --install-dir /srv/moss-server --port 18088
+  --version v0.0.7 --install-dir /srv/moss-server --port 18088
 ```
 
 ### 手动导入
@@ -126,9 +126,9 @@ sudo bash install-moss-server.sh --offline-dir /srv/moss-server-release \
 
 ```sh
 sha256sum --check --ignore-missing SHA256SUMS.txt
-sudo docker image load --input moss-server-images-v0.0.6-linux-amd64.tar.gz
-tar -xzf moss-server-deploy-v0.0.6.tar.gz
-sudo bash moss-server/deploy.sh --version v0.0.6
+sudo docker image load --input moss-server-images-v0.0.7-linux-amd64.tar.gz
+tar -xzf moss-server-deploy-v0.0.7.tar.gz
+sudo bash moss-server/deploy.sh --version v0.0.7
 ```
 
 导入和启动阶段不需要镜像仓库访问权限。镜像包较大，下载和导入前应预留临时文件与 Docker 镜像的磁盘空间。

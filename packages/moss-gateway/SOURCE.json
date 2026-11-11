@@ -6,5 +6,5 @@
   "license": "MIT",
   "package": "moss-gateway",
   "python_module": "moss_gateway",
-  "version": "0.0.6"
+  "version": "0.0.7"
 }

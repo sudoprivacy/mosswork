@@ -1,6 +1,6 @@
 {
   "name": "@sudo/sudograph-worker",
-  "version": "0.0.6",
+  "version": "0.0.7",
   "private": true,
   "description": "Host-bound portable Sudograph compiler MCP and review worker",
   "type": "module",

@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "moss-memory"
-version = "0.0.6"
+version = "0.0.7"
 description = "Pluggable memory system with hierarchical recall, FTS search, and multiple backend support."
 readme = "README.md"
 license = { text = "MIT" }

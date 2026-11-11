@@ -6,12 +6,20 @@
 
 ## [Unreleased]
 
+## [0.0.7] - 2026-11-11
+
 ### Added
 
+- Shared ACP runtime observations show foreground activity, input waits and independent background work without scanning conversation history. Disconnected, unsupported and stale observations retain unknown status.
 - A portable Sudograph compiler worker package built from current source with locked dependencies, installed-byte verification and compiler interoperability receipts.
 - A host-bound client for Sudograph context, model edits and review, with current authorization checks, audit completion and cancellation-preserving failures. Review documents retain their original model, revision and digest for exact recovery after edits.
 
 These components require trusted host authorization, transport and persistence providers; they do not enable a new product route or authenticate comment delivery by themselves.
+
+### Fixed
+
+- Bound status queries to their actual connection and request deadlines; drain cancelled readers without retaining stale engine facts.
+- Reuse reviewed host-read argument validation across connector entry points.
 
 ## [0.0.6] - 2026-11-10
 
