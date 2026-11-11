@@ -79,7 +79,9 @@ jobs:
           NODE_OPTIONS: --max-old-space-size=4096
         run: npm run build
       - name: Install the matching Chromium
-        run: uv run --locked playwright install --with-deps chromium
+        # Hosted images already supply the native browser libraries. The actual
+        # browser journey below still refuses any missing runtime dependency.
+        run: uv run --locked playwright install chromium
       - name: Check the built browser to local runtime journey
         env:
           MOSSWORK_RUN_BROWSER_ACCEPTANCE: '1'

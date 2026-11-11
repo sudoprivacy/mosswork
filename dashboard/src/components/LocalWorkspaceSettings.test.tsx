@@ -55,9 +55,17 @@ it("shows a tool-check failure and can check successfully again", async () => {
   mock.status.mockRejectedValueOnce(new Error("tool startup failed"));
   render(<LocalWorkspaceSettings />);
   expect(await screen.findByText("tool startup failed")).toBeVisible();
-  fireEvent.click(screen.getByRole("button", { name: "devices.runtimeCheck" }));
+  // Error rendering can precede the request's finally handler clearing loading.
+  const button = await screen.findByRole("button", {
+    name: "devices.runtimeCheck",
+  });
+  await waitFor(() => expect(button).toBeEnabled());
+  fireEvent.click(button);
   expect(await screen.findByText("devices.runtimeReady")).toBeVisible();
   expect(screen.queryByText("tool startup failed")).toBeNull();
+  expect(button).toBeEnabled();
+  expect(mock.status).toHaveBeenCalledTimes(2);
+  expect(mock.status).toHaveBeenLastCalledWith({ verify_tools: true });
 });
 
 it("closes the selected missing task and refreshes the warning without replaying it", async () => {

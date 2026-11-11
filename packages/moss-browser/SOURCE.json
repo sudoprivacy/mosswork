@@ -6,5 +6,5 @@
   "license": "MIT",
   "package": "moss-browser",
   "python_module": "moss_browser",
-  "version": "0.0.6"
+  "version": "0.0.7"
 }
