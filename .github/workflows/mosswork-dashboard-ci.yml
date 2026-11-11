@@ -78,15 +78,10 @@ jobs:
           VITE_STATIC_CDN_BASE: ''
           NODE_OPTIONS: --max-old-space-size=4096
         run: npm run build
-      - name: Use the official Ubuntu archive for browser dependencies
-        if: runner.os == 'Linux'
-        run: |
-          # The hosted image's Azure mirror can fail DNS before any browser test runs.
-          # Keep Ubuntu's signed package metadata and the locked Playwright browser.
-          test -f /etc/apt/apt-mirrors.txt
-          printf '%s\n' 'https://archive.ubuntu.com/ubuntu/' | sudo tee /etc/apt/apt-mirrors.txt
       - name: Install the matching Chromium
-        run: uv run --locked playwright install --with-deps chromium
+        # Hosted images already supply the native browser libraries. The actual
+        # browser journey below still refuses any missing runtime dependency.
+        run: uv run --locked playwright install chromium
       - name: Check the built browser to local runtime journey
         env:
           MOSSWORK_RUN_BROWSER_ACCEPTANCE: '1'
