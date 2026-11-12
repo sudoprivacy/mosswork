@@ -2,10 +2,10 @@ import { describe, expect, it } from "vitest";
 
 import {
   applyQqChannelSaveConfig,
-  DEFAULT_CHANNEL_DISPLAY_CONFIG,
   DEFAULT_QQ_GROUP_CONTEXT_CONFIG,
   normalizeQqGroupContextConfig,
   partitionChannelKeys,
+  fillChannelGridRow,
   CHANNEL_KEYS,
   CHANNEL_FIELDS,
   normalizeChannelFieldValue,
@@ -61,6 +61,26 @@ describe("partitionChannelKeys", () => {
     ).toEqual({
       featured: ["weixin", "telegram", "mqtt"],
       more: [],
+    });
+  });
+
+  it("promotes collapsed channels only when they complete the last grid row", () => {
+    const featured = CHANNEL_KEYS.filter(
+      (key) => key !== "telegram" && key !== "discord",
+    );
+    const more = ["telegram", "discord"] as const;
+
+    expect(fillChannelGridRow(featured, more, 3)).toEqual({
+      visible: [...featured, "telegram"],
+      remaining: ["discord"],
+    });
+    expect(fillChannelGridRow(featured, more, 4)).toEqual({
+      visible: featured,
+      remaining: more,
+    });
+    expect(fillChannelGridRow(featured, more, 5)).toEqual({
+      visible: [...featured, ...more],
+      remaining: [],
     });
   });
 });

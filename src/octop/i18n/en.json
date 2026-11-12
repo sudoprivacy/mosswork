@@ -688,8 +688,8 @@
     }
   },
   "threads": {
-    "fork_title_suffix": " (fork)",
-    "fork_default_title": "Forked chat"
+    "fork_title_suffix": " (copy)",
+    "fork_default_title": "Copied chat"
   },
   "cron": {
     "history": {

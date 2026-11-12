@@ -688,8 +688,8 @@
     }
   },
   "threads": {
-    "fork_title_suffix": "（分叉）",
-    "fork_default_title": "分叉对话"
+    "fork_title_suffix": "（复制）",
+    "fork_default_title": "复制对话"
   },
   "cron": {
     "history": {

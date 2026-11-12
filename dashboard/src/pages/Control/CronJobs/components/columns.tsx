@@ -14,6 +14,7 @@ import {
   formatCronTimestamp,
   truncatePromptPreview,
 } from "../cronDisplay";
+import { SCHEDULE_PRESETS } from "./constants";
 import styles from "../index.module.less";
 
 type CronJob = CronJobSpecOutput;
@@ -33,6 +34,12 @@ interface ColumnHandlers {
 function channelLabel(channel: string, t: TFunction): string {
   const key = CHANNEL_LABEL_KEYS[channel as keyof typeof CHANNEL_LABEL_KEYS];
   return key ? t(key) : channel;
+}
+
+function schedulePresetLabel(trigger: string, t: TFunction): string | null {
+  const normalized = trigger.replace(/\s+/g, " ").trim();
+  const preset = SCHEDULE_PRESETS.find((item) => item.cron === normalized);
+  return preset ? t(preset.labelKey) : null;
 }
 
 export const createColumns = (
@@ -169,13 +176,24 @@ export const createColumns = (
       dataIndex: ["schedule", "cron"],
       key: "trigger",
       width: 160,
-      render: (trigger: string) => (
-        <code style={{ fontSize: 12 }}>
-          {trigger?.startsWith("agently:")
-            ? handlers.t("cronJobs.form.agentlyNewMail")
-            : trigger || "—"}
-        </code>
-      ),
+      render: (trigger: string) => {
+        if (trigger?.startsWith("agently:")) {
+          return (
+            <span className={styles.scheduleLabel}>
+              {handlers.t("cronJobs.form.agentlyNewMail")}
+            </span>
+          );
+        }
+        const label = trigger ? schedulePresetLabel(trigger, handlers.t) : null;
+        return (
+          <div className={styles.scheduleCell}>
+            {label ? (
+              <span className={styles.scheduleLabel}>{label}</span>
+            ) : null}
+            <code className={styles.scheduleCode}>{trigger || "—"}</code>
+          </div>
+        );
+      },
     },
     {
       title: handlers.t("cronJobs.col.taskType"),

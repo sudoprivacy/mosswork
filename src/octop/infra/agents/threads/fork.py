@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import re
 from typing import Any
 
 from octop.i18n import tr
@@ -26,6 +27,8 @@ def _fork_title(source_title: str | None, locale: str) -> str:
     """Return a sidebar title that distinguishes a fork from its source thread."""
     base = (source_title or "").strip()
     if base:
+        base = base.replace("（分叉）", "（复制）")
+        base = re.sub(r" \(fork\)", " (copy)", base, flags=re.IGNORECASE)
         return f"{base}{tr('threads.fork_title_suffix', locale)}"
     return tr("threads.fork_default_title", locale)
 
@@ -106,7 +109,7 @@ def find_assistant_fork_index(
     """
     answers = _assistant_answer_indices(messages)
     if not answers:
-        raise MossworkError(ErrorCode.NOT_FOUND, "no assistant message to fork from")
+        raise MossworkError(ErrorCode.NOT_FOUND, "no assistant message to copy from")
 
     wanted_id = (message_id or "").strip()
     wanted_text = (content or "").strip()

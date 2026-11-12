@@ -20,10 +20,12 @@ from octop.infra.gateway.threads import ThreadRegistry
 
 
 def test_fork_title_suffix() -> None:
-    assert _fork_title("My chat", "en") == "My chat (fork)"
-    assert _fork_title("My chat", "zh") == "My chat（分叉）"
-    assert _fork_title(None, "en") == "Forked chat"
-    assert _fork_title("", "zh") == "分叉对话"
+    assert _fork_title("My chat", "en") == "My chat (copy)"
+    assert _fork_title("My chat", "zh") == "My chat（复制）"
+    assert _fork_title(None, "en") == "Copied chat"
+    assert _fork_title("", "zh") == "复制对话"
+    assert _fork_title("My chat（分叉）（分叉）", "zh") == ("My chat（复制）（复制）（复制）")
+    assert _fork_title("My chat (fork) (fork)", "en") == ("My chat (copy) (copy) (copy)")
 
 
 def test_find_assistant_fork_index_by_suffix_count() -> None:
@@ -159,7 +161,7 @@ async def test_fork_dashboard_thread_copies_through_assistant_and_rebinds() -> N
     assert out["source_thread_id"] == source_id
     assert out["copied_messages"] == 2
     assert [m.id for m in store["thr_fork"]] == ["h1", "a1"]
-    registry.update_title.assert_called_once_with("thr_fork", "Original title (fork)")
+    registry.update_title.assert_called_once_with("thr_fork", "Original title (copy)")
     registry.touch_last_active.assert_not_called()
     registry.update_composer.assert_called_once()
     assert created["rebind"]["thread_id"] == "thr_fork"

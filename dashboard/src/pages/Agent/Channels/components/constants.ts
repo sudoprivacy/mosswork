@@ -75,6 +75,22 @@ export function partitionChannelKeys(
   return { featured, more };
 }
 
+/** Promote just enough collapsed channels to complete the featured grid row. */
+export function fillChannelGridRow(
+  featured: readonly ChannelKey[],
+  more: readonly ChannelKey[],
+  columnCount: number,
+): { visible: ChannelKey[]; remaining: ChannelKey[] } {
+  const columns = Math.max(1, Math.floor(columnCount));
+  const remainder = featured.length % columns;
+  const openSlots = remainder === 0 ? 0 : columns - remainder;
+  const promotedCount = Math.min(openSlots, more.length);
+  return {
+    visible: [...featured, ...more.slice(0, promotedCount)],
+    remaining: more.slice(promotedCount),
+  };
+}
+
 /** i18n key for each channel's display name (``channels.label_{key}``). */
 export const CHANNEL_LABEL_KEYS: Record<ChannelKey, string> = {
   feishu: "channels.label_feishu",

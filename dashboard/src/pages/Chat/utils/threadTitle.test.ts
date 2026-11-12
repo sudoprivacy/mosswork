@@ -41,6 +41,17 @@ describe("formatThreadTitle", () => {
     expect(formatThreadTitle("你好")).toBe("你好");
   });
 
+  it("shows legacy fork suffixes as copy", () => {
+    expect(formatThreadTitle("方案讨论（分叉）")).toBe("方案讨论（复制）");
+    expect(formatThreadTitle("Planning (fork)")).toBe("Planning (copy)");
+    expect(formatThreadTitle("方案讨论（分叉）（分叉）")).toBe(
+      "方案讨论（复制）（复制）",
+    );
+    expect(formatThreadTitle("Planning (fork) (fork)")).toBe(
+      "Planning (copy) (copy)",
+    );
+  });
+
   it("does not append ellipsis to exact-max titles", () => {
     // Legitimate full-length titles (and legacy hard-cuts repaired by migration).
     const exact =

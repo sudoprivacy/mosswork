@@ -2,7 +2,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { Button, Checkbox, Input, Segmented, Spin } from "antd";
 import { message } from "@/utils/antdMessage";
 
-import { Globe, Plus, Terminal } from "lucide-react";
+import { Globe, Monitor, Plus } from "lucide-react";
 import { useTranslation } from "react-i18next";
 
 import {
@@ -701,7 +701,7 @@ export function CustomMcpTab({ focusServerName }: CustomMcpTabProps) {
                 className={styles.customMcpAddBtn}
                 onClick={() => handleAdd("stdio")}
               >
-                <Terminal size={18} />
+                <Monitor size={18} />
                 <span>
                   {t("connectors.customMcp.addStdio", "添加 Stdio Server")}
                 </span>

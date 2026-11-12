@@ -159,7 +159,7 @@ const PreviewSessionRow = memo(function PreviewSessionRow({
     },
     {
       key: "fork",
-      label: t("chat.fork", "分叉"),
+      label: t("chat.fork", "复制"),
       icon: <GitFork size={14} />,
       disabled: itemForkDisabled,
       title: itemForkDisabled && itemForkHint ? itemForkHint : undefined,
