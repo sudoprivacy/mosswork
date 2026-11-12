@@ -202,8 +202,27 @@ def worktree_paths(root: Path) -> tuple[list[str], str | None, str]:
     if result.returncode:
         return [], None, "No accepted-main ancestor is available; retain full application checks"
     base = result.stdout.decode().strip()
+    # Disable diff's silent index refresh only for this read. Numstat compares
+    # contents; name-only can otherwise report unchanged, stat-dirty files.
+    changed_files = git(
+        root,
+        "-c",
+        "diff.autoRefreshIndex=false",
+        "diff",
+        "--numstat",
+        "--no-ext-diff",
+        "--no-textconv",
+        "--no-renames",
+        "-z",
+        base,
+        "--",
+    )
     changed = sorted(
-        set(paths(git(root, "diff", "--name-only", "--no-renames", "-z", base, "--")))
+        {
+            item.split(b"\t", 2)[2].decode("utf-8", errors="surrogateescape")
+            for item in changed_files.split(b"\0")
+            if item
+        }
         | set(paths(git(root, "ls-files", "--others", "--exclude-standard", "-z")))
     )
     return changed, base, "Complete branch and working-tree diff against the accepted-main ancestor"

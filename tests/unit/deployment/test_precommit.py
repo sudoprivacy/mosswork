@@ -8,6 +8,7 @@ import os
 import shutil
 import subprocess
 import sys
+import time
 from pathlib import Path
 
 import pytest
@@ -651,6 +652,30 @@ def seed_tool_worktree(root: Path) -> str:
     base = git(root, "rev-parse", "HEAD")
     git(root, "update-ref", "refs/remotes/origin/main", base)
     return base
+
+
+def test_worktree_plan_ignores_stat_only_changes_without_refreshing_index(repo: Path) -> None:
+    seed_tool_worktree(repo)
+    stage(repo, "src/app.py", "value = 1\n")
+    ci_commit(repo, "accepted application fixture")
+    git(repo, "update-ref", "refs/remotes/origin/main", "HEAD")
+    stage(repo, "tools/ci_identity_reuse.py", "# Actual pending tool source\n")
+    runtime = repo / "src/app.py"
+    time.sleep(1.1)  # Exercise ordinary same-content writes across filesystem timestamp precision.
+    runtime.write_bytes(runtime.read_bytes())
+    before = (repo / ".git/index").read_bytes()
+    result = subprocess.run(
+        [sys.executable, str(repo / "tools/precommit.py"), "--plan", "--worktree"],
+        cwd=repo,
+        capture_output=True,
+        text=True,
+        encoding="utf-8",
+    )
+    assert result.returncode == 0, result.stdout + result.stderr
+    plan = json.loads(result.stdout)
+    assert plan["profile"] == "tools"
+    assert plan["paths"] == ["tools/ci_identity_reuse.py"]
+    assert (repo / ".git/index").read_bytes() == before
 
 
 def test_worktree_scope_includes_pending_commits_and_all_current_sources(repo: Path) -> None:
