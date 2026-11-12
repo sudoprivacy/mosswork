@@ -64,6 +64,11 @@ For a standalone clone, `make install-hooks` remains available. Hooks are checke
 out with LF on Windows, and the scoped dispatcher requires Python and uv rather
 than GNU Make. It does not change test worker counts or validation deadlines.
 
+`make all` and `make precommit` check backend lint and frontend formatting before
+typechecking and tests. For formatting errors, run `make format-all`, refresh staged
+inputs or the acceptance snapshot, then rerun the original command. Full-suite and
+commit-hook test selection are unchanged.
+
 ## License and releases
 
 Contribute only code and material you have the right to provide. Your changes are submitted under the root MIT license; third-party content must retain its license and provenance, and material with redistribution restrictions must not go into the public source package.
