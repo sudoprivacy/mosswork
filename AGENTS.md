@@ -2,7 +2,7 @@
 
 ## mosswork 发行约定
 
-本仓库采用以下发行约定：对外名称 mosswork，项目仓库 https://github.com/sudoprivacy/mosswork；主项目和自有通信服务使用 MIT。当前版本不因资料整理自动升级。仅在维护者明确要求时修改版本或提交 Git，不主动推送。只运行受影响模块及关联检查。独立更新渠道尚未建立，在线自更新与上游安装脚本已停用，不得通过上游 PyPI 包覆盖本分支。公开源码必须使用 tools/export_public_source.py 导出，排除本地记录、Git 历史和限制再分发的材料；上游自动发布工作流在公开副本中归档为 inactive。发布事项以 docs/open-source-release.md 为准。
+本仓库采用以下发行约定：对外名称 mosswork，项目仓库 https://github.com/sudoprivacy/mosswork；主项目和自有通信服务使用 MIT。当前版本不因资料整理自动升级。仅在维护者明确要求时修改版本或提交 Git，不主动推送。只运行受影响模块及关联检查。原生企业客户端使用本仓库官方 COS 稳定清单更新完整客户端，目标架构以 desktop/src/internal/desktopupdate/targets.json 为准。服务器/Python 包在线自更新与上游安装脚本保持停用，不得通过上游 PyPI 包覆盖本分支。公开源码必须使用 tools/export_public_source.py 导出，排除本地记录、Git 历史和限制再分发的材料；上游自动发布工作流在公开副本中归档为 inactive。发布事项以 docs/open-source-release.md 为准。
 
 同一次正式发布之前，所有源码修改统一累积在本仓库，只维护一个当前待发布入口。准备或刷新候选源码时，按既定公开源码范围导出完整当前工作区，包括未提交修改和新增测试，不按本次对话或修复批次挑选文件。尚未验证的改动应列为待验证项，不得静默漏出候选范围。旧候选快照仅作历史记录；后续修改继续更新同一待发布版本。维护者明确要求发布时，再核对完整差异并统一构建安装包和运行时工具包。
 

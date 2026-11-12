@@ -10,17 +10,19 @@
 
 - 以中文作为默认首页，保留英文说明、中英文员工指南、贡献说明、安全政策及部署和构建说明。
 - 根目录及通信服务保留原始 MIT 许可和贡献者声明。第三方来源与分发范围见 [NOTICE](../NOTICE.md)。
-- 本发行版禁用在线更新 CLI/API、上游一键安装脚本及 `make publish` / `publish-test`；安装和升级使用本仓库的 Release 镜像、客户端或源码。
+- 本发行版禁用服务器/Python 包在线更新 CLI/API、上游一键安装脚本及 `make publish` / `publish-test`。原生企业客户端通过本仓库官方稳定渠道更新完整客户端；服务器升级使用本仓库 Release 镜像或源码。
 - 公开副本排除 Git 历史、本地工具配置、运行环境文件、浏览器会话、部署记录和构建产物。
 - `docker/deploy/.env` 是不含凭据的部署模板，作为复制目录的入口保留；真实环境文件仍不纳入发行。
 - `office-automation` 专家及其头像不纳入源码发行，因为其随附文档技能限制再分发。测试和示例使用公开包含的专家；独立文档处理库和本机工具不受此排除影响。
 - 员工快速上手使用 [Markdown 文档](user-guide.md)；源码发行不包含生成的 `docs/user-guide.html` 和上游个人版介绍 `docs/mosswork-introduction.html`。
 - 源码发行不包含 FnOS 打包工具及上游发行资产下载表生成工具。
-- 上游工作流保存在 `.github/upstream-workflows/`，扩展名为 `.disabled`。本项目的 `mosswork-ci.yml`、`mosswork-release.yml` 在公开导出中保持启用；其他工作流仍归档。
+- 上游工作流保存在 `.github/upstream-workflows/`，扩展名为 `.disabled`。公开导出中保持启用的项目工作流统一由 `tools/export_public_source.py` 的 `PROJECT_WORKFLOWS` 清单管理。
 
 ## Tag 自动发布
 
 推送与 `pyproject.toml` 版本完全一致的 `v<version>` tag 后，`mosswork-release.yml` 自动构建。当前版本对应 `v0.0.7`；工作流不自动修改版本、提交代码或创建 tag。手工重跑须选择同一个 tag，选择分支会被拒绝。
+
+需要在合并或创建发行 tag 前验证原生安装包时，可在手工运行中启用 `qualify_clients_only`。此模式允许选择当前分支，从完整导出源码构建两个原生客户端并执行实际程序的完整运行时检查；不构建服务器镜像、不发布 GitHub/COS、不创建或修改 tag。关闭该选项时，原有发行 tag 检查仍强制执行。
 
 发布前先按下文导出并验证完整公开源码，将确定的源码提交到发行仓库，再由维护者推送 tag。流程从该 tag 再次导出完整公开范围，并从同一份导出物构建客户端和镜像。
 
@@ -33,6 +35,10 @@
 | 下载附件 | 公开源码、部署包、`install-moss-server.sh`、构建记录、镜像 ID 与 SHA-256 |
 
 CI 不发布 macOS Intel、Windows ARM、Linux 客户端、PyPI 包或独立 portable 下载包。两个客户端和 amd64 服务端镜像都成功后才发布 GitHub Release，任一失败不会发布部分版本。预发布 tag（如 `v0.0.7b1`）标记为 prerelease，不更新正式版 `latest`。已公开的 Release 不允许覆盖。
+
+原生自动更新还需要同次构建生成的完整 Mac 应用 ZIP 和内嵌完整运行时的 Windows 程序，文件名以 `-update.zip` / `-update.exe` 结尾。不得把 NSIS 安装器当作待替换的程序文件。`tools/desktop_update_manifest.py` 从实际文件生成 `desktop-update.json`，客户端和发布器共用 `desktop/src/internal/desktopupdate/targets.json` 的目标清单。生成清单后再写入 `SHA256SUMS.txt`。预发布版本不生成稳定更新清单。
+
+两个 COS 发布入口共用串行发布组。发布器验证不可变发行目录、完成安装包别名后，最后更新 `latest/desktop-update.json`；旧版本恢复不会回退已有的新版清单。启动和手动检查均使用此入口。没有更新器的客户端需要先手动安装一次包含此功能的正式版。
 
 仓库需允许 Actions 的 `GITHUB_TOKEN` 写入 Releases。所有产物均作为 Release 附件分发，无需 Packages 权限或镜像仓库凭据。Linux runner 构建并导出 amd64 Docker 镜像包，重新导入归档后验证首次部署、健康检查和重复安装。发布前校验每个附件小于 GitHub 的 2 GiB 上限，并生成 SHA-256 清单。
 

@@ -15,6 +15,9 @@ jobs:
   publish:
     name: Mirror ${{ inputs.release_tag }} to Tencent COS
     runs-on: ubuntu-24.04
+    concurrency:
+      group: mosswork-cos-publication
+      cancel-in-progress: false
     env:
       GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       RELEASE_TAG: ${{ inputs.release_tag }}

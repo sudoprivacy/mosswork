@@ -19,6 +19,8 @@ on:
       - 'tests/unit/test_cli_main.py'
       - 'scripts/install-moss-server.sh'
       - 'tools/publish-release-to-cos.sh'
+      - 'tools/desktop_update_manifest.py'
+      - 'desktop/src/**'
       - 'tools/*public_source.py'
       - 'tools/accept_sudograph_worker.py'
       - 'tools/package_sudograph_worker.py'
@@ -282,7 +284,7 @@ jobs:
           done
           bash -n tools/publish-release-to-cos.sh
           shellcheck scripts/install-moss-server.sh tools/publish-release-to-cos.sh docker/deploy/*.sh docker/enterprise/{prepare.sh,deploy.sh,start.sh,stop.sh}
-          go run github.com/rhysd/actionlint/cmd/actionlint@v1.7.7 .github/workflows/mosswork-ci.yml .github/workflows/mosswork-release.yml .github/workflows/mosswork-cos-publish.yml
+          go run github.com/rhysd/actionlint/cmd/actionlint@v1.7.7 .github/workflows/mosswork-ci.yml .github/workflows/mosswork-release.yml .github/workflows/mosswork-cos-publish.yml .github/workflows/mosswork-desktop-update.yml
       - name: Validate public source export
         run: |
           python3 tools/export_public_source.py --output "$RUNNER_TEMP/mosswork-source"

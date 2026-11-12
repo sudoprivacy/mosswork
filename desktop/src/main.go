@@ -16,9 +16,11 @@ import (
 	"mosswork.desktop/internal/company"
 	"mosswork.desktop/internal/companyruntime"
 	"mosswork.desktop/internal/companyui"
+	"mosswork.desktop/internal/desktopupdate"
 
 	"github.com/wailsapp/wails/v3/pkg/application"
 	"github.com/wailsapp/wails/v3/pkg/events"
+	"github.com/wailsapp/wails/v3/pkg/updater"
 )
 
 //go:embed assets/* assets/login.bundle.js assets/login.bundle.css
@@ -28,6 +30,9 @@ const trayDoubleClick = 400 * time.Millisecond
 
 // Optional deployment default; user-saved server settings take precedence.
 var companyDefaultURL string
+
+// Set from the same pyproject.toml version used for installer metadata.
+var desktopVersion = "dev"
 
 func companyServerURL(s Settings) string {
 	if s.CompanyURL != "" {
@@ -74,6 +79,13 @@ type App struct {
 	trayClickMu    sync.Mutex
 	lastTrayClick  time.Time
 	trayClickTimer *time.Timer
+	updates        *desktopupdate.Manager
+	updateWindow   *application.WebviewWindow
+	updateMu       sync.Mutex
+	updateCancel   context.CancelFunc
+	updateContext  context.Context
+	updateGate     sync.RWMutex
+	updateClosing  atomic.Bool // Blocks work after restart is admitted.
 }
 
 func (a *App) ServiceName() string { return "desktop" }
@@ -81,6 +93,12 @@ func (a *App) ServiceName() string { return "desktop" }
 func (a *App) ServiceStartup(context.Context, application.ServiceOptions) error { return nil }
 
 func (a *App) ServiceShutdown() error {
+	if a.updateCancel != nil {
+		a.updateCancel()
+	}
+	if a.updates != nil && !a.updateClosing.Load() {
+		a.updates.Close()
+	}
 	a.companyMu.Lock()
 	a.stopCompanyRuntimeLocked()
 	if a.companyUI != nil {
@@ -378,6 +396,15 @@ func (a *App) requestQuit() {
 }
 
 func main() {
+	// Helpers must run before tool preparation, account loading or GUI startup.
+	updater.HandleHelperMode()
+	if len(os.Args) == 2 && os.Args[1] == "--verify-update-payload" {
+		if err := verifyDesktopUpdatePayload(); err != nil {
+			log.Print(err)
+			os.Exit(1)
+		}
+		return
+	}
 	store := &settingsStore{cur: loadSettings()}
 	if companyOnly {
 		// Tool verification needs no login or company credentials. Start it
@@ -416,9 +443,11 @@ func main() {
 		},
 	})
 	api.app = app
+	api.configureDesktopUpdates()
 	attachOpenURLEventListener(app, api.OpenExternal)
 	attachDesktopEventListener(app, &connectionEventListener{app: api})
 	app.Event.OnApplicationEvent(events.Common.ApplicationStarted, func(_ *application.ApplicationEvent) {
+		api.startDesktopUpdateChecks()
 		applyAppIcon(app)
 		if api.window != nil {
 			api.window.SetBackgroundColour(desktopBackgroundColour(app.Env.IsDarkMode()))

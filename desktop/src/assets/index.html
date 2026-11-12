@@ -22,7 +22,10 @@
         );
       } else if (navigator.userAgent.includes("MossworkNativeTitlebar/1")) {
         document.documentElement.dataset.chrome = "native";
-        document.documentElement.style.setProperty("--window-controls-inset-end", "0px");
+        document.documentElement.style.setProperty(
+          "--window-controls-inset-end",
+          "0px",
+        );
       }
     </script>
     <script type="module" src="/wails/runtime.js"></script>
@@ -92,7 +95,9 @@
         --window-controls-inset-end: 36px;
       }
       html[data-mode="settings"] .window-controls [data-action="minimise"],
-      html[data-mode="settings"] .window-controls [data-action="toggle-maximise"] {
+      html[data-mode="settings"]
+        .window-controls
+        [data-action="toggle-maximise"] {
         display: none;
       }
       html[data-mode="settings"] .wrap {
@@ -106,7 +111,23 @@
         padding-right: var(--window-controls-inset-end);
       }
       html[data-mode="settings"] .subtitle {
+        margin: 0;
+      }
+      .settings-heading {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 12px;
         margin-bottom: 16px;
+      }
+      #desktop-update {
+        border: 0;
+        padding: 0;
+        background: transparent;
+        color: var(--brand-hover);
+        font: inherit;
+        font-size: 13px;
+        cursor: pointer;
       }
       html[data-mode="settings"] .actions {
         margin-top: 14px;
@@ -289,12 +310,13 @@
       }
       .actions button {
         flex: 1;
-        padding: 9px 12px;
+        padding: 9px 8px;
         border-radius: 8px;
         cursor: pointer;
         font: inherit;
         font-size: 14px;
         font-weight: 500;
+        white-space: nowrap;
       }
       .actions .primary {
         background: var(--brand);
@@ -453,8 +475,21 @@
       data-mosswork-no-drag="true"
       aria-label="Window controls"
     >
-      <button type="button" class="win-btn" data-action="minimise" aria-label="Minimize">
-        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+      <button
+        type="button"
+        class="win-btn"
+        data-action="minimise"
+        aria-label="Minimize"
+      >
+        <svg
+          width="12"
+          height="12"
+          viewBox="0 0 24 24"
+          fill="none"
+          stroke="currentColor"
+          stroke-width="2"
+          aria-hidden="true"
+        >
           <path d="M5 12h14" />
         </svg>
       </button>
@@ -464,7 +499,15 @@
         data-action="toggle-maximise"
         aria-label="Maximize"
       >
-        <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+        <svg
+          width="10"
+          height="10"
+          viewBox="0 0 24 24"
+          fill="none"
+          stroke="currentColor"
+          stroke-width="2"
+          aria-hidden="true"
+        >
           <rect x="3" y="3" width="18" height="18" rx="2" />
         </svg>
       </button>
@@ -474,7 +517,15 @@
         data-action="close"
         aria-label="Close"
       >
-        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+        <svg
+          width="12"
+          height="12"
+          viewBox="0 0 24 24"
+          fill="none"
+          stroke="currentColor"
+          stroke-width="2"
+          aria-hidden="true"
+        >
           <path d="M18 6 6 18" />
           <path d="m6 6 12 12" />
         </svg>
@@ -498,7 +549,9 @@
             <span class="loading-bar-fill"></span>
           </div>
           <p class="loading-status" id="status">正在启动，请稍候…</p>
-          <button class="ghost" id="server-setup">服务器设置 / Server settings</button>
+          <button class="ghost" id="server-setup">
+            服务器设置 / Server settings
+          </button>
         </div>
       </div>
     </div>
@@ -506,7 +559,10 @@
     <div id="settings-panel" class="hidden">
       <div class="wrap">
         <h1 id="title">mosswork设置</h1>
-        <p class="subtitle" id="subtitle">桌面端偏好</p>
+        <div class="settings-heading">
+          <p class="subtitle" id="subtitle">桌面端偏好</p>
+          <button id="desktop-update">检查更新</button>
+        </div>
         <div class="card">
           <div class="row">
             <div>
@@ -533,9 +589,7 @@
           <div class="row">
             <div>
               <div class="label" id="l-tray">最小化到托盘</div>
-              <small id="h-tray"
-                >点击最小化时隐藏窗口并保留在系统托盘</small
-              >
+              <small id="h-tray">点击最小化时隐藏窗口并保留在系统托盘</small>
             </div>
             <label class="switch">
               <input type="checkbox" id="tray" />
@@ -580,6 +634,7 @@
           sleep: "防止系统休眠",
           sleepH: "应用运行期间阻止系统自动休眠",
           showMain: "显示 mosswork",
+          checkUpdate: "检查更新",
           quit: "退出",
           winGroup: "窗口控制",
           winMin: "最小化",
@@ -601,6 +656,7 @@
           sleep: "Prevent system sleep",
           sleepH: "Keeps the system awake while mosswork is running",
           showMain: "Show mosswork",
+          checkUpdate: "Check for updates",
           quit: "Quit",
           winGroup: "Window controls",
           winMin: "Minimize",
@@ -638,6 +694,7 @@
         document.getElementById("l-sleep").textContent = t.sleep;
         document.getElementById("h-sleep").textContent = t.sleepH;
         document.getElementById("show-main").textContent = t.showMain;
+        document.getElementById("desktop-update").textContent = t.checkUpdate;
         document.getElementById("quit").textContent = t.quit;
         document.getElementById("loading-hint").textContent = t.loadingHint;
         applyWindowCopy(t);
@@ -670,8 +727,12 @@
         return Call.ByName("main.App." + name, ...args);
       }
 
-      document.getElementById("company-device").onclick = () => call("ShowCompany");
-      document.getElementById("server-setup").onclick = () => call("ShowCompany");
+      document.getElementById("company-device").onclick = () =>
+        call("ShowCompany");
+      document.getElementById("server-setup").onclick = () =>
+        call("ShowCompany");
+      document.getElementById("desktop-update").onclick = () =>
+        call("ShowDesktopUpdate");
 
       function current() {
         return {
@@ -715,8 +776,9 @@
         new URLSearchParams(window.location.search).get("settings") === "1";
       const s = await call("GetSettingsStatus");
       const locale = s.locale || "en";
-      document.getElementById("status").textContent =
-        (copy[locale] || copy.en).statusWait;
+      document.getElementById("status").textContent = (
+        copy[locale] || copy.en
+      ).statusWait;
       applyCopy(locale);
 
       if (settingsMode) {
@@ -745,10 +807,11 @@
             : ev?.data ?? ev?.payload ?? JSON.stringify(ev);
         const text = String(msg);
         document.getElementById("status").textContent = text;
-        const stuck = /未就绪|did not become ready|无法连接|Could not connect/.test(
-          text,
-        );
-        document.getElementById("loading-panel").classList.toggle("is-error", stuck);
+        const stuck =
+          /未就绪|did not become ready|无法连接|Could not connect/.test(text);
+        document
+          .getElementById("loading-panel")
+          .classList.toggle("is-error", stuck);
       });
     </script>
   </body>

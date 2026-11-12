@@ -200,11 +200,79 @@ func (c *companyPortableCache) prepare(zipPath, home string, prepare func(string
 }
 
 func ensureCompanyPortable() (string, error) {
-	zipPath, err := bundledPortableZip()
+	zipPath, err := companyPortableArchive()
 	if err != nil {
 		return "", errors.New("此客户端未包含本地 Python、文档和 FFmpeg 工具包，请安装完整企业客户端；通讯录和员工聊天仍可使用")
 	}
 	return readyCompanyPortable.prepare(zipPath, mossworkHome(), prepareCompanyPortable)
+}
+
+var embeddedCompanyArchive struct {
+	sync.Mutex
+	data []byte
+	home string
+	path string
+}
+
+// Windows company releases embed the verified payload in the executable so
+// an atomic executable update cannot leave an older sidecar runtime selected.
+// Materialize it once per process; the existing content-addressed runtime
+// installer and verification cache remain the only extraction path.
+func companyPortableArchive() (string, error) {
+	if len(embeddedPortable) == 0 || os.Getenv("MOSSWORK_DESKTOP_PORTABLE_ZIP") != "" {
+		return bundledPortableZip()
+	}
+	embeddedCompanyArchive.Lock()
+	defer embeddedCompanyArchive.Unlock()
+	home := mossworkHome()
+	if len(embeddedCompanyArchive.data) == len(embeddedPortable) &&
+		len(embeddedCompanyArchive.data) > 0 && &embeddedCompanyArchive.data[0] == &embeddedPortable[0] &&
+		embeddedCompanyArchive.home == home {
+		if _, err := os.Stat(embeddedCompanyArchive.path); err == nil {
+			return embeddedCompanyArchive.path, nil
+		}
+	}
+	digest := sha256.Sum256(embeddedPortable)
+	directory := filepath.Join(home, "company-runtime", "bundled")
+	if err := os.MkdirAll(directory, 0700); err != nil {
+		return "", err
+	}
+	archive := filepath.Join(directory, hex.EncodeToString(digest[:])+".zip")
+	valid := false
+	if file, err := os.Open(archive); err == nil {
+		hash := sha256.New()
+		_, err = io.Copy(hash, file)
+		file.Close()
+		valid = err == nil && hex.EncodeToString(hash.Sum(nil)) == hex.EncodeToString(digest[:])
+	}
+	if !valid {
+		temporary, err := os.CreateTemp(directory, ".payload-*")
+		if err != nil {
+			return "", err
+		}
+		defer os.Remove(temporary.Name())
+		_, writeErr := temporary.Write(embeddedPortable)
+		if writeErr == nil {
+			writeErr = temporary.Sync()
+		}
+		closeErr := temporary.Close()
+		if writeErr != nil {
+			return "", writeErr
+		}
+		if closeErr != nil {
+			return "", closeErr
+		}
+		// Only a corrupt private cached archive can exist at this content key.
+		// Windows cannot rename over it; live runtimes are in separate folders.
+		if err = os.Remove(archive); err != nil && !os.IsNotExist(err) {
+			return "", err
+		}
+		if err = os.Rename(temporary.Name(), archive); err != nil {
+			return "", err
+		}
+	}
+	embeddedCompanyArchive.data, embeddedCompanyArchive.home, embeddedCompanyArchive.path = embeddedPortable, home, archive
+	return archive, nil
 }
 
 func prepareCompanyPortable(zipPath, home string) (string, error) {

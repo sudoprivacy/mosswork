@@ -4,6 +4,11 @@ on:
   push:
     tags: ['v*']
   workflow_dispatch:
+    inputs:
+      qualify_clients_only:
+        description: 'Build and validate current native clients without publishing or changing a release'
+        type: boolean
+        default: false
 
 permissions:
   contents: read
@@ -28,6 +33,8 @@ jobs:
           enable-cache: true
       - id: version
         name: Require a tag matching the package version
+        env:
+          QUALIFY_CLIENTS_ONLY: ${{ github.event_name == 'workflow_dispatch' && inputs.qualify_clients_only || false }}
         run: |
           uv run --no-project python - <<'PY'
           import json, os, re, tomllib
@@ -37,7 +44,11 @@ jobs:
           if worker_version != version:
               raise SystemExit('Sudograph worker version must match the application release version.')
           tag = os.environ['GITHUB_REF_NAME']
-          if os.environ['GITHUB_REF_TYPE'] != 'tag' or tag != f'v{version}':
+          qualification = os.environ['QUALIFY_CLIENTS_ONLY'] == 'true'
+          if qualification:
+              tag = f'v{version}'
+              print('CLIENT QUALIFICATION ONLY: no GitHub/COS publication or tag changes.')
+          elif os.environ['GITHUB_REF_TYPE'] != 'tag' or tag != f'v{version}':
               raise SystemExit('Run on a v<pyproject.toml version> tag; no version is changed automatically.')
           if not re.fullmatch(r'[0-9]+\.[0-9]+\.[0-9]+[A-Za-z0-9._-]*', version):
               raise SystemExit('Version cannot be used as a Docker tag')
@@ -46,6 +57,7 @@ jobs:
               out.write(f'tag={tag}\nversion={version}\nprerelease={str(prerelease).lower()}\n')
           PY
       - name: Refuse overwriting a published release
+        if: ${{ !inputs.qualify_clients_only }}
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           GH_REPO: ${{ github.repository }}
@@ -187,6 +199,12 @@ jobs:
             --runtime-dir desktop/portable/release --webview2-dir webview2 \
             --output "$RUNNER_TEMP/client"
           mv "$RUNNER_TEMP/client/company-package-status.json" "$RUNNER_TEMP/client/mosswork-${GREEN_HOST_PLAT}-build.json"
+          uv run --no-project python - <<'PY'
+          import json, os
+          from pathlib import Path
+          record = json.loads((Path(os.environ['RUNNER_TEMP']) / 'client' / f"mosswork-{os.environ['GREEN_HOST_PLAT']}-build.json").read_text())
+          assert record['native_update_payload_checks'].get(os.environ['GREEN_HOST_PLAT']) is True, 'Actual client/runtime payload check did not run on the target host'
+          PY
           rm "$RUNNER_TEMP/client/SHA256SUMS.txt"
       - uses: actions/upload-artifact@v4
         with:
@@ -196,6 +214,7 @@ jobs:
           retention-days: 7
 
   image:
+    if: ${{ !inputs.qualify_clients_only }}
     name: Server images (${{ matrix.arch }})
     needs: source
     runs-on: ${{ matrix.os }}
@@ -286,6 +305,7 @@ jobs:
           retention-days: 7
 
   sudograph-worker:
+    if: ${{ !inputs.qualify_clients_only }}
     name: Package the current Sudograph compiler worker
     needs: source
     runs-on: ubuntu-24.04
@@ -349,9 +369,13 @@ jobs:
           retention-days: 7
 
   publish:
+    if: ${{ !inputs.qualify_clients_only }}
     name: Publish server bundles and downloadable clients
     needs: [source, client, image, sudograph-worker]
     runs-on: ubuntu-24.04
+    concurrency:
+      group: mosswork-cos-publication
+      cancel-in-progress: false
     permissions:
       contents: write
     env:
@@ -374,7 +398,9 @@ jobs:
           set -euo pipefail
           test -s "mosswork-company-macos-arm64-${RELEASE_VERSION}.dmg"
           test -s "mosswork-company-windows-amd64-${RELEASE_VERSION}.exe"
-          test "$(find . -maxdepth 1 \( -name '*.dmg' -o -name '*.exe' \) | wc -l)" -eq 2
+          test "$(find . -maxdepth 1 \( -name '*.dmg' -o -name '*.exe' \) ! -name '*-update.exe' | wc -l)" -eq 2
+          test -s "mosswork-company-macos-arm64-${RELEASE_VERSION}-update.zip"
+          test -s "mosswork-company-windows-amd64-${RELEASE_VERSION}-update.exe"
           test -s "moss-server-images-${RELEASE_TAG}-linux-amd64.tar.gz"
           test -s "moss-server-linux-amd64-images.json"
           test -s "moss-server-deploy-${RELEASE_TAG}.tar.gz"
@@ -386,6 +412,7 @@ jobs:
           test -s sudograph-worker-package.json
           test -s sudograph-worker-build.json
           test -s sudograph-worker-compiler.json
+          python3 ../tools/desktop_update_manifest.py --directory . --tag "$RELEASE_TAG"
           # GitHub limits each Release asset to less than 2 GiB.
           python3 - <<'PY'
           import hashlib

@@ -150,8 +150,9 @@ func TestSettingsHTMLFitsWithoutScrollbar(t *testing.T) {
 	if !strings.Contains(body, `.glyph`) || !strings.Contains(body, `translateY(-0.5px)`) {
 		t.Fatal("traffic-light glyphs must be optically centered in the lights")
 	}
-	if !strings.Contains(body, `html[data-mode="settings"] .window-controls [data-action="minimise"]`) ||
-		!strings.Contains(body, `html[data-mode="settings"] .window-controls [data-action="toggle-maximise"]`) {
+	css := strings.Join(strings.Fields(body), " ")
+	if !strings.Contains(css, `html[data-mode="settings"] .window-controls [data-action="minimise"]`) ||
+		!strings.Contains(css, `html[data-mode="settings"] .window-controls [data-action="toggle-maximise"]`) {
 		t.Fatal("settings popover should show only the close button")
 	}
 	if !strings.Contains(body, `"HideSettings"`) {

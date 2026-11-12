@@ -1,5 +1,17 @@
 # mosswork desktop (Wails v3 + green portable)
 
+Stable company clients support native automatic updates from the official COS
+channel. Startup and manual checks share one native provider and update state.
+Downloads are verified before the user confirms restart; active or unresolved
+local tasks and unsynced results block that restart. See [Update procedures](../docs/updates_EN.md).
+
+The Mac update archive contains exactly the signed `.app` from the DMG, including
+its runtime. The Windows installer and updater use the same executable with the
+complete runtime embedded, so the framework's atomic executable swap updates
+both together. Release tooling stamps `pyproject.toml`'s version into the running
+shell as well as installer metadata. Development and unsupported platform builds
+do not replace themselves with a different distribution.
+
 > For employee setup and everyday use, see [the employee guide](../docs/enterprise-client_EN.md). This document covers building the enterprise client and the base-mode desktop packages from source.
 
 All desktop-client code lives here. This is **not** `src/octop/infra/desktop`

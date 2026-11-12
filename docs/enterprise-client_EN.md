@@ -69,7 +69,7 @@ When an administrator changes an employee's role, permissions or policy, the aff
 
 Newly authorized menu entries are added to their default groups; entries you hid manually and your custom order are preserved. Revoked permissions are enforced by the server immediately and cannot be kept by choosing **Later**.
 
-**Update settings** only applies permissions and feature settings supported by the current program. A new client interface, program or tool environment requires a new build from your administrator. See [Update procedures](updates_EN.md) for the difference.
+**Update settings** only applies permissions and feature settings supported by the current program. The official desktop update channel installs the client interface, program and tool environment together. See [Update procedures](updates_EN.md) for supported clients and the first installation.
 
 ## Scope and limitations
 

@@ -10,16 +10,18 @@ This repository provides source code; server images and Windows/macOS enterprise
 
 - Use Chinese for the default homepage and retain the English edition, English and Chinese employee guides, contribution guide, security policy, and deployment and build instructions.
 - Keep the original MIT license and contributor notices in the root and the communication service. See [NOTICE](../NOTICE_EN.md) for third-party sources and distribution scope.
-- This distribution disables the online update CLI/API, upstream one-click installers and `make publish` / `publish-test`; use this repository's release images, clients or source.
+- This distribution disables server/Python-package online update CLI/API, upstream one-click installers and `make publish` / `publish-test`. Native company clients use the official complete-client stable update channel; server upgrades use this repository's release images or source.
 - The public copy excludes Git history, local tool configuration, runtime environment files, browser sessions, deployment records and build artifacts.
 - The `office-automation` expert and its avatars are excluded because bundled document skills restrict redistribution. Tests and examples use experts included publicly; independent document-processing libraries and local tools are unaffected.
 - Employee quick start uses [Markdown](user-guide_EN.md); the source release excludes generated `docs/user-guide.html` and the upstream personal-edition introduction `docs/mosswork-introduction.html`.
 - The source release excludes FnOS packaging tools and the upstream release-asset download-table generator.
-- Upstream workflows remain inactive in `.github/upstream-workflows/` with the `.disabled` extension. Only this project's `mosswork-ci.yml` and `mosswork-release.yml` are preserved as active workflows during export.
+- Upstream workflows remain inactive in `.github/upstream-workflows/` with the `.disabled` extension. The `PROJECT_WORKFLOWS` inventory in `tools/export_public_source.py` controls which project workflows remain active in public exports.
 
 ## Tag releases
 
 Push a tag exactly matching `v<pyproject.toml version>` after exporting, checking and committing the complete public source. The current version corresponds to `v0.0.7`. The workflow never bumps versions or creates tags; manual runs must select an existing version tag.
+
+For native package qualification before merging or tagging, dispatch the workflow with `qualify_clients_only` enabled. It accepts a current branch, builds both native clients from the complete exported source and invokes the actual executable's full-runtime verification. This mode skips server images and GitHub/COS publication and never creates or changes tags. Normal publication still requires the matching release tag.
 
 The release includes only two client installers: a macOS 13+ ARM64 DMG and a Windows amd64 EXE. Both include the offline local runtime, document tools and checksum-pinned FFmpeg from the public Sudowork mirror. Native runners exercise the packaged runtime before assembly. Windows includes Microsoft's signed offline WebView2 installer. macOS uses ad-hoc signing without notarization; the Windows client is not Authenticode signed.
 
@@ -30,6 +32,10 @@ Server images are distributed as `moss-server-images-<tag>-linux-amd64.tar.gz`. 
 Allow `GITHUB_TOKEN` to write Releases. Packages permissions and registry credentials are not needed. Native Linux runners reload the exported images and verify first installation, health checks and repeat installation. Publication checks that each asset is below GitHub's 2 GiB limit and generates SHA-256 checksums. See the [deployment guide](../docker/enterprise/INSTALL.md) (Chinese) for installation, persistent data and upgrades.
 
 ## Export and verification
+
+Native automatic updates require a complete Mac application ZIP and a Windows executable with its matching runtime embedded, named `-update.zip` and `-update.exe`. Never use the NSIS installer as a replacement application executable. `tools/desktop_update_manifest.py` derives `desktop-update.json` from the actual files before the final `SHA256SUMS.txt` is written. The generator and native client share `desktop/src/internal/desktopupdate/targets.json`. Prereleases do not generate a stable feed.
+
+Both COS publishers share a serialized publication group. They verify the immutable release and finish installer aliases before publishing `latest/desktop-update.json` last. An older recovery cannot roll the current feed backward. Startup and manual checks use this same endpoint. Clients without an updater need one manual installation of an updater-capable stable release.
 
 All changes between formal releases accumulate in the enterprise repository and share one current pending-release entry point. Export candidate source from the complete worktree, including uncommitted changes and new tests from earlier fixes. Record verification status separately instead of splitting fixes into parallel pending releases. Keep older snapshots only for traceability.
 

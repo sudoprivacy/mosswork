@@ -12,6 +12,7 @@ import ast
 import hashlib
 import json
 import os
+import platform
 import plistlib
 import shutil
 import struct
@@ -23,8 +24,30 @@ from email.parser import Parser
 from pathlib import Path
 
 
-def run(*args: str | Path, cwd: Path, env: dict[str, str] | None = None) -> None:
-    subprocess.run([str(a) for a in args], cwd=cwd, env=env, check=True)
+def run(
+    *args: str | Path, cwd: Path, env: dict[str, str] | None = None, capture_output: bool = False
+) -> str:
+    result = subprocess.run(
+        [str(a) for a in args],
+        cwd=cwd,
+        env=env,
+        check=True,
+        capture_output=capture_output,
+        text=True,
+    )
+    return result.stdout if capture_output else ""
+
+
+def host_target() -> tuple[str | None, str | None]:
+    """Describe the host which can actually execute a just-built client."""
+    host_arch = {
+        "AMD64": "amd64",
+        "amd64": "amd64",
+        "x86_64": "amd64",
+        "arm64": "arm64",
+        "aarch64": "arm64",
+    }.get(platform.machine())
+    return {"darwin": "darwin", "win32": "windows"}.get(sys.platform), host_arch
 
 
 LOCAL_COMPONENTS = ("moss-harness", "moss-memory", "moss-browser", "moss-gateway")
@@ -242,18 +265,18 @@ def main() -> None:
         raise SystemExit(f"Build staging already exists: {stage}; use a fresh output parent")
     payloads: dict[tuple[str, str], Path] = {}
     if not args.legacy_shell_only:
-        for platform in ("darwin", "windows"):
-            if args.platform not in ("all", platform):
+        for target_platform in ("darwin", "windows"):
+            if args.platform not in ("all", target_platform):
                 continue
             for arch in arches:
-                payloads[platform, arch] = package_runtime(
+                payloads[target_platform, arch] = package_runtime(
                     (
-                        args.runtime_dir / f"{platform}-{arch}"
-                        if (args.runtime_dir / f"{platform}-{arch}").is_dir()
-                        else args.runtime_dir / f"mosswork-{platform}-{arch}"
+                        args.runtime_dir / f"{target_platform}-{arch}"
+                        if (args.runtime_dir / f"{target_platform}-{arch}").is_dir()
+                        else args.runtime_dir / f"mosswork-{target_platform}-{arch}"
                     ),
-                    stage / "payloads" / f"mosswork-{platform}-{arch}.zip",
-                    platform,
+                    stage / "payloads" / f"mosswork-{target_platform}-{arch}.zip",
+                    target_platform,
                     arch,
                 )
     run("node", root / "desktop/login/build.mjs", cwd=root)
@@ -290,8 +313,36 @@ def main() -> None:
         build / "darwin/icons.icns",
         cwd=source,
     )
-    common = ["go", "build", "-tags", "production,company", "-trimpath", "-buildvcs=false"]
+    tags = "production,company" if args.legacy_shell_only else "production,company,company_embedded"
+    common = ["go", "build", "-tags", tags, "-trimpath", "-buildvcs=false"]
     artifacts: list[Path] = []
+    native_update_checks: dict[str, bool] = {}
+
+    def verify_native_client(binary: Path, target: str, arch: str) -> None:
+        host_platform, host_arch = host_target()
+        is_native = target == host_platform
+        if not args.legacy_shell_only and is_native and arch == host_arch:
+            output = run(
+                binary,
+                "--verify-update-payload",
+                cwd=source,
+                capture_output=True,
+                env={
+                    **os.environ,
+                    "MOSSWORK_HOME": str(stage / "native-verification" / f"{target}-{arch}"),
+                },
+            )
+            if json.loads(output) != {
+                "client_version": version,
+                "runtime_version": version,
+                "platform": target,
+                "arch": arch,
+            }:
+                raise ValueError(
+                    "Actual native client/runtime verification identity differs from this release"
+                )
+            native_update_checks[f"{target}-{arch}"] = True
+
     if args.platform in ("all", "darwin"):
         for arch in arches:
             env = dict(
@@ -302,7 +353,14 @@ def main() -> None:
                 CGO_CFLAGS="-mmacosx-version-min=13.0",
                 CGO_LDFLAGS="-mmacosx-version-min=13.0",
             )
-            run(*common, "-ldflags=-w -s", "-o", stage / f"mosswork-{arch}", cwd=source, env=env)
+            run(
+                *common,
+                f"-ldflags=-w -s -X main.desktopVersion={version}",
+                "-o",
+                stage / f"mosswork-{arch}",
+                cwd=source,
+                env=env,
+            )
         dmgroot = stage / "dmg"
         app = dmgroot / "mosswork.app"
         macos = app / "Contents/MacOS"
@@ -349,6 +407,8 @@ def main() -> None:
         else:
             run("codesign", "--force", "--sign", "-", app, cwd=source)
         mac_arch = "universal" if len(arches) == 2 else arches[0]
+        for arch in arches:
+            verify_native_client(macos / "mosswork", "darwin", arch)
         dmg = (
             output
             / f"mosswork-company{'-legacy-shell' if args.legacy_shell_only else ''}-macos-{mac_arch}-{version}.dmg"
@@ -369,6 +429,12 @@ def main() -> None:
             run("codesign", "--timestamp", "--sign", args.sign_identity, dmg, cwd=source)
         run("hdiutil", "verify", dmg, cwd=source)
         artifacts.append(dmg)
+        if not args.legacy_shell_only:
+            update = output / f"mosswork-company-macos-{mac_arch}-{version}-update.zip"
+            # Archive exactly the signed .app used in the DMG, including its
+            # matching runtime. The updater replaces the whole application.
+            run("ditto", "-c", "-k", "--norsrc", "--keepParent", app, update, cwd=source)
+            artifacts.append(update)
     if args.platform in ("all", "windows"):
         nsis = build / "windows/nsis"
         run(
@@ -419,20 +485,27 @@ def main() -> None:
             )
             binary = stage / f"mosswork-windows-{arch}.exe"
             env = dict(os.environ, GOOS="windows", GOARCH=arch, CGO_ENABLED="0")
+            if not args.legacy_shell_only:
+                bundled = source / "bundled"
+                bundled.mkdir(exist_ok=True)
+                shutil.copy2(payloads["windows", arch], bundled / "portable.zip")
             try:
-                run(*common, "-ldflags=-w -s -H windowsgui", "-o", binary, cwd=source, env=env)
+                run(
+                    *common,
+                    f"-ldflags=-w -s -H windowsgui -X main.desktopVersion={version}",
+                    "-o",
+                    binary,
+                    cwd=source,
+                    env=env,
+                )
             finally:
                 syso.unlink(missing_ok=True)
+            verify_native_client(binary, "windows", arch)
             installer = (
                 output
                 / f"mosswork-company{'-legacy-shell' if args.legacy_shell_only else ''}-windows-{arch}-{version}.exe"
             )
             runtime_args = []
-            if ("windows", arch) in payloads:
-                runtime_args = [
-                    f"-DMOSSWORK_COMPANY_RUNTIME_ZIP={payloads['windows', arch]}",
-                    f"-DMOSSWORK_COMPANY_RUNTIME_NAME=mosswork-windows-{arch}.zip",
-                ]
             nsis_args = [
                 "-V2",
                 *runtime_args,
@@ -447,6 +520,10 @@ def main() -> None:
                 nsis_args = ["/" + arg[1:] if arg.startswith("-") else arg for arg in nsis_args]
             run("makensis", *nsis_args, cwd=nsis)
             artifacts.append(installer)
+            if not args.legacy_shell_only:
+                update = output / f"mosswork-company-windows-{arch}-{version}-update.exe"
+                shutil.copy2(binary, update)
+                artifacts.append(update)
     (output / "SHA256SUMS.txt").write_text(
         "".join(
             f"{hashlib.file_digest(p.open('rb'), 'sha256').hexdigest()}  {p.name}\n"
@@ -458,6 +535,7 @@ def main() -> None:
             {
                 **release_identity(),
                 "version": version,
+                "native_update_payload_checks": native_update_checks,
                 "protocol_version": 1,
                 "local_runtime_included": not args.legacy_shell_only,
                 "dashboard_included": True,

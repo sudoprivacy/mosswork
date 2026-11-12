@@ -14,6 +14,7 @@ import urllib.request
 from pathlib import Path
 
 import pytest
+from tools.desktop_update_manifest import manifest
 
 pytestmark = pytest.mark.skipif(os.name != "posix", reason="Publisher requires a POSIX shell")
 SCRIPT = Path(__file__).resolve().parents[3] / "tools/publish-release-to-cos.sh"
@@ -59,6 +60,8 @@ destination = pathlib.Path(os.environ['COS_TEST_STORAGE']).joinpath(*key.parts)
 destination.parent.mkdir(parents=True, exist_ok=True)
 shutil.copyfile(args[3], destination)
 destination.with_name(destination.name + '.headers.json').write_text(json.dumps(headers))
+with (pathlib.Path(os.environ['COS_TEST_STORAGE']) / 'uploads.jsonl').open('a') as stream:
+    stream.write(json.dumps(str(key)) + '\n')
 """
     )
     command.chmod(0o755)
@@ -92,8 +95,26 @@ destination.with_name(destination.name + '.headers.json').write_text(json.dumps(
     thread.start()
     base = f"http://127.0.0.1:{server.server_port}"
 
-    def run(overrides=None):
+    def run(overrides=None, *, with_updates=False, mutate_feed=None):
         header_overrides.update(overrides or {})
+        if with_updates:
+            for platform, arch, suffix in (("macos", "arm64", "zip"), ("windows", "amd64", "exe")):
+                payloads[f"mosswork-company-{platform}-{arch}-0.0.7-update.{suffix}"] = (
+                    b"complete client and runtime"
+                )
+            for name, data in payloads.items():
+                (assets / name).write_bytes(data)
+            feed = manifest(assets, TAG)
+            if mutate_feed:
+                mutate_feed(feed)
+            payloads["desktop-update.json"] = json.dumps(feed).encode()
+            (assets / "desktop-update.json").write_bytes(payloads["desktop-update.json"])
+            (assets / "SHA256SUMS.txt").write_text(
+                "".join(
+                    f"{hashlib.sha256(data).hexdigest()}  {name}\n"
+                    for name, data in payloads.items()
+                )
+            )
         return subprocess.run(
             ["bash", str(SCRIPT), str(assets), TAG, "--all"],
             env={
@@ -146,3 +167,41 @@ def test_actual_publisher_refuses_wrong_headers_even_when_all_bytes_match(publis
     assert "invalid download headers" in result.stderr
     for alias, original in CLIENTS.items():
         assert (storage / "mosswork/release/latest" / alias).read_bytes() == payloads[original]
+
+
+def test_native_feed_is_published_after_complete_immutable_payloads_and_aliases(publisher):
+    run, base, storage, payloads = publisher
+    result = run(with_updates=True)
+    assert result.returncode == 0, result.stdout + result.stderr
+    uploads = [json.loads(line) for line in (storage / "uploads.jsonl").read_text().splitlines()]
+    assert uploads[-1] == "mosswork/release/latest/desktop-update.json"
+    with urllib.request.urlopen(f"{base}/mosswork/release/latest/desktop-update.json") as response:
+        feed = json.load(response)
+    for artifact in feed["artifacts"]:
+        with urllib.request.urlopen(
+            f"{base}/mosswork/release/releases/{TAG}/{artifact['filename']}"
+        ) as response:
+            assert response.read() == payloads[artifact["filename"]]
+
+
+def test_corrupt_feed_is_refused_even_if_outer_checksum_manifest_matches(publisher):
+    run, _base, storage, _payloads = publisher
+    result = run(with_updates=True, mutate_feed=lambda feed: feed.update(version="0.0.8"))
+    assert result.returncode != 0
+    assert "actual complete release payloads" in result.stderr
+    assert not (storage / "uploads.jsonl").exists()
+
+
+def test_older_recovery_keeps_newer_feed_and_installer_aliases(publisher):
+    run, _base, storage, _payloads = publisher
+    latest = storage / "mosswork/release/latest"
+    latest.mkdir(parents=True)
+    current = b'{"version":"0.0.8"}'
+    (latest / "desktop-update.json").write_bytes(current)
+    for alias in CLIENTS:
+        (latest / alias).write_bytes(b"newer installer")
+    result = run(with_updates=True)
+    assert result.returncode == 0, result.stdout + result.stderr
+    assert (latest / "desktop-update.json").read_bytes() == current
+    for alias in CLIENTS:
+        assert (latest / alias).read_bytes() == b"newer installer"
