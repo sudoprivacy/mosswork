@@ -61,6 +61,7 @@ jobs:
     runs-on: ubuntu-24.04
     outputs:
       runtime_matrix: ${{ steps.scope.outputs.runtime_matrix }}
+      windows_validation: ${{ steps.scope.outputs.windows_validation }}
     steps:
       - uses: actions/checkout@v4
         with:
@@ -71,6 +72,35 @@ jobs:
           CI_BASE: ${{ github.event.pull_request.base.sha }}
           CI_HEAD: ${{ github.event.pull_request.head.sha }}
         run: python3 tools/precommit.py --ci-plan "$CI_BASE" "$CI_HEAD"
+
+  windows-validation-tools:
+    name: Windows validation tools
+    needs: ci-scope
+    if: needs.ci-scope.outputs.windows_validation == 'true'
+    runs-on: windows-2022
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 2
+      - uses: astral-sh/setup-uv@v6
+        with:
+          python-version: '3.12'
+          enable-cache: true
+      - name: Run existing validators and export the complete current source
+        shell: bash
+        env:
+          CI_BASE: ${{ github.event.pull_request.base.sha }}
+          CI_HEAD: ${{ github.event.pull_request.head.sha }}
+        run: uv run --no-project python tools/precommit.py --ci-tools "$CI_BASE" "$CI_HEAD"
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: windows-validation-tools
+          path: |
+            ${{ runner.temp }}/mosswork-ci-tools-*/receipt.json
+            ${{ runner.temp }}/mosswork-ci-tools-*/public-source/*manifest*
+          if-no-files-found: ignore
 
   acp-runtime-observations:
     name: ACP runtime observations (${{ matrix.os }})

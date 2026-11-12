@@ -335,6 +335,12 @@ def ci_commit(repo: Path, message: str) -> None:
     git(repo, "-c", "core.hooksPath=" + str(empty_hooks), "commit", "-qm", message)
 
 
+def seed_windows_validation_workflow(repo: Path) -> None:
+    path = ".github/workflows/mosswork-ci.yml"
+    stage(repo, path, (SOURCE / path).read_text(encoding="utf-8"))
+    ci_commit(repo, "qualified Windows workflow fixture")
+
+
 @pytest.mark.parametrize(
     "path,run_runtime",
     [
@@ -353,7 +359,7 @@ def ci_commit(repo: Path, message: str) -> None:
         (".github/workflows/mosswork-ci.yml", True),
         (".github/workflows/mosswork-identity-ci.yml", True),
         ("tests/conftest.py", True),
-        ("tests/unit/deployment/test_precommit.py", True),
+        ("tests/unit/deployment/test_precommit.py", False),
         ("tests/unit/deployment/new_test.py", True),
         ("docs/new.md", True),
         ("unknown-input.json", True),
@@ -362,6 +368,8 @@ def ci_commit(repo: Path, message: str) -> None:
 def test_real_committed_ci_scope_defaults_to_both_runtime_matrices(
     repo: Path, path: str, run_runtime: bool
 ) -> None:
+    if path in gate.WINDOWS_VALIDATION_INPUTS:
+        seed_windows_validation_workflow(repo)
     base = git(repo, "rev-parse", "HEAD")
     stage(repo, path)
     ci_commit(repo, "candidate")
@@ -437,7 +445,7 @@ def test_ci_scope_cli_uses_commits_without_inheriting_or_mutating_an_index(
     assert result.returncode == 0, result.stdout + result.stderr
     plan = json.loads(result.stdout.removeprefix("CI_SCOPE: "))
     assert plan["runtime_matrix"] is False and plan["paths"] == ["Makefile"]
-    assert output.read_text(encoding="utf-8") == "runtime_matrix=false\n"
+    assert output.read_text(encoding="utf-8") == "runtime_matrix=false\nwindows_validation=false\n"
     assert (repo / ".git/index").read_bytes() == index_before
     assert git(repo, "rev-parse", "HEAD") == head
 
@@ -451,4 +459,161 @@ def test_ci_scope_cli_uses_commits_without_inheriting_or_mutating_an_index(
     )
     assert refused.returncode != 0 and "CI_SCOPE_REFUSED" in refused.stderr
     assert not output.exists()
+    assert (repo / ".git/index").read_bytes() == index_before
+
+
+@pytest.mark.parametrize("path", sorted(gate.WINDOWS_VALIDATION_INPUTS))
+def test_committed_validation_tools_keep_windows_checks_without_runtime_jobs(
+    repo: Path, path: str
+) -> None:
+    seed_windows_validation_workflow(repo)
+    base = git(repo, "rev-parse", "HEAD")
+    stage(repo, path)
+    stage(repo, "CONTRIBUTING.md")
+    ci_commit(repo, "independent tool candidate")
+    plan = gate.ci_plan(repo, base, git(repo, "rev-parse", "HEAD"))
+    assert plan["runtime_matrix"] is False
+    assert plan["windows_validation"] is True
+    assert set(plan["paths"]) == {path, "CONTRIBUTING.md"}
+
+
+@pytest.mark.parametrize("workflow", ["missing", "changed", "output-commented", "planner-changed"])
+def test_windows_tool_scope_keeps_runtime_jobs_for_unqualified_workflow(
+    repo: Path, workflow: str
+) -> None:
+    if workflow != "missing":
+        path = ".github/workflows/mosswork-ci.yml"
+        source = (SOURCE / path).read_text(encoding="utf-8")
+        old, new = {
+            "changed": ("    timeout-minutes: 10\n", "    timeout-minutes: 11\n"),
+            "output-commented": (
+                "      windows_validation: ${{ steps.scope.outputs.windows_validation }}",
+                "#       windows_validation: ${{ steps.scope.outputs.windows_validation }}",
+            ),
+            "planner-changed": ("id: scope", "id: other-selector"),
+        }[workflow]
+        assert old in source
+        stage(repo, path, source.replace(old, new))
+        ci_commit(repo, "different Windows workflow fixture")
+    base = git(repo, "rev-parse", "HEAD")
+    stage(repo, "tools/check_public_source.py")
+    ci_commit(repo, "tool-only candidate")
+    plan = gate.ci_plan(repo, base, git(repo, "rev-parse", "HEAD"))
+    assert plan["runtime_matrix"] is True
+    assert plan["windows_validation"] is False
+    assert "recipe" in plan["reason"]
+
+
+@pytest.mark.parametrize("operation", ["delete", "rename", "runtime", "dispatcher", "worker"])
+def test_windows_tool_scope_refuses_missing_or_mixed_runtime_inputs(
+    repo: Path, operation: str
+) -> None:
+    path = "tools/export_public_source.py"
+    stage(repo, path)
+    ci_commit(repo, "tool baseline")
+    base = git(repo, "rev-parse", "HEAD")
+    if operation == "delete":
+        git(repo, "rm", path)
+    elif operation == "rename":
+        git(repo, "mv", path, "tools/unknown.py")
+    else:
+        stage(repo, path, "# Changed tool\n")
+        extra = {
+            "runtime": "src/octop/config.py",
+            "dispatcher": "tools/precommit.py",
+            "worker": "tools/accept_sudograph_worker.py",
+        }[operation]
+        stage(repo, extra)
+    ci_commit(repo, "candidate requiring runtime checks")
+    plan = gate.ci_plan(repo, base, git(repo, "rev-parse", "HEAD"))
+    assert plan["runtime_matrix"] is True
+    assert plan["windows_validation"] is False
+
+
+def test_ci_tools_refuses_ineligible_input_before_starting_validators(
+    repo: Path, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    base = git(repo, "rev-parse", "HEAD")
+    stage(repo, "src/octop/config.py")
+    ci_commit(repo, "runtime candidate")
+
+    def must_not_run(*_args: object) -> None:
+        raise AssertionError("Runtime input must not enter independent tool validation")
+
+    monkeypatch.setattr(gate, "run_commands", must_not_run)
+    output = tmp_path / "outputs"
+    output.mkdir()
+    monkeypatch.setenv("RUNNER_TEMP", str(output))
+    with pytest.raises(ValueError, match="normal workflow"):
+        gate.ci_tools(repo, base, git(repo, "rev-parse", "HEAD"))
+    assert list(output.iterdir()) == []
+
+
+@pytest.mark.parametrize("outcome", ["success", "validator-failure", "source-drift"])
+def test_ci_tools_real_processes_preserve_parent_index_and_stop_after_failure(
+    repo: Path, tmp_path: Path, monkeypatch: pytest.MonkeyPatch, outcome: str
+) -> None:
+    install_dispatcher(repo)
+    for path in gate.TOOL_FILES:
+        target = repo / path
+        target.parent.mkdir(parents=True, exist_ok=True)
+        shutil.copyfile(SOURCE / path, target)
+    path = ".github/workflows/mosswork-ci.yml"
+    target = repo / path
+    target.parent.mkdir(parents=True, exist_ok=True)
+    shutil.copyfile(SOURCE / path, target)
+    git(repo, "add", ".")
+    ci_commit(repo, "complete validator baseline")
+    base = git(repo, "rev-parse", "HEAD")
+    path = "tests/unit/deployment/test_export_public_source.py"
+    stage(repo, path, (repo / path).read_text(encoding="utf-8") + "\n# Changed fixture\n")
+    ci_commit(repo, "independent candidate")
+    head = git(repo, "rev-parse", "HEAD")
+    index_before = (repo / ".git/index").read_bytes()
+    output = tmp_path / "outputs"
+    output.mkdir()
+    foreign = tmp_path / "foreign-index"
+    foreign.write_bytes(b"unrelated index bytes")
+    log = tmp_path / "validator-calls.jsonl"
+    probe = tmp_path / "validator.py"
+    probe.write_text(
+        "import json, os, sys\nfrom pathlib import Path\n"
+        "assert all(k not in os.environ for k in ['GIT_DIR','GIT_INDEX_FILE','GIT_WORK_TREE','GIT_COMMON_DIR','GIT_PREFIX'])\n"
+        "assert os.environ.get('GIT_CONFIG_COUNT') == '1'\n"
+        "with Path(os.environ['VALIDATOR_LOG']).open('a',encoding='utf-8') as f:\n"
+        "    f.write(json.dumps(sys.argv[1:])+'\\n')\n"
+        "if os.environ['VALIDATOR_OUTCOME']=='source-drift':\n"
+        "    Path('README.md').write_text('changed during validation',encoding='utf-8')\n"
+        "raise SystemExit(7 if os.environ['VALIDATOR_OUTCOME']=='validator-failure' else 0)\n",
+        encoding="utf-8",
+    )
+    monkeypatch.setenv("RUNNER_TEMP", str(output))
+    monkeypatch.setenv("VALIDATOR_LOG", str(log))
+    monkeypatch.setenv("VALIDATOR_OUTCOME", outcome)
+    monkeypatch.setenv("GIT_DIR", str(tmp_path / "foreign.git"))
+    monkeypatch.setenv("GIT_INDEX_FILE", str(foreign))
+    monkeypatch.setenv("GIT_CONFIG_COUNT", "1")
+    monkeypatch.setenv("GIT_CONFIG_KEY_0", "core.abbrev")
+    monkeypatch.setenv("GIT_CONFIG_VALUE_0", "12")
+    original = gate.run_commands
+
+    def execute(root: Path, checks: list[list[str]], results: list[dict]) -> None:
+        original(root, [[sys.executable, str(probe), *argv[1:]] for argv in checks], results)
+
+    monkeypatch.setattr(gate, "run_commands", execute)
+    if outcome == "success":
+        gate.ci_tools(repo, base, head)
+    else:
+        with pytest.raises(ValueError, match="exited 7|checkout changed"):
+            gate.ci_tools(repo, base, head)
+    calls = [json.loads(line) for line in log.read_text(encoding="utf-8").splitlines()]
+    assert len(calls) == (5 if outcome == "success" else 1)
+    receipts = list(output.glob("mosswork-ci-tools-*/receipt.json"))
+    assert len(receipts) == 1
+    receipt = json.loads(receipts[0].read_text(encoding="utf-8"))
+    assert receipt["passed"] is (outcome == "success")
+    assert receipt["profile"] == "windows-validation-tools"
+    assert receipt["platform"] == sys.platform
+    assert os.environ["GIT_INDEX_FILE"] == str(foreign)
+    assert foreign.read_bytes() == b"unrelated index bytes"
     assert (repo / ".git/index").read_bytes() == index_before
