@@ -31,7 +31,7 @@ PIP  := $(if $(UV),uv pip,python3 -m pip)
 # Parallel workers for make test / make test-fast (override: make test PYTEST_JOBS=4)
 PYTEST_JOBS ?= auto
 # The shared pytest defaults also cover direct CI invocations.
-PYTEST_FAILURE_MESSAGE := stop after first failure; in-flight tests finish. For all failures: PYTEST_ADDOPTS=--maxfail=0
+PYTEST_FAILURE_MESSAGE := previous failures/new files first; all cases retained. Stop after first failure; in-flight tests finish. For all failures: PYTEST_ADDOPTS=--maxfail=0
 FORMAT_GATE_MESSAGE := Resolve the reported lint/format errors. Run make format-all for available fixes; refresh staged/frozen inputs, then rerun this gate.
 
 # ─── Help ────────────────────────────────────────────────────────────────────
