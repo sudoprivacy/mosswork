@@ -48,6 +48,11 @@ on:
 permissions:
   contents: read
 
+# Superseded PR commits share a group; manual runs keep their own run ID.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.run_id }}
+  cancel-in-progress: true
+
 jobs:
   ci-scope:
     name: CI input scope
