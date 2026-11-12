@@ -6,6 +6,8 @@ on:
       - '.github/workflows/mosswork-identity-ci.yml'
       - 'conftest.py'
       - 'tools/test_gate.py'
+      - 'tools/ci_identity_reuse.py'
+      - 'tests/unit/deployment/test_ci_identity_reuse.py'
       - 'src/octop/infra/identity/**'
       - 'src/octop/infra/agents/personal_moss_*.py'
       - 'src/octop/infra/gateway/personal_moss_identity.py'
@@ -28,6 +30,8 @@ on:
       - '.github/workflows/mosswork-identity-ci.yml'
       - 'conftest.py'
       - 'tools/test_gate.py'
+      - 'tools/ci_identity_reuse.py'
+      - 'tests/unit/deployment/test_ci_identity_reuse.py'
       - 'src/octop/infra/identity/**'
       - 'src/octop/infra/agents/personal_moss_*.py'
       - 'src/octop/infra/gateway/personal_moss_identity.py'
@@ -54,8 +58,42 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  identity-reuse:
+    name: Already-tested main tree
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: read
+      actions: read
+      pull-requests: read
+    outputs:
+      reuse: ${{ steps.proof.outputs.reuse }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: Verify both original successful platform checkouts
+        id: proof
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: >-
+          python3 tools/ci_identity_reuse.py
+          --repository "$GITHUB_REPOSITORY"
+          --commit "$GITHUB_SHA"
+          --output "$RUNNER_TEMP/identity-reuse.json"
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: identity-reuse-proof
+          path: ${{ runner.temp }}/identity-reuse.json
+          if-no-files-found: ignore
+
   identity:
     name: Canonical identity (${{ matrix.os }})
+    needs: identity-reuse
+    # Missing, failed or malformed proof retains every original platform command.
+    if: >-
+      ${{ !cancelled() && (github.event_name != 'push' ||
+          needs.identity-reuse.result != 'success' ||
+          needs.identity-reuse.outputs.reuse != 'true') }}
     strategy:
       fail-fast: true
       matrix:
