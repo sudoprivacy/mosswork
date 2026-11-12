@@ -326,3 +326,129 @@ def test_full_hook_preserves_required_commands_and_refuses_real_failures(
     else:
         assert result.returncode == 0, result.stdout + result.stderr
         assert git(repo, "rev-parse", "HEAD") != before
+
+
+def ci_commit(repo: Path, message: str) -> None:
+    """Prepare private Git data without inheriting the outer commit's hook."""
+    empty_hooks = repo / "fixture-hooks"
+    empty_hooks.mkdir(exist_ok=True)
+    git(repo, "-c", "core.hooksPath=" + str(empty_hooks), "commit", "-qm", message)
+
+
+@pytest.mark.parametrize(
+    "path,run_runtime",
+    [
+        ("Makefile", False),
+        ("AGENTS.md", False),
+        ("CONTRIBUTING.md", False),
+        ("CONTRIBUTING_EN.md", False),
+        (".githooks/pre-commit", False),
+        ("tests/unit/deployment/test_make_format_gate.py", False),
+        ("tests/unit/deployment/test_make_testmon.py", False),
+        ("src/octop/config.py", True),
+        ("packages/moss-harness/src/moss_harness/config.py", True),
+        ("pyproject.toml", True),
+        ("uv.lock", True),
+        ("tools/precommit.py", True),
+        (".github/workflows/mosswork-ci.yml", True),
+        (".github/workflows/mosswork-identity-ci.yml", True),
+        ("tests/conftest.py", True),
+        ("tests/unit/deployment/test_precommit.py", True),
+        ("tests/unit/deployment/new_test.py", True),
+        ("docs/new.md", True),
+        ("unknown-input.json", True),
+    ],
+)
+def test_real_committed_ci_scope_defaults_to_both_runtime_matrices(
+    repo: Path, path: str, run_runtime: bool
+) -> None:
+    base = git(repo, "rev-parse", "HEAD")
+    stage(repo, path)
+    ci_commit(repo, "candidate")
+    plan = gate.ci_plan(repo, base, git(repo, "rev-parse", "HEAD"))
+    assert plan["runtime_matrix"] is run_runtime
+    assert plan["paths"] == [path]
+
+
+@pytest.mark.parametrize("operation", ["rename", "delete", "mixed"])
+def test_ci_scope_cannot_hide_runtime_changes_behind_validation_inputs(
+    repo: Path, operation: str
+) -> None:
+    stage(repo, "src/runtime.py")
+    ci_commit(repo, "runtime baseline")
+    base = git(repo, "rev-parse", "HEAD")
+    if operation == "rename":
+        git(repo, "mv", "src/runtime.py", "Makefile")
+    elif operation == "delete":
+        git(repo, "rm", "src/runtime.py")
+    else:
+        stage(repo, "src/runtime.py", "changed = True\n")
+        stage(repo, "Makefile")
+    ci_commit(repo, "candidate")
+    plan = gate.ci_plan(repo, base, git(repo, "rev-parse", "HEAD"))
+    assert plan["runtime_matrix"] is True
+    assert "src/runtime.py" in plan["paths"]
+
+
+def test_ci_scope_keeps_full_matrices_for_dispatch_empty_diff_and_shallow_history(
+    repo: Path, tmp_path: Path
+) -> None:
+    base = git(repo, "rev-parse", "HEAD")
+    assert gate.ci_plan(repo, "", "")["runtime_matrix"] is True
+    assert gate.ci_plan(repo, base, base)["runtime_matrix"] is True
+    stage(repo, "Makefile")
+    ci_commit(repo, "candidate")
+    head = git(repo, "rev-parse", "HEAD")
+    shallow = tmp_path / "shallow"
+    subprocess.run(
+        ["git", "clone", "--quiet", "--depth=1", repo.as_uri(), str(shallow)], check=True
+    )
+    assert gate.ci_plan(shallow, base, head)["runtime_matrix"] is True
+    assert "unavailable" in gate.ci_plan(shallow, base, head)["reason"]
+
+
+@pytest.mark.skipif(os.name == "nt", reason="POSIX symlink fixture")
+def test_ci_scope_retains_runtime_matrices_for_nonregular_inputs(repo: Path) -> None:
+    base = git(repo, "rev-parse", "HEAD")
+    (repo / "AGENTS.md").symlink_to("README.md")
+    git(repo, "add", "AGENTS.md")
+    ci_commit(repo, "symlink candidate")
+    assert gate.ci_plan(repo, base, git(repo, "rev-parse", "HEAD"))["runtime_matrix"] is True
+
+
+def test_ci_scope_cli_uses_commits_without_inheriting_or_mutating_an_index(
+    repo: Path, tmp_path: Path
+) -> None:
+    install_dispatcher(repo)
+    base = git(repo, "rev-parse", "HEAD")
+    stage(repo, "Makefile")
+    ci_commit(repo, "candidate")
+    head = git(repo, "rev-parse", "HEAD")
+    index_before = (repo / ".git/index").read_bytes()
+    output = tmp_path / "github-output"
+    environment = {
+        **os.environ,
+        "GITHUB_OUTPUT": str(output),
+        "GIT_DIR": str(tmp_path / "foreign.git"),
+        "GIT_INDEX_FILE": str(tmp_path / "foreign-index"),
+    }
+    argv = [sys.executable, str(repo / "tools/precommit.py"), "--ci-plan", base, head]
+    result = subprocess.run(argv, cwd=repo, env=environment, capture_output=True, text=True)
+    assert result.returncode == 0, result.stdout + result.stderr
+    plan = json.loads(result.stdout.removeprefix("CI_SCOPE: "))
+    assert plan["runtime_matrix"] is False and plan["paths"] == ["Makefile"]
+    assert output.read_text(encoding="utf-8") == "runtime_matrix=false\n"
+    assert (repo / ".git/index").read_bytes() == index_before
+    assert git(repo, "rev-parse", "HEAD") == head
+
+    output.unlink()
+    refused = subprocess.run(
+        [*argv[:-2], "HEAD;echo invalid", head],
+        cwd=repo,
+        env=environment,
+        capture_output=True,
+        text=True,
+    )
+    assert refused.returncode != 0 and "CI_SCOPE_REFUSED" in refused.stderr
+    assert not output.exists()
+    assert (repo / ".git/index").read_bytes() == index_before

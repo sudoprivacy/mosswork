@@ -11,10 +11,12 @@ import hashlib
 import importlib.util
 import json
 import os
+import re
 import subprocess
 import sys
 import time
 from pathlib import Path, PurePosixPath
+from typing import Any, TypedDict
 
 FULL_CHECKS = 3
 ROOT_DOCS = frozenset(
@@ -42,6 +44,13 @@ TOOL_SCOPE = frozenset(TOOL_FILES) | {
     "AGENTS.md",
 }
 GIT_CONTEXT = ("GIT_DIR", "GIT_WORK_TREE", "GIT_INDEX_FILE", "GIT_COMMON_DIR", "GIT_PREFIX")
+RELEASE_ONLY_INPUTS = ROOT_DOCS | {
+    "AGENTS.md",
+    "Makefile",
+    ".githooks/pre-commit",
+    "tests/unit/deployment/test_make_format_gate.py",
+    "tests/unit/deployment/test_make_testmon.py",
+}
 
 
 def git(root: Path, *arguments: str) -> bytes:
@@ -50,6 +59,61 @@ def git(root: Path, *arguments: str) -> bytes:
 
 def paths(data: bytes) -> list[str]:
     return [item.decode("utf-8", errors="surrogateescape") for item in data.split(b"\0") if item]
+
+
+class CiPlan(TypedDict):
+    runtime_matrix: bool
+    paths: list[str]
+    reason: str
+
+
+def ci_plan(root: Path, base: str, head: str) -> CiPlan:
+    """Retain both runtime matrices unless complete Git inputs prove tool-only changes."""
+    plan: CiPlan = {
+        "runtime_matrix": True,
+        "paths": [],
+        "reason": "No PR diff; run both runtime matrices",
+    }
+    if not base and not head:
+        return plan
+    if not all(re.fullmatch(r"[a-f0-9]{40}", value) for value in (base, head)):
+        raise ValueError("CI scope requires two full commit SHAs, or two empty dispatch inputs")
+    environment = {key: value for key, value in os.environ.items() if key not in GIT_CONTEXT}
+    for revision in (base, head):
+        result = subprocess.run(
+            ["git", "cat-file", "-e", revision + "^{commit}"],
+            cwd=root,
+            env=environment,
+            capture_output=True,
+            check=False,
+        )
+        if result.returncode:
+            plan["reason"] = "Git endpoint unavailable; run both runtime matrices"
+            return plan
+    changed = paths(
+        subprocess.check_output(
+            ["git", "diff", "--no-renames", "--name-only", "-z", base, head, "--"],
+            cwd=root,
+            env=environment,
+        )
+    )
+    plan["paths"] = changed
+    if not changed or any(path not in RELEASE_ONLY_INPUTS for path in changed):
+        plan["reason"] = (
+            "Runtime, dependency, workflow or unclassified input; run both runtime matrices"
+        )
+        return plan
+    entries = subprocess.check_output(
+        ["git", "ls-tree", "-rz", head, "--", *changed], cwd=root, env=environment
+    )
+    if any(
+        entry and not entry.startswith((b"100644 ", b"100755 ")) for entry in entries.split(b"\0")
+    ):
+        plan["reason"] = "Nonregular Git input; run both runtime matrices"
+        return plan
+    plan["runtime_matrix"] = False
+    plan["reason"] = "Validation-only inputs; release checks remain required"
+    return plan
 
 
 def staged_paths(root: Path) -> list[str]:
@@ -134,12 +198,13 @@ def references(root: Path, changed: list[str]) -> list[str]:
     assert spec is not None and spec.loader is not None
     checker = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(checker)
-    return checker.check_references(
+    errors: list[str] = checker.check_references(
         root, tuple(root / path for path in changed if path.endswith(".md"))
     )
+    return errors
 
 
-def run_commands(root: Path, checks: list[list[str]], results: list[dict]) -> None:
+def run_commands(root: Path, checks: list[list[str]], results: list[dict[str, Any]]) -> None:
     environment = dict(os.environ)
     # Nested Git fixture repositories must not inherit the parent commit's
     # temporary index or worktree. Keep authentication and policy settings.
@@ -164,16 +229,40 @@ def run_commands(root: Path, checks: list[list[str]], results: list[dict]) -> No
 
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--plan", action="store_true", help="Show selection without running checks")
+    mode = parser.add_mutually_exclusive_group()
+    mode.add_argument("--plan", action="store_true", help="Show selection without running checks")
+    mode.add_argument(
+        "--ci-plan",
+        nargs=2,
+        metavar=("BASE", "HEAD"),
+        help="Plan hosted runtime matrices from committed Git inputs",
+    )
     args = parser.parse_args()
+    environment = dict(os.environ)
+    if args.ci_plan is not None:
+        for name in GIT_CONTEXT:
+            environment.pop(name, None)
     root = Path(
         subprocess.check_output(
-            ["git", "rev-parse", "--show-toplevel"], text=True, encoding="utf-8"
+            ["git", "rev-parse", "--show-toplevel"], text=True, encoding="utf-8", env=environment
         ).strip()
     )
+    if args.ci_plan is not None:
+        try:
+            ci_selection = ci_plan(root, *args.ci_plan)
+            print("CI_SCOPE: " + json.dumps(ci_selection, ensure_ascii=True), flush=True)
+            if output := os.environ.get("GITHUB_OUTPUT"):
+                with open(output, "a", encoding="utf-8") as stream:
+                    stream.write(
+                        "runtime_matrix=" + str(ci_selection["runtime_matrix"]).lower() + "\n"
+                    )
+            return 0
+        except (OSError, ValueError, subprocess.CalledProcessError) as error:
+            print(f"CI_SCOPE_REFUSED: {error}", file=sys.stderr, flush=True)
+            return 1
     changed = staged_paths(root)
     selected = profile(root, changed)
-    plan = {"profile": selected, "paths": changed, "commands": commands(selected)}
+    plan: dict[str, Any] = {"profile": selected, "paths": changed, "commands": commands(selected)}
     if selected == "full":
         plan["delegated_commands"] = [
             {"cwd": ".", "argv": ["make", "precommit"]},
@@ -191,7 +280,7 @@ def main() -> int:
         Path(git(root, "rev-parse", "--absolute-git-dir").decode().strip())
         / "mosswork-precommit.json"
     )
-    result = {**plan, "passed": False, "status": "running", "checks": []}
+    result: dict[str, Any] = {**plan, "passed": False, "status": "running", "checks": []}
     started = time.monotonic()
     try:
         assert_staged_content(root, changed)
