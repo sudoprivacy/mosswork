@@ -8,6 +8,7 @@ import os
 import shutil
 import subprocess
 import sys
+import time
 from pathlib import Path
 
 import pytest
@@ -48,9 +49,9 @@ def stage(root: Path, path: str, text: str = "# Changed\n") -> None:
     [
         ("README.md", "docs"),
         ("docs/design/new.md", "docs"),
-        ("docs/业务说明.md", "docs"),
+        ("docs/涓氬姟璇存槑.md", "docs"),
         pytest.param(
-            "docs/业务\n说明.md",
+            "docs/涓氬姟\n璇存槑.md",
             "docs",
             marks=pytest.mark.skipif(
                 os.name == "nt", reason="Windows filenames cannot contain newlines"
@@ -232,7 +233,9 @@ def test_candidate_change_during_real_validation_is_refused(repo, tmp_path, monk
     )
     monkeypatch.chdir(repo)
     monkeypatch.setattr(sys, "argv", ["precommit.py"])
-    monkeypatch.setattr(gate, "commands", lambda _selected: [[sys.executable, str(child)]])
+    monkeypatch.setattr(
+        gate, "commands", lambda _selected, _changed=None: [[sys.executable, str(child)]]
+    )
     assert gate.main() == 1
     receipt = json.loads((repo / ".git/mosswork-precommit.json").read_text(encoding="utf-8"))
     assert receipt["passed"] is False and "candidate changed" in receipt["error"]
@@ -639,3 +642,179 @@ def test_ci_tools_real_processes_preserve_parent_index_and_stop_after_failure(
     assert os.environ["GIT_INDEX_FILE"] == str(foreign)
     assert foreign.read_bytes() == b"unrelated index bytes"
     assert (repo / ".git/index").read_bytes() == index_before
+
+
+def seed_tool_worktree(root: Path) -> str:
+    for path in (*gate.TOOL_FILES, "tools/test_gate.py", "Makefile"):
+        destination = root / path
+        destination.parent.mkdir(parents=True, exist_ok=True)
+        shutil.copyfile(SOURCE / path, destination)
+    git(root, "add", ".")
+    ci_commit(root, "complete tool baseline")
+    base = git(root, "rev-parse", "HEAD")
+    git(root, "update-ref", "refs/remotes/origin/main", base)
+    return base
+
+
+def test_worktree_plan_ignores_stat_only_changes_without_refreshing_index(repo: Path) -> None:
+    seed_tool_worktree(repo)
+    stage(repo, "src/app.py", "value = 1\n")
+    ci_commit(repo, "accepted application fixture")
+    git(repo, "update-ref", "refs/remotes/origin/main", "HEAD")
+    stage(repo, "tools/ci_identity_reuse.py", "# Actual pending tool source\n")
+    runtime = repo / "src/app.py"
+    time.sleep(1.1)  # Exercise ordinary same-content writes across filesystem timestamp precision.
+    runtime.write_bytes(runtime.read_bytes())
+    before = (repo / ".git/index").read_bytes()
+    result = subprocess.run(
+        [sys.executable, str(repo / "tools/precommit.py"), "--plan", "--worktree"],
+        cwd=repo,
+        capture_output=True,
+        text=True,
+        encoding="utf-8",
+    )
+    assert result.returncode == 0, result.stdout + result.stderr
+    plan = json.loads(result.stdout)
+    assert plan["profile"] == "tools"
+    assert plan["paths"] == ["tools/ci_identity_reuse.py"]
+    assert (repo / ".git/index").read_bytes() == before
+
+
+def test_worktree_scope_includes_pending_commits_and_all_current_sources(repo: Path) -> None:
+    base = seed_tool_worktree(repo)
+    stage(repo, "tools/ci_identity_reuse.py", "# Pending committed tool change\n")
+    ci_commit(repo, "unmerged tool commit")
+    stage(repo, "README.md", "# Staged documentation\n")
+    stage(repo, "src/app.py", "value = 1\n")
+    ci_commit(repo, "unmerged application commit")
+    (repo / "src/app.py").write_text("value = 2\n", encoding="utf-8")
+    (repo / "untracked.py").write_text("value = 3\n", encoding="utf-8")
+    changed, original, _ = gate.worktree_paths(repo)
+    assert original == base
+    assert set(changed) == {"tools/ci_identity_reuse.py", "README.md", "src/app.py", "untracked.py"}
+
+
+@pytest.mark.skipif(os.name == "nt", reason="Windows symlinks need additional OS privileges")
+def test_unstaged_tool_symlink_cannot_reuse_regular_index_mode(repo: Path) -> None:
+    seed_tool_worktree(repo)
+    path = repo / "tools/ci_identity_reuse.py"
+    path.unlink()
+    path.symlink_to(repo / "README.md")
+    result = subprocess.run(
+        [sys.executable, str(repo / "tools/precommit.py"), "--plan", "--worktree"],
+        cwd=repo,
+        capture_output=True,
+        text=True,
+        encoding="utf-8",
+    )
+    assert result.returncode == 0, result.stdout + result.stderr
+    plan = json.loads(result.stdout)
+    assert plan["profile"] == "full"
+    assert "links" in plan["reason"]
+
+
+@pytest.mark.parametrize(
+    "case,expected",
+    [
+        ("tool", "tools"),
+        ("make", "tools"),
+        ("docs", "docs"),
+        ("missing-base", "full"),
+        ("clean", "full"),
+        ("unstaged-runtime", "full"),
+        ("untracked-runtime", "full"),
+        ("committed-runtime", "full"),
+        ("deleted-tool", "full"),
+    ],
+)
+def test_actual_worktree_cli_plans_complete_sources_without_borrowing_index(
+    repo: Path, tmp_path: Path, case: str, expected: str
+) -> None:
+    seed_tool_worktree(repo)
+    if case == "missing-base":
+        git(repo, "update-ref", "-d", "refs/remotes/origin/main")
+    if case not in {"clean", "docs", "make"}:
+        path = "tools/ci_identity_reuse.py"
+        stage(repo, path, (repo / path).read_text(encoding="utf-8") + "\n# tool change\n")
+    if case == "docs":
+        stage(repo, "docs/new.md", "# Documentation\n")
+    if case == "make":
+        path = "Makefile"
+        stage(repo, path, (repo / path).read_text(encoding="utf-8") + "\n# Changed Make entry\n")
+    if case == "unstaged-runtime":
+        stage(repo, "src/app.py")
+        ci_commit(repo, "runtime baseline in branch")
+        (repo / "src/app.py").write_text("# Unstaged runtime\n", encoding="utf-8")
+    if case == "untracked-runtime":
+        (repo / "unknown.py").write_text("# Unknown source\n", encoding="utf-8")
+    if case == "committed-runtime":
+        stage(repo, "src/app.py")
+        ci_commit(repo, "pending application source")
+    if case == "deleted-tool":
+        git(repo, "rm", "tools/check_public_source.py")
+    index = (repo / ".git/index").read_bytes()
+    foreign = tmp_path / "foreign-index"
+    foreign.write_bytes(b"foreign original bytes")
+    result = subprocess.run(
+        [sys.executable, str(repo / "tools/precommit.py"), "--plan", "--worktree"],
+        cwd=repo,
+        env={
+            **os.environ,
+            "GIT_INDEX_FILE": str(foreign),
+            "GIT_DIR": str(tmp_path / "foreign.git"),
+        },
+        capture_output=True,
+        text=True,
+        encoding="utf-8",
+    )
+    assert result.returncode == 0, result.stdout + result.stderr
+    plan = json.loads(result.stdout)
+    assert plan["profile"] == expected
+    assert plan["scope"] == "complete-branch-and-worktree"
+    if case in {"tool", "make"}:
+        test_command = next(argv for argv in plan["commands"] if "pytest" in argv)
+        assert ("tests/unit/deployment/test_make_format_gate.py" in test_command) is (
+            case == "make"
+        )
+        assert ("tests/unit/deployment/test_make_testmon.py" in test_command) is (case == "make")
+    if expected == "full":
+        assert plan["delegated_commands"] == [
+            {"cwd": ".", "argv": ["make", "validate-application"]}
+        ]
+    assert (repo / ".git/index").read_bytes() == index
+    assert foreign.read_bytes() == b"foreign original bytes"
+
+
+@pytest.mark.parametrize("outcome", ["success", "failed-validator", "new-source"])
+def test_worktree_validation_preserves_failure_and_detects_untracked_source_drift(
+    repo: Path, tmp_path: Path, monkeypatch: pytest.MonkeyPatch, outcome: str
+) -> None:
+    seed_tool_worktree(repo)
+    stage(repo, "tools/ci_identity_reuse.py", "# Tool source\n")
+    index = (repo / ".git/index").read_bytes()
+    probe = tmp_path / "validator.py"
+    probe.write_text(
+        "import os,sys\nfrom pathlib import Path\n"
+        "assert 'GIT_INDEX_FILE' not in os.environ\n"
+        "assert os.environ['GIT_CONFIG_VALUE_0']=='12'\n"
+        "if sys.argv[1]=='new-source': Path('unknown.py').write_text('# added during validation')\n"
+        "raise SystemExit(7 if sys.argv[1]=='failed-validator' else 0)\n",
+        encoding="utf-8",
+    )
+    original = gate.run_commands
+
+    def execute(root: Path, checks: list[list[str]], results: list[dict]) -> None:
+        original(root, [[sys.executable, str(probe), outcome]], results)
+
+    monkeypatch.setattr(gate, "run_commands", execute)
+    monkeypatch.chdir(repo)
+    monkeypatch.setattr(sys, "argv", [str(repo / "tools/precommit.py"), "--worktree"])
+    monkeypatch.setenv("GIT_INDEX_FILE", str(tmp_path / "unused-index"))
+    monkeypatch.setenv("GIT_CONFIG_COUNT", "1")
+    monkeypatch.setenv("GIT_CONFIG_KEY_0", "core.abbrev")
+    monkeypatch.setenv("GIT_CONFIG_VALUE_0", "12")
+    assert gate.main() == (0 if outcome == "success" else 1)
+    receipt = json.loads((repo / ".git/mosswork-worktree-validation.json").read_text())
+    assert receipt["passed"] is (outcome == "success")
+    assert receipt["status"] == ("passed" if outcome == "success" else "failed")
+    assert (repo / ".git/index").read_bytes() == index

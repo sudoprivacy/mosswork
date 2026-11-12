@@ -1,7 +1,7 @@
 # Makefile for mosswork
 # Usage:
 #   make              - Show this help
-#   make all          - format checks (BE+FE) + backend lint + typecheck + test
+#   make all          - independent docs/tools, otherwise the full application gate
 #   make build        - Build frontend + Python wheel
 #   make publish      - Disabled until an independent release channel exists
 #
@@ -63,7 +63,7 @@ help:
 	@echo "  run-online       Start mosswork run from .venv-online"
 	@echo ""
 	@echo "Quality targets (ship bar):"
-	@echo "  all              format checks + lint + typecheck + full non-live test suite"
+	@echo "  all              complete branch/worktree docs/tools, otherwise application checks"
 	@echo "  precommit        fast change-aware gate for the git pre-commit hook (testmon-scoped tests)"
 	@echo "  lint             Ruff check + format check (src, tests)"
 	@echo "  format           Ruff auto-fix + format (src, tests)"
@@ -183,6 +183,15 @@ run-online:
 
 .PHONY: all
 all:
+	@if [ -f tools/precommit.py ]; then \
+		status=0; $(TEST_PYTHON) tools/precommit.py --worktree || status=$$?; \
+		if [ $$status -eq 0 ]; then exit 0; fi; \
+		if [ $$status -ne 3 ]; then exit $$status; fi; \
+	fi; \
+	$(MAKE) validate-application
+
+.PHONY: validate-application
+validate-application:
 	@echo "[all] Checking backend lint and frontend formatting before validation..."
 	@$(MAKE) lint format-check-frontend || { echo "[all] $(FORMAT_GATE_MESSAGE)"; exit 1; }
 	$(MAKE) typecheck
