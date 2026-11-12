@@ -477,7 +477,17 @@ def test_committed_validation_tools_keep_windows_checks_without_runtime_jobs(
     assert set(plan["paths"]) == {path, "CONTRIBUTING.md"}
 
 
-@pytest.mark.parametrize("workflow", ["missing", "changed", "output-commented", "planner-changed"])
+@pytest.mark.parametrize(
+    "workflow",
+    [
+        "missing",
+        "changed",
+        "output-commented",
+        "planner-changed",
+        "linux-command",
+        "linux-selection",
+    ],
+)
 def test_windows_tool_scope_keeps_runtime_jobs_for_unqualified_workflow(
     repo: Path, workflow: str
 ) -> None:
@@ -491,6 +501,14 @@ def test_windows_tool_scope_keeps_runtime_jobs_for_unqualified_workflow(
                 "#       windows_validation: ${{ steps.scope.outputs.windows_validation }}",
             ),
             "planner-changed": ("id: scope", "id: other-selector"),
+            "linux-command": (
+                "      - name: Check independent validation tools and the complete current source",
+                "      - name: Removed independent tool check",
+            ),
+            "linux-selection": (
+                "  release-checks:\n    needs: ci-scope",
+                "  release-checks:\n    needs: other-selector",
+            ),
         }[workflow]
         assert old in source
         stage(repo, path, source.replace(old, new))
@@ -612,7 +630,11 @@ def test_ci_tools_real_processes_preserve_parent_index_and_stop_after_failure(
     assert len(receipts) == 1
     receipt = json.loads(receipts[0].read_text(encoding="utf-8"))
     assert receipt["passed"] is (outcome == "success")
-    assert receipt["profile"] == "windows-validation-tools"
+    assert receipt["profile"] == (
+        "windows-validation-tools"
+        if sys.platform == "win32"
+        else sys.platform + "-validation-tools"
+    )
     assert receipt["platform"] == sys.platform
     assert os.environ["GIT_INDEX_FILE"] == str(foreign)
     assert foreign.read_bytes() == b"unrelated index bytes"
