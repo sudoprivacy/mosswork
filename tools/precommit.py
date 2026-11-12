@@ -14,6 +14,7 @@ import os
 import re
 import subprocess
 import sys
+import tempfile
 import time
 from pathlib import Path, PurePosixPath
 from typing import Any, TypedDict
@@ -51,6 +52,17 @@ RELEASE_ONLY_INPUTS = ROOT_DOCS | {
     "tests/unit/deployment/test_make_format_gate.py",
     "tests/unit/deployment/test_make_testmon.py",
 }
+WINDOWS_VALIDATION_INPUTS = frozenset(
+    {
+        "tools/check_public_source.py",
+        "tools/export_public_source.py",
+        "tests/unit/deployment/test_precommit.py",
+        "tests/unit/deployment/test_export_public_source.py",
+    }
+)
+WINDOWS_VALIDATION_RECIPE_SHA256 = (
+    "e2c3b07263c1bdfceff7c074c3ed13ab7d5d5b749d16faf063709e2fea72849a"
+)
 
 
 def git(root: Path, *arguments: str) -> bytes:
@@ -63,14 +75,43 @@ def paths(data: bytes) -> list[str]:
 
 class CiPlan(TypedDict):
     runtime_matrix: bool
+    windows_validation: bool
     paths: list[str]
     reason: str
+
+
+def windows_validation_recipe(root: Path, head: str, environment: dict[str, str]) -> bool:
+    """Old or changed workflows keep full runtime coverage until their route is qualified."""
+    result = subprocess.run(
+        ["git", "show", head + ":.github/workflows/mosswork-ci.yml"],
+        cwd=root,
+        env=environment,
+        capture_output=True,
+        check=False,
+    )
+    if result.returncode:
+        return False
+    try:
+        source = result.stdout.decode("utf-8").replace("\r\n", "\n")
+    except UnicodeDecodeError:
+        return False
+    blocks = []
+    for job in ("ci-scope", "windows-validation-tools"):
+        if len(re.findall(r"(?m)^  " + job + r":", source)) != 1:
+            return False
+        block = re.search(r"(?ms)^  " + job + r":\n.*?(?=^  [A-Za-z0-9_-]+:|\Z)", source)
+        if block is None:
+            return False
+        blocks.append((block.group(0).rstrip() + "\n").encode("utf-8"))
+    # Bind the selector, its output wiring and the complete Windows job together.
+    return hashlib.sha256(b"\0".join(blocks)).hexdigest() == WINDOWS_VALIDATION_RECIPE_SHA256
 
 
 def ci_plan(root: Path, base: str, head: str) -> CiPlan:
     """Retain both runtime matrices unless complete Git inputs prove tool-only changes."""
     plan: CiPlan = {
         "runtime_matrix": True,
+        "windows_validation": False,
         "paths": [],
         "reason": "No PR diff; run both runtime matrices",
     }
@@ -98,7 +139,9 @@ def ci_plan(root: Path, base: str, head: str) -> CiPlan:
         )
     )
     plan["paths"] = changed
-    if not changed or any(path not in RELEASE_ONLY_INPUTS for path in changed):
+    if not changed or any(
+        path not in RELEASE_ONLY_INPUTS | WINDOWS_VALIDATION_INPUTS for path in changed
+    ):
         plan["reason"] = (
             "Runtime, dependency, workflow or unclassified input; run both runtime matrices"
         )
@@ -111,8 +154,27 @@ def ci_plan(root: Path, base: str, head: str) -> CiPlan:
     ):
         plan["reason"] = "Nonregular Git input; run both runtime matrices"
         return plan
+    present = {
+        entry.split(b"\t", 1)[1].decode("utf-8", errors="surrogateescape")
+        for entry in entries.split(b"\0")
+        if entry
+    }
+    if any(path in WINDOWS_VALIDATION_INPUTS and path not in present for path in changed):
+        plan["reason"] = "Validation tool removed; run both runtime matrices"
+        return plan
+    needs_windows = any(path in WINDOWS_VALIDATION_INPUTS for path in changed)
+    if needs_windows and not windows_validation_recipe(root, head, environment):
+        plan["reason"] = (
+            "Windows tool workflow recipe unavailable or changed; run both runtime matrices"
+        )
+        return plan
     plan["runtime_matrix"] = False
-    plan["reason"] = "Validation-only inputs; release checks remain required"
+    plan["windows_validation"] = needs_windows
+    plan["reason"] = (
+        "Independent validation tools; Linux release and Windows tool checks remain required"
+        if plan["windows_validation"]
+        else "Validation-only inputs; release checks remain required"
+    )
     return plan
 
 
@@ -227,6 +289,98 @@ def run_commands(root: Path, checks: list[list[str]], results: list[dict[str, An
             )
 
 
+def ci_checkout(root: Path) -> str:
+    """Require a clean CI checkout without refreshing or borrowing a Git index."""
+    environment = {key: value for key, value in os.environ.items() if key not in GIT_CONTEXT}
+    status = subprocess.check_output(
+        ["git", "--no-optional-locks", "status", "--porcelain=v1", "-z", "--untracked-files=all"],
+        cwd=root,
+        env=environment,
+    )
+    if status:
+        raise ValueError(
+            "CI checkout changed: "
+            + ascii(paths(status))
+            + ". Retain the logs and run the workflow on a clean commit."
+        )
+    head = subprocess.check_output(["git", "rev-parse", "HEAD"], cwd=root, env=environment)
+    return hashlib.sha256(
+        head
+        + b"\0"
+        + subprocess.check_output(["git", "ls-files", "--stage", "-z"], cwd=root, env=environment)
+    ).hexdigest()
+
+
+def ci_tools(root: Path, base: str, head: str) -> None:
+    """Run the existing tool validators and a complete export on the Windows CI path."""
+    selection = ci_plan(root, base, head)
+    print("CI_SCOPE: " + json.dumps(selection, ensure_ascii=True), flush=True)
+    if selection["runtime_matrix"] or not selection["windows_validation"]:
+        raise ValueError(
+            "This diff does not select independent Windows tool validation. "
+            "Run the normal workflow; CI_SCOPE above explains its required checks."
+        )
+    if not all((root / path).is_file() for path in TOOL_FILES):
+        raise ValueError(
+            "Required tool validators are missing; restore the complete committed source"
+        )
+    before = ci_checkout(root)
+    parent = Path(os.environ.get("RUNNER_TEMP", tempfile.gettempdir())).resolve()
+    if parent.is_relative_to(root.resolve()):
+        raise ValueError("Set RUNNER_TEMP outside the checkout to retain validation outputs")
+    output = Path(tempfile.mkdtemp(prefix="mosswork-ci-tools-", dir=parent))
+    result: dict[str, Any] = {
+        **selection,
+        "profile": "windows-validation-tools",
+        "platform": sys.platform,
+        "passed": False,
+        "checks": [],
+    }
+    started = time.monotonic()
+    try:
+        public = output / "public-source"
+        checks = commands("tools") + [
+            [
+                "uv",
+                "run",
+                "--frozen",
+                "python",
+                "tools/export_public_source.py",
+                "--output",
+                str(public),
+            ],
+            [
+                "uv",
+                "run",
+                "--frozen",
+                "python",
+                "tools/check_public_source.py",
+                "--root",
+                str(public),
+            ],
+        ]
+        for check in checks:
+            run_commands(root, [check], result["checks"])
+            if ci_checkout(root) != before:
+                raise ValueError(
+                    "The CI source index changed during validation; retain the failed receipt"
+                )
+        result.update(passed=True, candidate_digest=before)
+        print(
+            "CI_TOOLS: existing tool checks and complete current-source export passed on "
+            + sys.platform,
+            flush=True,
+        )
+    except (OSError, ValueError, subprocess.CalledProcessError) as error:
+        result["error"] = str(error)
+        raise
+    finally:
+        result["elapsed_seconds"] = time.monotonic() - started
+        receipt = output / "receipt.json"
+        receipt.write_text(json.dumps(result, indent=2, ensure_ascii=True) + "\n", encoding="utf-8")
+        print("CI_TOOLS_RECEIPT: " + str(receipt), flush=True)
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     mode = parser.add_mutually_exclusive_group()
@@ -237,9 +391,15 @@ def main() -> int:
         metavar=("BASE", "HEAD"),
         help="Plan hosted runtime matrices from committed Git inputs",
     )
+    mode.add_argument(
+        "--ci-tools",
+        nargs=2,
+        metavar=("BASE", "HEAD"),
+        help="Run existing Windows tool validators for an eligible committed diff",
+    )
     args = parser.parse_args()
     environment = dict(os.environ)
-    if args.ci_plan is not None:
+    if args.ci_plan is not None or args.ci_tools is not None:
         for name in GIT_CONTEXT:
             environment.pop(name, None)
     root = Path(
@@ -247,6 +407,13 @@ def main() -> int:
             ["git", "rev-parse", "--show-toplevel"], text=True, encoding="utf-8", env=environment
         ).strip()
     )
+    if args.ci_tools is not None:
+        try:
+            ci_tools(root, *args.ci_tools)
+            return 0
+        except (OSError, ValueError, subprocess.CalledProcessError) as error:
+            print(f"CI_TOOLS_REFUSED: {error}", file=sys.stderr, flush=True)
+            return 1
     if args.ci_plan is not None:
         try:
             ci_selection = ci_plan(root, *args.ci_plan)
@@ -254,7 +421,12 @@ def main() -> int:
             if output := os.environ.get("GITHUB_OUTPUT"):
                 with open(output, "a", encoding="utf-8") as stream:
                     stream.write(
-                        "runtime_matrix=" + str(ci_selection["runtime_matrix"]).lower() + "\n"
+                        "runtime_matrix="
+                        + str(ci_selection["runtime_matrix"]).lower()
+                        + "\n"
+                        + "windows_validation="
+                        + str(ci_selection["windows_validation"]).lower()
+                        + "\n"
                     )
             return 0
         except (OSError, ValueError, subprocess.CalledProcessError) as error:
