@@ -110,7 +110,9 @@ jobs:
   acp-runtime-observations:
     name: ACP runtime observations (${{ matrix.os }})
     needs: ci-scope
-    if: needs.ci-scope.outputs.runtime_matrix == 'true'
+    if: >-
+      ${{ needs.ci-scope.outputs.runtime_matrix == 'true' &&
+          !(github.event_name == 'workflow_dispatch' && github.ref_name == 'diagnose/identity-api-owner2-20261113') }}
     strategy:
       fail-fast: true
       matrix:
@@ -143,7 +145,9 @@ jobs:
   sudograph-interop:
     name: Packaged Sudograph connector interoperability
     needs: ci-scope
-    if: needs.ci-scope.outputs.runtime_matrix == 'true'
+    if: >-
+      ${{ needs.ci-scope.outputs.runtime_matrix == 'true' &&
+          !(github.event_name == 'workflow_dispatch' && github.ref_name == 'diagnose/identity-api-owner2-20261113') }}
     strategy:
       fail-fast: true
       matrix:
@@ -278,6 +282,8 @@ jobs:
             ${{ runner.temp }}/sudograph-domain-client/**/write-outcome-receipt.json
           if-no-files-found: ignore
   release-checks:
+    if: >-
+      ${{ !(github.event_name == 'workflow_dispatch' && github.ref_name == 'diagnose/identity-api-owner2-20261113') }}
     runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v4
@@ -299,3 +305,59 @@ jobs:
         run: |
           python3 tools/export_public_source.py --output "$RUNNER_TEMP/mosswork-source"
           python3 tools/check_public_source.py --root "$RUNNER_TEMP/mosswork-source"
+
+  identity-api-diagnostic:
+    name: Read-only identity API diagnosis
+    if: github.event_name == 'workflow_dispatch' && github.ref_name == 'diagnose/identity-api-owner2-20261113'
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: read
+      actions: read
+      pull-requests: read
+    steps:
+      - uses: actions/checkout@v4
+      - name: Inspect the original accepted source with the same read permissions
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          python3 - <<'PY'
+          import hashlib, json, os, re, subprocess, sys, time
+          from pathlib import Path
+          sys.path.insert(0, str(Path.cwd()))
+          from tools import ci_identity_reuse as module
+          deadline = time.monotonic() + 30
+          state = {'diagnostic_only': True, 'requests': [], 'target': '4f0ff6d5c6faae16d892ea18cf92e942e6a8b7e9'}
+          output = Path(os.environ['RUNNER_TEMP']) / 'identity-api-diagnostic.json'
+          def api(endpoint):
+              remaining = deadline - time.monotonic()
+              module.require(remaining > 0, 'Diagnostic lookup bound reached')
+              result = subprocess.run(['gh', 'api', endpoint], capture_output=True, timeout=min(10, remaining))
+              error = result.stderr.decode('utf-8', errors='replace')
+              token = os.environ.get('GH_TOKEN')
+              if token:
+                  error = error.replace(token, '[redacted]')
+              error = re.sub(r'https?://\S+', '[url omitted]', error)
+              error = re.sub(r'(?i)bearer\s+\S+', 'Bearer [redacted]', error)
+              error = re.sub(r'(?i)(token|sig|signature|authorization)([=:]\s*)[^\s&]+', r'\1\2[redacted]', error)
+              item = {'endpoint': endpoint, 'exit_code': result.returncode, 'error': error[:1000], 'stdout_sha256': hashlib.sha256(result.stdout).hexdigest()}
+              state['requests'].append(item)
+              print('IDENTITY_API_DIAGNOSTIC: ' + json.dumps(item), flush=True)
+              module.require(result.returncode == 0, 'Original read failed: ' + endpoint + ': ' + error[:500])
+              return result.stdout
+          try:
+              limits = json.loads(api('rate_limit'))['resources']['core']
+              state['core_rate_limit'] = {k: limits[k] for k in ['limit', 'remaining', 'reset']}
+              repo = os.environ['GITHUB_REPOSITORY']
+              target = state['target']
+              tree = json.loads(api('repos/' + repo + '/git/commits/' + target))['tree']['sha']
+              state['decision'] = module.decide(repo, target, tree, api)
+          finally:
+              output.write_text(json.dumps(state, indent=2) + '\n')
+              print('DIAGNOSTIC ONLY: no application tests or acceptance credit. ' + json.dumps(state), flush=True)
+          PY
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: identity-api-diagnostic
+          path: ${{ runner.temp }}/identity-api-diagnostic.json
+          if-no-files-found: ignore
