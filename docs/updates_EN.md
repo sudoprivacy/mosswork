@@ -28,7 +28,13 @@ Web users can load newly deployed web code after refreshing. The employee client
 
 ## Employee client software upgrades
 
-Changes to the bundled interface, native bridge, Python/document/FFmpeg tool environment require a matching new installer from the administrator. Employees finish current tasks, install according to the release notes, and restart the program if needed.
+Stable company clients with the native updater check the official channel at startup and every six hours. You can also select **Check for updates** in the system tray's desktop settings, including before sign-in.
+
+When a new version is available, select **Download update**. Once the complete download passes SHA-256 verification, save unsent edits, select **Restart and install** and confirm. Checking and downloading do not quit the client. Running tasks, pending approvals, unresolved results and unsynced results block the restart; the verified download remains ready until those tasks are handled.
+
+An update replaces the whole native client, bundled interface and matching Python/document/FFmpeg environment. Account settings, working folders and saved task receipts are preserved. On macOS, move the application into a writable Applications folder before updating; do not update from a read-only installation image. The stable update targets are macOS 13+ ARM64 and Windows x64, selected by their actual architecture.
+
+Older clients without an updater need one manual installation of an updater-capable stable release. Complete native installers remain available for offline use.
 
 Publishers must build the web app, desktop shell and matching offline tool payload together, and publish architectures, checksums, signing and real-device verification status; see [Desktop builds](../desktop/README.md). The configuration-update channel cannot deliver new interface code or native programs.
 
@@ -36,4 +42,4 @@ Local projects stay in the employee working folder; before installing or upgradi
 
 ## Update sources
 
-Use the source and matching client for the corresponding version in this repository. `mosswork update` and the online update API are disabled in this distribution; upstream PyPI packages with the same name and personal-edition installers must not be used to upgrade the enterprise edition. Client interface assets are updated with the installer.
+Native clients use this repository's official COS stable channel. Startup and manual checks share one manifest; downloads stay pinned to the selected immutable release and its checksum. Server and Python package upgrades remain administrator-managed: `mosswork update` and the online update API stay disabled. Upstream PyPI packages with the same name and personal-edition installers must not replace the enterprise distribution.

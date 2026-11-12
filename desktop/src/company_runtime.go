@@ -79,6 +79,13 @@ func (a *App) dispatchRuntimeEvent(name string) {
 	}()
 }
 func (a *App) performRuntimeAction(nonce, base, method string, params json.RawMessage) (any, error) {
+	// Share the updater's admission fence with every native task action. The
+	// restart status check cannot race a start/approval/attachment operation.
+	a.updateGate.RLock()
+	defer a.updateGate.RUnlock()
+	if a.updateClosing.Load() {
+		return nil, errors.New("客户端即将更新，请在重启后继续操作")
+	}
 	a.companyMu.Lock()
 	if a.workspaceNonce != nonce || a.companyURL != base {
 		a.companyMu.Unlock()

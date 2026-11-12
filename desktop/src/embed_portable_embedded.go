@@ -1,4 +1,4 @@
-//go:build production && !darwin && !company
+//go:build production && !darwin && (!company || company_embedded)
 
 package main
 

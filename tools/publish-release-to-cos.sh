@@ -24,6 +24,7 @@ fi
 }
 
 ASSETS_DIR="$1"
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 RELEASE_TAG="$2"
 MODE="${3:---all}"
 COS_BUCKET="${COS_BUCKET:-sudowork-release-1309794936}"
@@ -80,6 +81,9 @@ for file_name in "${required_files[@]}"; do
 done
 
 (cd "$ASSETS_DIR" && sha256sum -c SHA256SUMS.txt)
+if [[ -f "$ASSETS_DIR/desktop-update.json" ]]; then
+  python3 "$SCRIPT_DIR/desktop_update_manifest.py" --directory "$ASSETS_DIR" --tag "$RELEASE_TAG" --verify
+fi
 
 COS_PUBLIC_BASE_URL="${COS_PUBLIC_BASE_URL%/}"
 RELEASE_PATH="$COS_ROOT_PATH/releases/$RELEASE_TAG"
@@ -161,21 +165,48 @@ upload_directory() {
 }
 
 publish_latest() {
-  local index
+  local index promotion
   verify_release "$RELEASE_URL"
+  if [[ -f "$ASSETS_DIR/desktop-update.json" ]]; then
+    for file in "$ASSETS_DIR/"*-update.exe "$ASSETS_DIR/"*-update.zip; do
+      [[ -f "$file" ]] || continue
+      verify_remote_content "$file" "$RELEASE_URL/${file##*/}"
+    done
+  fi
+  # A recovery on an older release must not downgrade already-updated clients.
+  # Both publisher workflows share one concurrency group for this check/promote.
+  promotion=0
+  python3 "$SCRIPT_DIR/desktop_update_manifest.py" --directory "$ASSETS_DIR" --tag "$RELEASE_TAG" \
+    --can-promote "$LATEST_URL/desktop-update.json" || promotion=$?
+  if [[ "$promotion" == 10 ]]; then
+    echo 'A newer desktop release is already current; latest remains unchanged.'
+    return
+  elif [[ "$promotion" != 0 ]]; then
+    echo 'FAIL: cannot verify the existing desktop update channel' >&2
+    return "$promotion"
+  fi
   echo "Publishing latest aliases to $LATEST_URL/"
   for file in "${asset_files[@]}"; do
     file_name="${file##*/}"
+    [[ "$file_name" == desktop-update.json ]] && continue
     coscmd upload -H "$LATEST_HEADERS" "$file" "$LATEST_PATH/$file_name"
   done
   for index in "${!latest_client_aliases[@]}"; do
     coscmd upload -H "$LATEST_HEADERS" \
       "$ASSETS_DIR/${latest_client_sources[$index]}" "$LATEST_PATH/${latest_client_aliases[$index]}"
   done
-  verify_release "$LATEST_URL"
+  # Publish the feed only after every immutable payload and installer alias is
+  # available. Feed URLs name the immutable release, never the changing aliases.
   for index in "${!latest_client_aliases[@]}"; do
     verify_remote_size "$ASSETS_DIR/${latest_client_sources[$index]}" "$LATEST_URL/${latest_client_aliases[$index]}" --download
   done
+  if [[ -f "$ASSETS_DIR/desktop-update.json" ]]; then
+    coscmd upload -H "$LATEST_HEADERS" "$ASSETS_DIR/desktop-update.json" "$LATEST_PATH/desktop-update.json"
+  fi
+  verify_release "$LATEST_URL"
+  if [[ -f "$ASSETS_DIR/desktop-update.json" ]]; then
+    verify_remote_content "$ASSETS_DIR/desktop-update.json" "$LATEST_URL/desktop-update.json"
+  fi
 }
 
 case "$MODE" in

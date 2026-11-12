@@ -1,0 +1,14 @@
+[
+  {
+    "platform": "darwin",
+    "arch": "arm64",
+    "artifact_platform": "macos",
+    "extension": "zip"
+  },
+  {
+    "platform": "windows",
+    "arch": "amd64",
+    "artifact_platform": "windows",
+    "extension": "exe"
+  }
+]

@@ -1,0 +1,61 @@
+name: Native desktop updates
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - 'desktop/src/**'
+      - 'desktop/package-company.py'
+      - 'desktop/tests/**'
+      - 'tools/desktop_update_manifest.py'
+      - 'tools/publish-release-to-cos.sh'
+      - 'tests/unit/deployment/test_desktop_update_manifest.py'
+      - 'tests/unit/deployment/test_release_cos.py'
+      - '.github/workflows/mosswork-desktop-update.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: native-updates-${{ github.event.pull_request.number || github.run_id }}
+  cancel-in-progress: true
+
+jobs:
+  native-update:
+    name: Native update and restart (${{ matrix.os }})
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-24.04, windows-2022, macos-15]
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: desktop/src/go.mod
+          cache-dependency-path: desktop/src/go.sum
+      - name: Exercise actual HTTP discovery, refusal controls, native swap and relaunch
+        working-directory: desktop/src
+        run: go test ./internal/desktopupdate -count=1 -v
+      - uses: actions/setup-node@v4
+        if: runner.os != 'Linux'
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: dashboard/package-lock.json
+      - name: Install pinned native UI test dependencies
+        if: runner.os != 'Linux'
+        working-directory: dashboard
+        run: npm ci --no-audit --replace-registry-host=never
+      - name: Build native login assets and test the actual update UI
+        if: runner.os != 'Linux'
+        run: |
+          node desktop/login/build.mjs
+          python desktop/build-dashboard.py
+          node --test desktop/tests/desktop-update.test.mjs
+      - name: Check native restart task admission and packaged-runtime selection
+        if: runner.os != 'Linux'
+        working-directory: desktop/src
+        run: go test -tags company . -count=1 -v

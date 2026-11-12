@@ -83,7 +83,7 @@ class CompanyPackageTest(unittest.TestCase):
                     "arch": "arm64",
                     "protocol_version": 1,
                     "harness_version": "1.0.0",
-                    "component_versions": {name: "1.0.0" for name in module.LOCAL_COMPONENTS},
+                    "component_versions": dict.fromkeys(module.LOCAL_COMPONENTS, "1.0.0"),
                     "mosswork_version": "1.0.0",
                     "smoke_test_passed": True,
                     "file_hashes": {
@@ -180,8 +180,19 @@ def test_single_arch_build_needs_only_its_own_payload(
     output = tmp_path / "release"
     commands, payloads = [], []
 
-    def run(*args, cwd, env=None):
+    def run(*args, cwd, env=None, capture_output=False):
         commands.append((args, env))
+        if len(args) > 1 and args[1] == "--verify-update-payload":
+            assert capture_output
+            assert str(tmp_path / "build-company/native-verification") in env["MOSSWORK_HOME"]
+            return json.dumps(
+                {
+                    "client_version": "1.0.1b2",
+                    "runtime_version": "1.0.1b2",
+                    "platform": platform,
+                    "arch": arch,
+                }
+            )
         if args[0] == "go":
             Path(args[args.index("-o") + 1]).write_bytes(b"shell")
         elif args[:3] == ("wails3", "generate", "icons"):
@@ -195,6 +206,8 @@ def test_single_arch_build_needs_only_its_own_payload(
                 if str(a).lstrip("-/").startswith("DINSTALLER_OUTFILE=")
             )
             Path(name).write_bytes(b"exe")
+        elif args[0] == "ditto":
+            Path(args[-1]).write_bytes(b"whole signed app archive")
 
     def payload(source, destination, target_platform, target_arch):
         payloads.append((target_platform, target_arch))
@@ -205,6 +218,7 @@ def test_single_arch_build_needs_only_its_own_payload(
     monkeypatch.setattr(module, "__file__", str(root / "desktop/package-company.py"))
     monkeypatch.setattr(module, "release_identity", lambda: {"source_commit": "fixture"})
     monkeypatch.setattr(module, "run", run)
+    monkeypatch.setattr(module, "host_target", lambda: (platform, arch))
     monkeypatch.setattr(module, "package_runtime", payload)
     monkeypatch.setattr(
         module.sys,
@@ -227,8 +241,18 @@ def test_single_arch_build_needs_only_its_own_payload(
     assert payloads == [(platform, arch)]
     assert [env["GOARCH"] for args, env in commands if args[0] == "go"] == [arch]
     assert not any(args[0] == "lipo" for args, _ in commands)
-    assert len(list(output.glob("*" + extension))) == 1
-    assert arch in next(output.glob("*" + extension)).name
+    installers = [p for p in output.glob("*" + extension) if not p.name.endswith("-update.exe")]
+    assert len(installers) == 1
+    assert arch in installers[0].name
+    assert all(
+        "-X main.desktopVersion=1.0.1b2" in str(args) for args, _ in commands if args[0] == "go"
+    )
+    updates = list(output.glob("*-update.*"))
+    assert len(updates) == 1
+    if platform == "windows":
+        assert updates[0].read_bytes() == b"shell"
+        assert not any("MOSSWORK_COMPANY_RUNTIME_ZIP=" in str(args) for args, _ in commands)
+        assert (output.parent / "build-company/src/bundled/portable.zip").is_file()
 
 
 def test_exported_source_identity_does_not_require_git(tmp_path, monkeypatch):
