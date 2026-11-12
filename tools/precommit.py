@@ -65,7 +65,7 @@ WINDOWS_VALIDATION_INPUTS = frozenset(
     }
 )
 WINDOWS_VALIDATION_RECIPE_SHA256 = (
-    "2bed787f7feae2be4370346ed2f89ddf8f65b9afba77ffb0872c0ccdc56df4c2"
+    "cbfd17e028eda7dee7cca69d1fa01c38dd8ac93246cdd1f7ea2b582cc07b1856"
 )
 
 
@@ -100,14 +100,14 @@ def windows_validation_recipe(root: Path, head: str, environment: dict[str, str]
     except UnicodeDecodeError:
         return False
     blocks = []
-    for job in ("ci-scope", "windows-validation-tools"):
+    for job in ("ci-scope", "windows-validation-tools", "release-checks"):
         if len(re.findall(r"(?m)^  " + job + r":", source)) != 1:
             return False
         block = re.search(r"(?ms)^  " + job + r":\n.*?(?=^  [A-Za-z0-9_-]+:|\Z)", source)
         if block is None:
             return False
         blocks.append((block.group(0).rstrip() + "\n").encode("utf-8"))
-    # Bind the selector, its output wiring and the complete Windows job together.
+    # Bind the selector, its output wiring and both complete tool jobs together.
     return hashlib.sha256(b"\0".join(blocks)).hexdigest() == WINDOWS_VALIDATION_RECIPE_SHA256
 
 
@@ -318,7 +318,7 @@ def ci_checkout(root: Path) -> str:
 
 
 def ci_tools(root: Path, base: str, head: str) -> None:
-    """Run the existing tool validators and a complete export on the Windows CI path."""
+    """Run the existing tool validators and a complete export on the selected CI platform."""
     selection = ci_plan(root, base, head)
     print("CI_SCOPE: " + json.dumps(selection, ensure_ascii=True), flush=True)
     if selection["runtime_matrix"] or not selection["windows_validation"]:
@@ -337,7 +337,11 @@ def ci_tools(root: Path, base: str, head: str) -> None:
     output = Path(tempfile.mkdtemp(prefix="mosswork-ci-tools-", dir=parent))
     result: dict[str, Any] = {
         **selection,
-        "profile": "windows-validation-tools",
+        "profile": (
+            "windows-validation-tools"
+            if sys.platform == "win32"
+            else sys.platform + "-validation-tools"
+        ),
         "platform": sys.platform,
         "passed": False,
         "checks": [],
