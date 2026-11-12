@@ -205,7 +205,7 @@ module = "octop.infra.utils.subprocess_io_win"
 disable_error_code = ["attr-defined"]
 
 [tool.pytest.ini_options]
-addopts = "--maxfail=1 --maxschedchunk=1"
+addopts = "--maxfail=1 --maxschedchunk=1 --failed-first --new-first"
 testpaths = ["tests"]
 asyncio_mode = "auto"
 markers = [
