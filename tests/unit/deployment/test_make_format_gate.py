@@ -163,6 +163,7 @@ else:
         before, index = snapshot(), git("ls-files", "--stage", "-z")
         positive, calls = run(target, problem + "-qualified")
         assert positive.returncode == 0, positive.stdout + positive.stderr
+        assert "available fixes" not in positive.stdout + positive.stderr
         assert snapshot() == before and git("ls-files", "--stage", "-z") == index
         assert ["mypy", "src/octop"] in [row["args"] for row in calls]
         pytest_args = [row["args"] for row in calls if row["args"][:1] == ["pytest"]]
@@ -185,5 +186,6 @@ else:
     git("add", ".")
     failure, calls = run(target, "original-test-failure")
     assert failure.returncode != 0, failure.stdout + failure.stderr
+    assert "available fixes" not in failure.stdout + failure.stderr
     assert any(row["args"][:1] == ["pytest"] for row in calls)
     assert "assert 7 == 999" in failure.stdout + failure.stderr
