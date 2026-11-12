@@ -38,7 +38,12 @@ def require(condition: Any, reason: str) -> None:
 
 def checkout_commit(log: bytes) -> str:
     """Read checkout's original command output, before test-owned Git commands."""
-    lines = log.decode("utf-8").splitlines()
+    text = log.decode("utf-8")
+    require(
+        not any((ord(c) < 32 and c not in "\t\n\r") or 127 <= ord(c) <= 159 for c in text),
+        "Checkout metadata contains terminal control data; run the complete matrix",
+    )
+    lines = text.splitlines()
     for index, line in enumerate(lines):
         if "[command]" in line and " log -1 --format=%H" in line:
             for following in lines[index + 1 : index + 4]:
@@ -128,7 +133,22 @@ def prove(repository: str, commit: str, tree: str, api: Api) -> dict[str, Any]:
             )
         job_id = int(job["id"])
         require(job_id > 0, "Invalid original job ID")
-        log = api(prefix + f"actions/jobs/{job_id}/logs")
+        checkout_steps = [
+            step for step in job.get("steps", []) if step.get("name") == "Run actions/checkout@v4"
+        ]
+        require(len(checkout_steps) == 1, "Missing or ambiguous original checkout step")
+        checkout = checkout_steps[0]
+        step_number = checkout.get("number")
+        require(
+            checkout.get("status") == "completed"
+            and checkout.get("conclusion") == "success"
+            and type(step_number) is int
+            and step_number > 0,
+            "The original checkout step did not complete successfully",
+        )
+        # Request only the required source metadata. Full job logs include test
+        # terminal controls which current gh correctly refuses to render.
+        log = api(prefix + f"actions/jobs/{job_id}/steps/{step_number}/logs")
         require(len(log) <= 4 * 1024 * 1024, "The original job log exceeds the proof bound")
         actual = checkout_commit(log)
         if actual not in trees:
@@ -141,6 +161,7 @@ def prove(repository: str, commit: str, tree: str, api: Api) -> dict[str, Any]:
             {
                 "platform": platform,
                 "job": job_id,
+                "checkoutStep": step_number,
                 "checkout": actual,
                 "tree": trees[actual],
                 "originalLogSHA256": hashlib.sha256(log).hexdigest(),
@@ -185,10 +206,17 @@ def main() -> int:
             raise Unavailable(
                 "GitHub proof lookup unavailable; run the original complete matrix"
             ) from error
-        require(
-            request.returncode == 0,
-            "GitHub proof lookup failed; run the original complete matrix",
-        )
+        if request.returncode:
+            detail = request.stderr.decode("utf-8", errors="replace")
+            if "terminal escape sequences" in detail:
+                reason = "GitHub CLI refused terminal control data"
+            elif status := re.search(r"HTTP ([0-9]{3})", detail):
+                reason = "GitHub read returned HTTP " + status.group(1)
+            else:
+                reason = "GitHub proof lookup failed"
+            # Print the constructed API path and status, never response data,
+            # credentials or a temporary signed download URL from stderr.
+            raise Unavailable(reason + " for " + endpoint + "; run the original complete matrix")
         return request.stdout
 
     try:

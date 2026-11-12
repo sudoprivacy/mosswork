@@ -607,7 +607,7 @@ def test_ci_tools_real_processes_preserve_parent_index_and_stop_after_failure(
         with pytest.raises(ValueError, match="exited 7|checkout changed"):
             gate.ci_tools(repo, base, head)
     calls = [json.loads(line) for line in log.read_text(encoding="utf-8").splitlines()]
-    assert len(calls) == (5 if outcome == "success" else 1)
+    assert len(calls) == (6 if outcome == "success" else 1)
     receipts = list(output.glob("mosswork-ci-tools-*/receipt.json"))
     assert len(receipts) == 1
     receipt = json.loads(receipts[0].read_text(encoding="utf-8"))
