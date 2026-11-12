@@ -49,10 +49,28 @@ permissions:
   contents: read
 
 jobs:
+  ci-scope:
+    name: CI input scope
+    runs-on: ubuntu-24.04
+    outputs:
+      runtime_matrix: ${{ steps.scope.outputs.runtime_matrix }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 2
+      - name: Select runtime matrices from committed inputs
+        id: scope
+        env:
+          CI_BASE: ${{ github.event.pull_request.base.sha }}
+          CI_HEAD: ${{ github.event.pull_request.head.sha }}
+        run: python3 tools/precommit.py --ci-plan "$CI_BASE" "$CI_HEAD"
+
   acp-runtime-observations:
     name: ACP runtime observations (${{ matrix.os }})
+    needs: ci-scope
+    if: needs.ci-scope.outputs.runtime_matrix == 'true'
     strategy:
-      fail-fast: false
+      fail-fast: true
       matrix:
         os: [ubuntu-24.04, windows-2022, macos-15]
     runs-on: ${{ matrix.os }}
@@ -82,8 +100,10 @@ jobs:
 
   sudograph-interop:
     name: Packaged Sudograph connector interoperability
+    needs: ci-scope
+    if: needs.ci-scope.outputs.runtime_matrix == 'true'
     strategy:
-      fail-fast: false
+      fail-fast: true
       matrix:
         os: [ubuntu-24.04, windows-2022]
     runs-on: ${{ matrix.os }}
