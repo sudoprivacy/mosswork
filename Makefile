@@ -32,7 +32,7 @@ PIP  := $(if $(UV),uv pip,python3 -m pip)
 PYTEST_JOBS ?= auto
 # The shared pytest defaults also cover direct CI invocations.
 PYTEST_FAILURE_MESSAGE := stop after first failure; in-flight tests finish. For all failures: PYTEST_ADDOPTS=--maxfail=0
-FORMAT_GATE_MESSAGE := Fix formatting with: make format-all. Refresh staged/frozen inputs, then rerun this gate.
+FORMAT_GATE_MESSAGE := Resolve the reported lint/format errors. Run make format-all for available fixes; refresh staged/frozen inputs, then rerun this gate.
 
 # ─── Help ────────────────────────────────────────────────────────────────────
 
@@ -182,8 +182,8 @@ run-online:
 
 .PHONY: all
 all:
-	@echo "[all] $(FORMAT_GATE_MESSAGE)"
-	$(MAKE) lint format-check-frontend
+	@echo "[all] Checking backend lint and frontend formatting before validation..."
+	@$(MAKE) lint format-check-frontend || { echo "[all] $(FORMAT_GATE_MESSAGE)"; exit 1; }
 	$(MAKE) typecheck
 	$(MAKE) test
 
@@ -227,8 +227,8 @@ test-live:
 # feedback only, so a missed cross-module impact is caught there.
 .PHONY: precommit
 precommit:
-	@echo "[precommit] $(FORMAT_GATE_MESSAGE)"
-	$(MAKE) lint format-check-frontend
+	@echo "[precommit] Checking backend lint and frontend formatting before validation..."
+	@$(MAKE) lint format-check-frontend || { echo "[precommit] $(FORMAT_GATE_MESSAGE)"; exit 1; }
 	$(MAKE) typecheck
 	$(MAKE) test-affected
 
