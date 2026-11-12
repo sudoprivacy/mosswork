@@ -1,6 +1,6 @@
 """Run independent documentation/tool checks, or request the legacy full gate.
 
-Exit 3 means the shell hook must execute its existing make/frontend checks.
+Exit 3 means the caller must execute its existing application checks.
 Validation failures always exit 1 and must never select that fallback.
 """
 
@@ -290,9 +290,26 @@ def assert_staged_content(root: Path, changed: list[str]) -> None:
         )
 
 
-def commands(selected: str) -> list[list[str]]:
+def commands(selected: str, changed: list[str] | None = None) -> list[list[str]]:
     if selected != "tools":
         return []
+    tests = [
+        "tests/unit/deployment/test_precommit.py",
+        "tests/unit/deployment/test_export_public_source.py",
+        "tests/unit/deployment/test_ci_identity_reuse.py",
+    ]
+    if changed is None or set(changed) & {
+        "Makefile",
+        "tools/precommit.py",
+        ".githooks/pre-commit",
+        ".github/workflows/mosswork-ci.yml",
+        "tests/unit/deployment/test_make_format_gate.py",
+        "tests/unit/deployment/test_make_testmon.py",
+    }:
+        tests += [
+            "tests/unit/deployment/test_make_format_gate.py",
+            "tests/unit/deployment/test_make_testmon.py",
+        ]
     return [
         ["uv", "run", "--frozen", "ruff", "check", *TOOL_FILES],
         ["uv", "run", "--frozen", "ruff", "format", "--check", *TOOL_FILES],
@@ -302,11 +319,7 @@ def commands(selected: str) -> list[list[str]]:
             "run",
             "--frozen",
             "pytest",
-            "tests/unit/deployment/test_precommit.py",
-            "tests/unit/deployment/test_export_public_source.py",
-            "tests/unit/deployment/test_ci_identity_reuse.py",
-            "tests/unit/deployment/test_make_format_gate.py",
-            "tests/unit/deployment/test_make_testmon.py",
+            *tests,
             "-q",
         ],
     ]
@@ -401,7 +414,7 @@ def ci_tools(root: Path, base: str, head: str) -> None:
     started = time.monotonic()
     try:
         public = output / "public-source"
-        checks = commands("tools") + [
+        checks = commands("tools", selection["paths"]) + [
             [
                 "uv",
                 "run",
@@ -524,7 +537,11 @@ def main() -> int:
             except ValueError as error:
                 selected = "full"
                 reason = str(error) + "; retain full application checks"
-    plan: dict[str, Any] = {"profile": selected, "paths": changed, "commands": commands(selected)}
+    plan: dict[str, Any] = {
+        "profile": selected,
+        "paths": changed,
+        "commands": commands(selected, changed),
+    }
     if args.worktree:
         plan.update(baseline=baseline, scope="complete-branch-and-worktree", reason=reason)
     if selected == "full":
@@ -581,7 +598,7 @@ def main() -> int:
             raise ValueError("\n".join(errors))
         if changed:
             result["checks"].append({"name": "documentation and expert references", "passed": True})
-        run_commands(root, commands(selected), result["checks"])
+        run_commands(root, commands(selected, changed), result["checks"])
         if args.worktree:
             if worktree_inputs(root) != snapshot:
                 raise ValueError(

@@ -233,7 +233,9 @@ def test_candidate_change_during_real_validation_is_refused(repo, tmp_path, monk
     )
     monkeypatch.chdir(repo)
     monkeypatch.setattr(sys, "argv", ["precommit.py"])
-    monkeypatch.setattr(gate, "commands", lambda _selected: [[sys.executable, str(child)]])
+    monkeypatch.setattr(
+        gate, "commands", lambda _selected, _changed=None: [[sys.executable, str(child)]]
+    )
     assert gate.main() == 1
     receipt = json.loads((repo / ".git/mosswork-precommit.json").read_text(encoding="utf-8"))
     assert receipt["passed"] is False and "candidate changed" in receipt["error"]
@@ -715,6 +717,7 @@ def test_unstaged_tool_symlink_cannot_reuse_regular_index_mode(repo: Path) -> No
     "case,expected",
     [
         ("tool", "tools"),
+        ("make", "tools"),
         ("docs", "docs"),
         ("missing-base", "full"),
         ("clean", "full"),
@@ -730,11 +733,14 @@ def test_actual_worktree_cli_plans_complete_sources_without_borrowing_index(
     seed_tool_worktree(repo)
     if case == "missing-base":
         git(repo, "update-ref", "-d", "refs/remotes/origin/main")
-    if case not in {"clean", "docs"}:
+    if case not in {"clean", "docs", "make"}:
         path = "tools/ci_identity_reuse.py"
         stage(repo, path, (repo / path).read_text(encoding="utf-8") + "\n# tool change\n")
     if case == "docs":
         stage(repo, "docs/new.md", "# Documentation\n")
+    if case == "make":
+        path = "Makefile"
+        stage(repo, path, (repo / path).read_text(encoding="utf-8") + "\n# Changed Make entry\n")
     if case == "unstaged-runtime":
         stage(repo, "src/app.py")
         ci_commit(repo, "runtime baseline in branch")
@@ -765,6 +771,12 @@ def test_actual_worktree_cli_plans_complete_sources_without_borrowing_index(
     plan = json.loads(result.stdout)
     assert plan["profile"] == expected
     assert plan["scope"] == "complete-branch-and-worktree"
+    if case in {"tool", "make"}:
+        test_command = next(argv for argv in plan["commands"] if "pytest" in argv)
+        assert ("tests/unit/deployment/test_make_format_gate.py" in test_command) is (
+            case == "make"
+        )
+        assert ("tests/unit/deployment/test_make_testmon.py" in test_command) is (case == "make")
     if expected == "full":
         assert plan["delegated_commands"] == [
             {"cwd": ".", "argv": ["make", "validate-application"]}
