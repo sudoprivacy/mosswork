@@ -68,7 +68,7 @@ WINDOWS_VALIDATION_INPUTS = frozenset(
     }
 )
 WINDOWS_VALIDATION_RECIPE_SHA256 = (
-    "cbfd17e028eda7dee7cca69d1fa01c38dd8ac93246cdd1f7ea2b582cc07b1856"
+    "41b55b2ba8bfd1a51174085ed12040bac0c42df5ec985b2ad8cae51fc0d68a2e"
 )
 
 
@@ -83,8 +83,38 @@ def paths(data: bytes) -> list[str]:
 class CiPlan(TypedDict):
     runtime_matrix: bool
     windows_validation: bool
+    validator_regressions: bool
     paths: list[str]
     reason: str
+
+
+def validator_regressions_required(
+    root: Path, head: str, changed: list[str], environment: dict[str, str]
+) -> bool:
+    """Pure product Python payloads do not change the private validator fixtures."""
+    if not changed:
+        return True
+    for name in changed:
+        path = PurePosixPath(name)
+        product = name.startswith("src/octop/") or (
+            len(path.parts) >= 4 and path.parts[0] == "packages" and path.parts[2] == "src"
+        )
+        product_test = name.startswith(("tests/unit/", "tests/integration/")) and (
+            not name.startswith("tests/unit/deployment/") and path.name.startswith("test_")
+        )
+        if path.suffix != ".py" or path.name == "conftest.py" or not (product or product_test):
+            return True
+    entries = subprocess.check_output(
+        ["git", "ls-tree", "-rz", head, "--", *changed], cwd=root, env=environment
+    ).split(b"\0")
+    present = set()
+    for entry in entries:
+        if not entry:
+            continue
+        if not entry.startswith((b"100644 ", b"100755 ")):
+            return True
+        present.add(entry.split(b"\t", 1)[1].decode("utf-8", errors="surrogateescape"))
+    return present != set(changed)
 
 
 def windows_validation_recipe(root: Path, head: str, environment: dict[str, str]) -> bool:
@@ -119,6 +149,7 @@ def ci_plan(root: Path, base: str, head: str) -> CiPlan:
     plan: CiPlan = {
         "runtime_matrix": True,
         "windows_validation": False,
+        "validator_regressions": True,
         "paths": [],
         "reason": "No PR diff; run both runtime matrices",
     }
@@ -146,6 +177,7 @@ def ci_plan(root: Path, base: str, head: str) -> CiPlan:
         )
     )
     plan["paths"] = changed
+    plan["validator_regressions"] = validator_regressions_required(root, head, changed, environment)
     if not changed or any(
         path not in RELEASE_ONLY_INPUTS | WINDOWS_VALIDATION_INPUTS for path in changed
     ):
@@ -510,6 +542,8 @@ def main() -> int:
                         + "\n"
                         + "windows_validation="
                         + str(ci_selection["windows_validation"]).lower()
+                        + "\nvalidator_regressions="
+                        + str(ci_selection["validator_regressions"]).lower()
                         + "\n"
                     )
             return 0
