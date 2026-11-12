@@ -5,12 +5,25 @@ from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import AsyncMock
 
+import httpx
 import pytest
 from langchain_core.messages import AIMessageChunk, HumanMessage, ToolMessage
 
-from octop.infra.company_runtime.client import RemoteCheckpointSaver
+from octop.infra.company_runtime.client import CompanyClient, RemoteCheckpointSaver
 from octop.infra.company_runtime.local import ProjectBackend
 from octop.infra.company_runtime.runtime import EnterpriseRuntime
+from tests.support.http import serve_http
+
+
+@pytest.fixture
+async def streaming_company(company):
+    server, client, credentials, owner = company
+    async with serve_http(client.http._transport.app) as origin:
+        streaming_client = CompanyClient(origin, credentials[0])
+        try:
+            yield server, streaming_client, credentials, owner
+        finally:
+            await streaming_client.close()
 
 
 class ToolModel:
@@ -69,6 +82,167 @@ async def acquire(client, task="task1", thread="thread1"):
             "installation_token": "i" * 32,
         },
     )
+
+
+@pytest.mark.parametrize("disconnect", [False, True])
+async def test_input_is_published_before_model_and_retried_without_replay(
+    company, tmp_path, monkeypatch, disconnect
+):
+    from tests.unit.company_runtime.test_resilience import runtime_for
+
+    server, client, _, _ = company
+    install_agent(server)
+    runtime, _events = runtime_for(client, tmp_path)
+    entered, release = asyncio.Event(), asyncio.Event()
+    attempts = 0
+    model_calls = 0
+    send = client.http.send
+
+    async def send_event(request, *args, **kwargs):
+        nonlocal attempts
+        if request.url.path.endswith("/events") and json.loads(request.content)["seq"] == 1:
+            attempts += 1
+            if disconnect and attempts == 1:
+                raise httpx.ReadError("input delivery disconnected", request=request)
+        return await send(request, *args, **kwargs)
+
+    class Model:
+        def bind_tools(self, _tools):
+            return self
+
+        async def astream(self, _messages):
+            nonlocal model_calls
+            model_calls += 1
+            entered.set()
+            await release.wait()
+            yield AIMessageChunk(content="Finished once", id="answer")
+
+    monkeypatch.setattr(client.http, "send", send_event)
+    server.app_runtime.agent_registry.get_agent("expert").model_factory.get_chat_model = (
+        lambda _ref: Model()
+    )
+    try:
+        await runtime.start(
+            {
+                "task_id": "input-task",
+                "thread_id": "thread1",
+                "agent_id": "expert",
+                "text": "Keep this accepted question",
+            }
+        )
+        work = runtime.work["thread1"]
+        await asyncio.wait_for(entered.wait(), 30)
+        assert attempts == 1
+        rows, _ = server.services.thread_message_repo.page("thread1", limit=100)
+        if disconnect:
+            assert rows == []
+            assert list((runtime.state / "tasks/input-task/pending").glob("*.json"))
+        else:
+            assert [(row.message_id, row.role) for row in rows] == [("input-task_user", "human")]
+            assert (
+                json.loads(rows[0].message_json)["data"]["content"] == "Keep this accepted question"
+            )
+        release.set()
+        await asyncio.wait_for(work, 30)
+        assert runtime.tasks["thread1"]["status"] == "completed"
+        assert runtime.tasks["thread1"]["sync_state"] == "synced"
+        assert model_calls == 1
+        assert attempts == (2 if disconnect else 1)
+        rows, _ = server.services.thread_message_repo.page("thread1", limit=100)
+        assert [row.message_id for row in rows].count("input-task_user") == 1
+        assert not list((runtime.state / "tasks/input-task/pending").glob("*.json"))
+    finally:
+        release.set()
+        await runtime.close()
+
+
+@pytest.mark.parametrize("checkpoint_read_fails", [False, True])
+async def test_cancelled_visible_text_survives_history_reload_and_the_next_turn(
+    streaming_company, tmp_path, monkeypatch, checkpoint_read_fails
+):
+    from octop.infra.company_runtime.runtime import HarnessAgent
+    from tests.unit.company_runtime.test_resilience import runtime_for
+
+    server, client, _, _ = streaming_company
+    install_agent(server)
+    runtime, events = runtime_for(client, tmp_path)
+    visible = asyncio.Event()
+    emit = runtime.emit
+
+    def publish(event):
+        emit(event)
+        if event.get("data", {}).get("content") == "Visible partial answer":
+            visible.set()
+
+    runtime.emit = publish
+
+    class PartialModel(ToolModel):
+        async def astream(self, messages):
+            if any(isinstance(message, ToolMessage) for message in messages):
+                yield AIMessageChunk(content="Visible partial answer", id="partial")
+                await asyncio.Event().wait()
+            else:
+                async for chunk in super().astream(messages):
+                    yield chunk
+
+    agent = server.app_runtime.agent_registry.get_agent("expert")
+    agent.model_factory.get_chat_model = lambda _ref: PartialModel()
+    try:
+        await runtime.start(
+            {
+                "task_id": "partial-task",
+                "thread_id": "thread1",
+                "agent_id": "expert",
+                "text": "Start a report",
+            }
+        )
+        work = runtime.work["thread1"]
+        await asyncio.wait_for(visible.wait(), 30)
+        with monkeypatch.context() as patch:
+            if checkpoint_read_fails:
+                patch.setattr(
+                    HarnessAgent,
+                    "aget_history",
+                    AsyncMock(side_effect=OSError("checkpoint read failed")),
+                )
+            await runtime.cancel({"thread_id": "thread1"})
+            await asyncio.wait_for(work, 30)
+        assert runtime.tasks["thread1"]["status"] == "cancelled"
+        assert events[-1]["sync_state"] == "synced"
+
+        class NextModel(ToolModel):
+            async def astream(self, messages):
+                # A display-only interrupted fragment must not alter graph state.
+                assert all(message.content != "Visible partial answer" for message in messages)
+                async for chunk in super().astream(messages):
+                    yield chunk
+
+        agent.model_factory.get_chat_model = lambda _ref: NextModel()
+        for after_next_turn in (False, True):
+            if after_next_turn:
+                await runtime.start(
+                    {
+                        "task_id": "next-task",
+                        "thread_id": "thread1",
+                        "agent_id": "expert",
+                        "text": "Continue the report",
+                    }
+                )
+                await asyncio.wait_for(runtime.work["thread1"], 30)
+                assert runtime.tasks["thread1"]["status"] == "completed"
+            rows, _ = server.services.thread_message_repo.page("thread1", limit=100)
+            texts = [json.loads(row.message_json)["data"]["content"] for row in rows]
+            assert texts.count("Visible partial answer") == 1
+            assert texts.count("Start a report") == 1
+            if after_next_turn:
+                assert (
+                    texts.index("Start a report")
+                    < texts.index("Visible partial answer")
+                    < texts.index("Continue the report")
+                )
+            assert (runtime.workspace / "thread1/report.txt").read_text() == "local report 42"
+    finally:
+        await runtime.close()
 
 
 @pytest.mark.asyncio

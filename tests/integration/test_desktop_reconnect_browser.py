@@ -13,15 +13,12 @@ import json
 import mimetypes
 import os
 import re
-import socket
 import time
-from contextlib import nullcontext
 from pathlib import Path
 from types import SimpleNamespace
 from urllib.parse import urlsplit
 
 import pytest
-import uvicorn
 from langchain_core.messages import AIMessageChunk, ToolMessage
 from playwright.async_api import Error as PlaywrightError
 from playwright.async_api import async_playwright, expect
@@ -30,6 +27,7 @@ from octop.infra.company_runtime import runtime as runtime_module
 from octop.infra.company_runtime.client import CompanyClient
 from tests.support.app import mosswork_client, write_mosswork_config
 from tests.support.auth import auth_header, bootstrap_admin
+from tests.support.http import serve_http
 from tests.unit.company_runtime.test_memory_approvals import native_runtime
 
 pytestmark = [
@@ -55,34 +53,11 @@ async def env(tmp_mosswork_home):
 
 
 @pytest.fixture
-async def company_origin(env_with_agent, monkeypatch):
+async def company_origin(env_with_agent):
     """Use real HTTP so SSE deltas arrive before the model response completes."""
     client, _, _, _ = env_with_agent
-    with socket.socket() as listener:
-        listener.bind(("127.0.0.1", 0))
-        listener.listen()
-        host, port = listener.getsockname()
-        server = uvicorn.Server(
-            uvicorn.Config(
-                client._mosswork_app,
-                lifespan="off",
-                log_level="warning",
-                access_log=False,
-                timeout_graceful_shutdown=5,
-            )
-        )
-        monkeypatch.setattr(server, "capture_signals", nullcontext)
-        task = asyncio.create_task(server.serve(sockets=[listener]))
-        try:
-            async with asyncio.timeout(10):
-                while not server.started:
-                    if task.done():
-                        task.result()
-                    await asyncio.sleep(0.01)
-            yield f"http://{host}:{port}"
-        finally:
-            server.should_exit = True
-            await asyncio.wait_for(task, 10)
+    async with serve_http(client._mosswork_app) as origin:
+        yield origin
 
 
 async def test_built_desktop_chat_reconnect_and_cancel(
@@ -308,6 +283,9 @@ async def test_built_desktop_chat_reconnect_and_cancel(
             await expect(page.locator("textarea").first).to_be_visible(timeout=30000)
             stop = page.get_by_role("button", name=re.compile(r"^(Stop|停止)$"))
             await expect(stop).to_be_visible(timeout=30000)
+            await expect(
+                page.get_by_text("Continue the browser acceptance report", exact=True)
+            ).to_have_count(1)
             await page.evaluate(
                 "event => window.acceptanceEmit(event)",
                 {
@@ -348,6 +326,14 @@ async def test_built_desktop_chat_reconnect_and_cancel(
             assert runtime.tasks[thread_id]["status"] == "cancelled"
             assert calls.count("start") == 3, "Reload must never start or replay a task"
             assert target.read_text() == "browser report 42"
+            await page.reload()
+            await expect(page.locator("textarea").first).to_be_visible(timeout=30000)
+            await expect(
+                page.get_by_text("Run the cancellable browser acceptance task", exact=True)
+            ).to_have_count(1)
+            await expect(
+                page.get_by_text("Browser cancel stream started.", exact=False)
+            ).to_have_count(1)
             if os.name == "posix":
                 await expect(stop).to_have_count(0, timeout=20000)
                 phase["mode"] = "approval"
@@ -361,6 +347,12 @@ async def test_built_desktop_chat_reconnect_and_cancel(
                 assert disposable.exists()
                 await page.reload()
                 await expect(approve).to_be_visible(timeout=30000)
+                await expect(
+                    page.get_by_text("Remove the disposable approval fixture", exact=True)
+                ).to_have_count(1)
+                await expect(
+                    page.get_by_text("Browser cancel stream started.", exact=False)
+                ).to_have_count(1)
                 assert runtime.steering.approvals.snapshot(thread_id)["pending_id"] == pending_id
                 assert calls.count("start") == 4, "Approval reload must not restart execution"
                 await page.screenshot(path=str(evidence / "restored-approval.png"))

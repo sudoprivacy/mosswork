@@ -51,6 +51,7 @@ from octop.infra.company_runtime.model_context import company_model_profile
 from octop.infra.company_runtime.steer import CompanySteering
 from octop.infra.company_runtime.ui_stream import project_ui_chunk
 from octop.infra.gateway.process.message_keys import INBOUND_ATTACHMENTS_KEY
+from octop.infra.history.recorder import StreamHistoryTracker
 from octop.infra.utils.asyncio import offload
 
 _IDENTIFIER = re.compile(r"^[A-Za-z0-9_-]{1,128}$")
@@ -459,6 +460,7 @@ class EnterpriseRuntime:
         saver = None
         agent = None
         watcher = None
+        history = None
         status, error, artifacts = "completed", "", []
         sent_files: dict[str, dict[str, Any]] = {}
         try:
@@ -876,9 +878,19 @@ class EnterpriseRuntime:
                 if request.get("inbound_attachments")
                 else {},
             )
+            history = StreamHistoryTracker(
+                {"id": task_id, "format": "v2", "agent_id": task["agent_id"]}, [message]
+            )
             await self.event(
                 task, directory, {"kind": "messages", "messages": messages_to_dict([message])}
             )
+            # Publish the accepted input before execution. A WebView reload
+            # reads company history while this task is still running/paused.
+            # Transport failures keep the existing durable outbox for retry.
+            try:
+                await self.flush_events(task, directory)
+            except httpx.TransportError:
+                logger.warning("Company input synchronization pending task=%s", task_id)
 
             async def watch() -> None:
                 while True:
@@ -901,19 +913,29 @@ class EnterpriseRuntime:
             watcher = asyncio.create_task(watch())
 
             async def persist_steer(steer_message: HumanMessage) -> None:
+                nonlocal history
                 # Commit the preceding segment before inserting its next user row.
+                messages = await agent.aget_history(thread)
+                if history is not None:
+                    history.observe({"type": "state_snapshot", "data": {"messages": messages}})
                 await self.event(
                     task,
                     directory,
                     {
                         "kind": "messages",
-                        "messages": messages_to_dict(await agent.aget_history(thread)),
+                        "messages": history.wires()
+                        if history is not None
+                        else messages_to_dict(messages),
                     },
                 )
                 await self.event(
                     task,
                     directory,
                     {"kind": "messages", "messages": messages_to_dict([steer_message])},
+                )
+                history = StreamHistoryTracker(
+                    {"id": steer_message.id, "format": "v2", "agent_id": task["agent_id"]},
+                    [steer_message],
                 )
 
             from octop.infra.agents.settings.runtime_limits import (
@@ -937,6 +959,13 @@ class EnterpriseRuntime:
             ):
                 ui_chunk = project_ui_chunk(chunk)
                 if ui_chunk is not None:
+                    # Collect visible deltas only. Graph snapshots can carry
+                    # large historical media and are read once during cleanup.
+                    if history is not None and ui_chunk.get("type") not in {
+                        "state_update",
+                        "state_snapshot",
+                    }:
+                        history.observe(ui_chunk)
                     self.emit({"event": "chunk", "thread_id": thread, "data": ui_chunk})
             messages = await agent.aget_history(thread)
             await self.event(
@@ -987,12 +1016,22 @@ class EnterpriseRuntime:
                 # event() leaves a durable pending receipt for reconnection;
                 # keep the original failure if the company is unreachable.
                 with contextlib.suppress(Exception):
+                    if history is not None:
+                        # Partial visible text is independent of checkpoint reads.
+                        with contextlib.suppress(Exception):
+                            messages = await agent.aget_history(thread)
+                            history.observe(
+                                {"type": "state_snapshot", "data": {"messages": messages}}
+                            )
+                        wires = history.wires()
+                    else:
+                        wires = messages_to_dict(await agent.aget_history(thread))
                     await self.event(
                         task,
                         directory,
                         {
                             "kind": "messages",
-                            "messages": messages_to_dict(await agent.aget_history(thread)),
+                            "messages": wires,
                         },
                     )
                     if sent_files:
