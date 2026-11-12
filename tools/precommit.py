@@ -40,11 +40,14 @@ TOOL_FILES = (
     "tests/unit/deployment/test_precommit.py",
     "tests/unit/deployment/test_export_public_source.py",
     "tests/unit/deployment/test_ci_identity_reuse.py",
+    "tests/unit/deployment/test_make_format_gate.py",
+    "tests/unit/deployment/test_make_testmon.py",
 )
 TOOL_SCOPE = frozenset(TOOL_FILES) | {
     ".githooks/pre-commit",
     ".github/workflows/mosswork-ci.yml",
     "AGENTS.md",
+    "Makefile",
 }
 GIT_CONTEXT = ("GIT_DIR", "GIT_WORK_TREE", "GIT_INDEX_FILE", "GIT_COMMON_DIR", "GIT_PREFIX")
 RELEASE_ONLY_INPUTS = ROOT_DOCS | {
@@ -188,6 +191,34 @@ def staged_paths(root: Path) -> list[str]:
     return paths(git(root, "diff", "--cached", "--name-only", "--no-renames", "-z"))
 
 
+def worktree_paths(root: Path) -> tuple[list[str], str | None, str]:
+    """Include every pending commit, staged/unstaged edit and untracked source."""
+    result = subprocess.run(
+        ["git", "merge-base", "HEAD", "refs/remotes/origin/main"],
+        cwd=root,
+        capture_output=True,
+        check=False,
+    )
+    if result.returncode:
+        return [], None, "No accepted-main ancestor is available; retain full application checks"
+    base = result.stdout.decode().strip()
+    changed = sorted(
+        set(paths(git(root, "diff", "--name-only", "--no-renames", "-z", base, "--")))
+        | set(paths(git(root, "ls-files", "--others", "--exclude-standard", "-z")))
+    )
+    return changed, base, "Complete branch and working-tree diff against the accepted-main ancestor"
+
+
+def worktree_inputs(root: Path) -> dict[str, str]:
+    """Use the existing gate's complete raw-source snapshot, including untracked files."""
+    source = Path(__file__).with_name("test_gate.py")
+    spec = importlib.util.spec_from_file_location("mosswork_worktree_inputs", source)
+    assert spec is not None and spec.loader is not None
+    helper = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(helper)
+    return dict(helper.inputs(root))
+
+
 def documentation(path: str) -> bool:
     p = PurePosixPath(path)
     return path in ROOT_DOCS or (
@@ -255,6 +286,8 @@ def commands(selected: str) -> list[list[str]]:
             "tests/unit/deployment/test_precommit.py",
             "tests/unit/deployment/test_export_public_source.py",
             "tests/unit/deployment/test_ci_identity_reuse.py",
+            "tests/unit/deployment/test_make_format_gate.py",
+            "tests/unit/deployment/test_make_testmon.py",
             "-q",
         ],
     ]
@@ -393,6 +426,11 @@ def ci_tools(root: Path, base: str, head: str) -> None:
 
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument(
+        "--worktree",
+        action="store_true",
+        help="Validate the complete branch and working tree for make all",
+    )
     mode = parser.add_mutually_exclusive_group()
     mode.add_argument("--plan", action="store_true", help="Show selection without running checks")
     mode.add_argument(
@@ -408,8 +446,12 @@ def main() -> int:
         help="Run existing Windows tool validators for an eligible committed diff",
     )
     args = parser.parse_args()
+    if args.worktree and (args.ci_plan is not None or args.ci_tools is not None):
+        parser.error(
+            "--worktree is local validation; use --ci-plan/--ci-tools for committed CI inputs"
+        )
     environment = dict(os.environ)
-    if args.ci_plan is not None or args.ci_tools is not None:
+    if args.worktree or args.ci_plan is not None or args.ci_tools is not None:
         for name in GIT_CONTEXT:
             environment.pop(name, None)
     root = Path(
@@ -442,9 +484,30 @@ def main() -> int:
         except (OSError, ValueError, subprocess.CalledProcessError) as error:
             print(f"CI_SCOPE_REFUSED: {error}", file=sys.stderr, flush=True)
             return 1
-    changed = staged_paths(root)
+    baseline = None
+    reason = "Staged commit candidate"
+    snapshot = None
+    if args.worktree:
+        # This validator is a child process. Its complete worktree must never
+        # borrow a caller's temporary Git index; keep Git policy/auth settings.
+        for name in GIT_CONTEXT:
+            os.environ.pop(name, None)
+        changed, baseline, reason = worktree_paths(root)
+    else:
+        changed = staged_paths(root)
     selected = profile(root, changed)
+    if args.worktree:
+        if baseline is None or not changed:
+            selected = "full"
+        elif selected != "full":
+            try:
+                snapshot = worktree_inputs(root)
+            except ValueError as error:
+                selected = "full"
+                reason = str(error) + "; retain full application checks"
     plan: dict[str, Any] = {"profile": selected, "paths": changed, "commands": commands(selected)}
+    if args.worktree:
+        plan.update(baseline=baseline, scope="complete-branch-and-worktree", reason=reason)
     if selected == "full":
         plan["delegated_commands"] = [
             {"cwd": ".", "argv": ["make", "precommit"]},
@@ -455,18 +518,30 @@ def main() -> int:
             "recorded_by": ["make test", "make all"],
             "scope": "This worktree's real dependency graph; missing or changed data may select the full suite",
         }
+        if args.worktree:
+            plan["delegated_commands"] = [{"cwd": ".", "argv": ["make", "validate-application"]}]
     if args.plan:
         print(json.dumps(plan, ensure_ascii=True))
         return 0
-    receipt = (
-        Path(git(root, "rev-parse", "--absolute-git-dir").decode().strip())
-        / "mosswork-precommit.json"
+    receipt = Path(git(root, "rev-parse", "--absolute-git-dir").decode().strip()) / (
+        "mosswork-worktree-validation.json" if args.worktree else "mosswork-precommit.json"
     )
     result: dict[str, Any] = {**plan, "passed": False, "status": "running", "checks": []}
     started = time.monotonic()
     try:
-        assert_staged_content(root, changed)
+        if not args.worktree:
+            assert_staged_content(root, changed)
+        else:
+            print("WORKTREE_VALIDATION: " + json.dumps(plan, ensure_ascii=True), flush=True)
         if selected == "full":
+            if args.worktree:
+                print(
+                    "[all] Full application validation is required: original lint, frontend formatting, "
+                    "typecheck and non-live tests. No tool-only result substitutes for it.",
+                    flush=True,
+                )
+                result.update(status="requires_full_gate", passed=None, delegated_to_full_gate=True)
+                return FULL_CHECKS
             print(
                 "[pre-commit] Application gate: make precommit, then (cd dashboard && npm run build)",
                 flush=True,
@@ -488,13 +563,29 @@ def main() -> int:
         if changed:
             result["checks"].append({"name": "documentation and expert references", "passed": True})
         run_commands(root, commands(selected), result["checks"])
-        assert_staged_content(root, changed)
+        if args.worktree:
+            if worktree_inputs(root) != snapshot:
+                raise ValueError(
+                    "Working-tree source changed during validation; retain this failure and rerun"
+                )
+        else:
+            assert_staged_content(root, changed)
         if candidate(root) != before:
             raise ValueError("The staged candidate changed during validation; rerun the hook")
         result["passed"] = True
         result["status"] = "passed"
         result["candidate_digest"] = before
-        print(f"[pre-commit] {selected} checks passed", flush=True)
+        if args.worktree:
+            result["worktree_source_digest"] = hashlib.sha256(
+                json.dumps(snapshot, sort_keys=True).encode()
+            ).hexdigest()
+        if args.worktree:
+            print(
+                f"[all] {selected} checks passed for the complete branch and working tree",
+                flush=True,
+            )
+        else:
+            print(f"[pre-commit] {selected} checks passed", flush=True)
         return 0
     except (OSError, ValueError, subprocess.CalledProcessError) as error:
         result["error"] = str(error)
@@ -504,6 +595,8 @@ def main() -> int:
     finally:
         result["elapsed_seconds"] = time.monotonic() - started
         receipt.write_text(json.dumps(result, indent=2, ensure_ascii=True) + "\n", encoding="utf-8")
+        if args.worktree:
+            print("WORKTREE_VALIDATION_RECEIPT: " + str(receipt), flush=True)
 
 
 if __name__ == "__main__":

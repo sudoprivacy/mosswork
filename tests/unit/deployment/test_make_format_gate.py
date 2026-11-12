@@ -20,6 +20,33 @@ import pytest
 SOURCE = Path(__file__).resolve().parents[3]
 
 
+@pytest.mark.parametrize("status", [0, 1, 2, 3])
+def test_make_all_only_delegates_the_explicit_full_gate_status(tmp_path: Path, status: int) -> None:
+    make = shutil.which("make") or shutil.which("mingw32-make")
+    if make is None and os.name == "nt":
+        pytest.skip("GNU Make is required; the actual Windows publication gate supplies it")
+    assert make is not None
+    (tmp_path / "tools").mkdir()
+    shutil.copyfile(SOURCE / "Makefile", tmp_path / "Makefile")
+    (tmp_path / "tools/precommit.py").write_text(f"raise SystemExit({status})\n", encoding="utf-8")
+    interpreter = shlex.quote(Path(sys.executable).as_posix())
+    (tmp_path / "GNUmakefile").write_text(
+        "include Makefile\nvalidate-application:\n\t@"
+        + interpreter
+        + " -c \"from pathlib import Path; Path('application-ran').touch()\"\n",
+        encoding="utf-8",
+    )
+    result = subprocess.run(
+        [make, "all", "TEST_PYTHON=" + interpreter],
+        cwd=tmp_path,
+        capture_output=True,
+        text=True,
+        encoding="utf-8",
+    )
+    assert (result.returncode == 0) is (status in {0, 3}), result.stdout + result.stderr
+    assert (tmp_path / "application-ran").exists() is (status == 3)
+
+
 @pytest.mark.parametrize("target", ["all", "precommit"])
 def test_format_checks_preserve_inputs_and_precede_typecheck_and_tests(
     tmp_path: Path, target: str
@@ -33,6 +60,7 @@ def test_format_checks_preserve_inputs_and_precede_typecheck_and_tests(
         (root / path).mkdir(parents=True, exist_ok=True)
     shutil.copyfile(SOURCE / "Makefile", root / "Makefile")
     shutil.copyfile(SOURCE / "tools/test_gate.py", root / "tools/test_gate.py")
+    shutil.copyfile(SOURCE / "tools/precommit.py", root / "tools/precommit.py")
     shutil.copyfile(SOURCE / "tests/support/testmon_staged_changes.py", root / "staged_changes.py")
     (root / "conftest.py").write_text(
         "import staged_changes\nimport os, sys, json\nfrom pathlib import Path\n"
@@ -123,6 +151,7 @@ else:
     git("config", "core.autocrlf", "true")
     git("add", ".")
     git("commit", "-qm", "fixture")
+    git("update-ref", "refs/remotes/origin/main", git("rev-parse", "HEAD").decode().strip())
     inputs = [root / name.decode() for name in git("ls-files", "-z").split(b"\0") if name]
 
     def snapshot() -> dict[str, str]:

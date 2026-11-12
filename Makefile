@@ -183,6 +183,15 @@ run-online:
 
 .PHONY: all
 all:
+	@if [ -f tools/precommit.py ]; then \
+		status=0; $(TEST_PYTHON) tools/precommit.py --worktree || status=$$?; \
+		if [ $$status -eq 0 ]; then exit 0; fi; \
+		if [ $$status -ne 3 ]; then exit $$status; fi; \
+	fi; \
+	$(MAKE) validate-application
+
+.PHONY: validate-application
+validate-application:
 	@echo "[all] Checking backend lint and frontend formatting before validation..."
 	@$(MAKE) lint format-check-frontend || { echo "[all] $(FORMAT_GATE_MESSAGE)"; exit 1; }
 	$(MAKE) typecheck
