@@ -36,8 +36,10 @@ TOOL_FILES = (
     "tools/check_public_source.py",
     "tools/export_public_source.py",
     "tools/accept_sudograph_worker.py",
+    "tools/ci_identity_reuse.py",
     "tests/unit/deployment/test_precommit.py",
     "tests/unit/deployment/test_export_public_source.py",
+    "tests/unit/deployment/test_ci_identity_reuse.py",
 )
 TOOL_SCOPE = frozenset(TOOL_FILES) | {
     ".githooks/pre-commit",
@@ -58,6 +60,8 @@ WINDOWS_VALIDATION_INPUTS = frozenset(
         "tools/export_public_source.py",
         "tests/unit/deployment/test_precommit.py",
         "tests/unit/deployment/test_export_public_source.py",
+        "tools/ci_identity_reuse.py",
+        "tests/unit/deployment/test_ci_identity_reuse.py",
     }
 )
 WINDOWS_VALIDATION_RECIPE_SHA256 = (
@@ -242,6 +246,7 @@ def commands(selected: str) -> list[list[str]]:
     return [
         ["uv", "run", "--frozen", "ruff", "check", *TOOL_FILES],
         ["uv", "run", "--frozen", "ruff", "format", "--check", *TOOL_FILES],
+        ["uv", "run", "--frozen", "mypy", "--strict", "tools/ci_identity_reuse.py"],
         [
             "uv",
             "run",
@@ -249,6 +254,7 @@ def commands(selected: str) -> list[list[str]]:
             "pytest",
             "tests/unit/deployment/test_precommit.py",
             "tests/unit/deployment/test_export_public_source.py",
+            "tests/unit/deployment/test_ci_identity_reuse.py",
             "-q",
         ],
     ]

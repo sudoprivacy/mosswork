@@ -30,6 +30,14 @@ def original() -> dict[str, Any]:
                 "run_id": 10,
                 "run_attempt": 1,
                 "steps": [
+                    {
+                        "name": "Run actions/checkout@v4",
+                        "number": 2,
+                        "status": "completed",
+                        "conclusion": "success",
+                    },
+                ]
+                + [
                     {"name": step, "status": "completed", "conclusion": "success"}
                     for step in reuse.TEST_STEPS
                 ],
@@ -84,7 +92,11 @@ def api_for(source: dict[str, Any]):
         elif path.startswith("actions/runs/"):
             value = {"jobs": source["jobs"]}
         elif path.startswith("actions/jobs/"):
-            return source["logs"][int(path.split("/")[2])]
+            job_id = int(path.split("/")[2])
+            job = next(j for j in source["jobs"] if j["id"] == job_id)
+            step = next(s for s in job["steps"] if s["name"] == "Run actions/checkout@v4")
+            assert path == f"actions/jobs/{job_id}/steps/{step['number']}/logs", endpoint
+            return source["logs"][job_id]
         elif path.startswith("git/commits/"):
             value = {"tree": {"sha": source["checkouts"][path.rsplit("/", 1)[-1]]}}
         else:
@@ -138,7 +150,9 @@ def test_job_matrix_and_original_command_proof_are_required(original, mutation):
     if mutation == "new-platform":
         original["jobs"].append({"name": "Canonical identity (macos-15)"})
     elif mutation == "failed-step":
-        original["jobs"][0]["steps"][0]["conclusion"] = "failure"
+        next(step for step in original["jobs"][0]["steps"] if step["name"] in reuse.TEST_STEPS)[
+            "conclusion"
+        ] = "failure"
     elif mutation == "wrong-head":
         original["jobs"][0]["head_sha"] = "e" * 40
     else:
@@ -170,6 +184,31 @@ def test_skipped_proof_job_does_not_replace_the_two_original_pr_jobs(original):
     original["jobs"].append({"name": reuse.PROOF_JOB, "conclusion": "skipped"})
     assert decision(original)["reuse"] is True
     original["jobs"][-1]["conclusion"] = "success"
+    assert decision(original)["reuse"] is False
+
+
+@pytest.mark.parametrize(
+    "mutation", ["missing", "duplicate", "failed", "unfinished", "zero", "boolean"]
+)
+def test_only_one_successful_numbered_checkout_step_is_eligible(original, mutation):
+    steps = original["jobs"][0]["steps"]
+    checkout = steps[0]
+    if mutation == "missing":
+        steps.pop(0)
+    elif mutation == "duplicate":
+        steps.append(copy.deepcopy(checkout))
+    elif mutation == "failed":
+        checkout["conclusion"] = "failure"
+    elif mutation == "unfinished":
+        checkout["status"] = "in_progress"
+    else:
+        checkout["number"] = 0 if mutation == "zero" else True
+    assert decision(original)["reuse"] is False
+
+
+@pytest.mark.parametrize("control", [b"\x1b[31m", b"\x07", "\u009b".encode()])
+def test_checkout_terminal_controls_stay_refused_even_with_an_older_cli(original, control):
+    original["logs"][1] += control
     assert decision(original)["reuse"] is False
 
 
@@ -224,6 +263,11 @@ def test_normal_cli_binds_a_real_git_checkout_and_keeps_api_failure_full(
 
     def run(argv, **kwargs):
         if argv[:2] == ["gh", "api"]:
+            assert "--allow-escape-sequences" not in argv
+            if argv[2].endswith(("/jobs/1/logs", "/jobs/2/logs")):
+                return subprocess.CompletedProcess(
+                    argv, 1, b"", b"the response contains terminal escape sequences"
+                )
             return subprocess.CompletedProcess(argv, 0, api_for(original)(argv[2]), b"")
         return actual_run(argv, **kwargs)
 
@@ -246,6 +290,7 @@ def test_normal_cli_binds_a_real_git_checkout_and_keeps_api_failure_full(
     text = capsys.readouterr().out
     assert "synthetic-token-must-not-be-logged" not in text
     assert "No manual retry is required" in text
+    assert "HTTP 403" in text and "commits/" in text
     (root / "uncommitted.py").write_text("raise RuntimeError('source drift')\n")
 
     def no_api_for_drift(argv, **kwargs):
