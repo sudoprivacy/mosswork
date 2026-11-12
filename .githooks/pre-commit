@@ -35,7 +35,7 @@ run_validation() {
   env -u GIT_DIR -u GIT_WORK_TREE -u GIT_INDEX_FILE -u GIT_COMMON_DIR -u GIT_PREFIX "$@"
 }
 
-echo "[pre-commit] make precommit  (format-all + lint + typecheck + testmon-scoped test)"
+echo "[pre-commit] make precommit  (format checks + lint + typecheck + testmon-scoped test)"
 run_validation make precommit
 
 # If format rewrote files that were already staged, refresh the index so the

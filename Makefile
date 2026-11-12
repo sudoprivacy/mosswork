@@ -1,7 +1,7 @@
 # Makefile for mosswork
 # Usage:
 #   make              - Show this help
-#   make all          - format (BE+FE) + backend lint + typecheck + test (ship bar)
+#   make all          - format checks (BE+FE) + backend lint + typecheck + test
 #   make build        - Build frontend + Python wheel
 #   make publish      - Disabled until an independent release channel exists
 #
@@ -32,6 +32,7 @@ PIP  := $(if $(UV),uv pip,python3 -m pip)
 PYTEST_JOBS ?= auto
 # The shared pytest defaults also cover direct CI invocations.
 PYTEST_FAILURE_MESSAGE := stop after first failure; in-flight tests finish. For all failures: PYTEST_ADDOPTS=--maxfail=0
+FORMAT_GATE_MESSAGE := Fix formatting with: make format-all. Refresh staged/frozen inputs, then rerun this gate.
 
 # ─── Help ────────────────────────────────────────────────────────────────────
 
@@ -61,7 +62,7 @@ help:
 	@echo "  run-online       Start mosswork run from .venv-online"
 	@echo ""
 	@echo "Quality targets (ship bar):"
-	@echo "  all              format-all + lint + typecheck + test (backend lint/typecheck/test)"
+	@echo "  all              format checks + lint + typecheck + full non-live test suite"
 	@echo "  precommit        fast change-aware gate for the git pre-commit hook (testmon-scoped tests)"
 	@echo "  lint             Ruff check + format check (src, tests)"
 	@echo "  format           Ruff auto-fix + format (src, tests)"
@@ -72,11 +73,12 @@ help:
 	@echo "Quality targets (frontend):"
 	@echo "  lint-frontend    ESLint + Prettier check"
 	@echo "  format-frontend  Prettier write"
+	@echo "  format-check-frontend  Prettier check before backend tests"
 	@echo "  typecheck-frontend  tsc -b (project references)"
 	@echo ""
 	@echo "Quality targets (full stack):"
 	@echo "  lint-all         lint + lint-frontend"
-	@echo "  format-all       format + format-frontend (also first step of make all)"
+	@echo "  format-all       format + format-frontend (run before staging/freezing inputs)"
 	@echo "  typecheck-all    typecheck + typecheck-frontend"
 	@echo "  check-all        lint-all + typecheck-all + test"
 	@echo ""
@@ -179,7 +181,11 @@ run-online:
 # ─── Quality (backend) ───────────────────────────────────────────────────────
 
 .PHONY: all
-all: format-all lint typecheck test
+all:
+	@echo "[all] $(FORMAT_GATE_MESSAGE)"
+	$(MAKE) lint format-check-frontend
+	$(MAKE) typecheck
+	$(MAKE) test
 
 .PHONY: lint
 lint:
@@ -220,7 +226,11 @@ test-live:
 # pytest-testmon. The full suite still runs in CI (`make all`); this is local
 # feedback only, so a missed cross-module impact is caught there.
 .PHONY: precommit
-precommit: format-all lint typecheck test-affected
+precommit:
+	@echo "[precommit] $(FORMAT_GATE_MESSAGE)"
+	$(MAKE) lint format-check-frontend
+	$(MAKE) typecheck
+	$(MAKE) test-affected
 
 # NOTE: do NOT pass `-m` here — pytest-testmon deactivates its affected-test
 # selection whenever a marker expression is present, which would fall back to
@@ -245,13 +255,17 @@ test-affected:
 lint-frontend:
 	@echo "[lint-frontend] ESLint..."
 	cd $(DASHBOARD_DIR) && npm run lint
-	@echo "[lint-frontend] Prettier check..."
-	cd $(DASHBOARD_DIR) && npm run format:check
+	$(MAKE) format-check-frontend
+
+.PHONY: format-check-frontend
+format-check-frontend:
+	@echo "[format-check-frontend] Prettier check..."
+	cd "$(DASHBOARD_DIR)" && npm run format:check
 
 .PHONY: format-frontend
 format-frontend:
 	@echo "[format-frontend] Prettier..."
-	cd $(DASHBOARD_DIR) && npm run format
+	cd "$(DASHBOARD_DIR)" && npm run format
 
 .PHONY: typecheck-frontend
 typecheck-frontend:
@@ -279,7 +293,7 @@ install-hooks:
 	@echo "[install-hooks] Setting core.hooksPath=.githooks"
 	git config core.hooksPath .githooks
 	@chmod +x "$(REPO_ROOT)/.githooks/"* 2>/dev/null || true
-	@echo "[install-hooks] Done. Pre-commit will run: make precommit (format-all + lint + typecheck + testmon-scoped tests), dashboard build"
+	@echo "[install-hooks] Done. Pre-commit will run: make precommit (format checks + lint + typecheck + testmon-scoped tests), dashboard build"
 	@echo "[install-hooks] Bypass: SKIP_PRECOMMIT=1 git commit …   or   git commit --no-verify"
 
 .PHONY: install install-dev

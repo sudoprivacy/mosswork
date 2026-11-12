@@ -195,7 +195,7 @@ Frontend talks to mosswork **only** via `/api` HTTP — never import or assume P
 
 ```bash
 make install-hooks                      # once per clone: enable .githooks pre-commit
-make all                                # format-all + lint + typecheck + test (ship bar)
+make all                                # format checks + lint + typecheck + test (ship bar)
 make format-all                         # backend Ruff + dashboard Prettier write
 make lint                               # ruff check + format check
 make typecheck                          # mypy --strict src/octop
@@ -208,7 +208,7 @@ cd dashboard && npx tsc -b             # frontend typecheck (after UI changes)
 make build-frontend                     # dashboard/ → src/octop/dashboard/
 ```
 
-**Git hooks (required for local commits):** after cloning, run **`make install-hooks`** once. That sets `core.hooksPath=.githooks` so every `git commit` runs **`make precommit`** (which first runs **`format-all`**: backend Ruff + dashboard Prettier write, then lint / typecheck / testmon-scoped tests) and dashboard **`npm run build`**. Formatted files that were already staged are re-added so the commit includes the formatted content. Bypass only in emergencies: `SKIP_PRECOMMIT=1 git commit …` or `git commit --no-verify`. Do **not** skip hooks to land red tests — fix the suite first (CI runs on Linux **and** Windows).
+**Git hooks (required for local commits):** after cloning, run **`make install-hooks`** once. That sets `core.hooksPath=.githooks` so every `git commit` runs **`make precommit`** (backend lint / format checks and dashboard Prettier check, then typecheck / testmon-scoped tests) and dashboard **`npm run build`**. Fix formatting with `make format-all` before refreshing staged inputs or an acceptance snapshot. Bypass only in emergencies: `SKIP_PRECOMMIT=1 git commit …` or `git commit --no-verify`. Do **not** skip hooks to land red tests — fix the suite first (CI runs on Linux **and** Windows).
 
 ## 7. Key patterns
 
@@ -392,7 +392,7 @@ Boundary rules are in [§5](#5-module-boundaries). Additionally:
 1. **Clarify scope** — read relevant code/docs; confirm assumptions and ambiguities with the user (see [§1](#1-collaboration-principles)).
 2. **Hooks** — run the repository hook when committing. For a shared linked worktree, use `git -c core.hooksPath=.githooks commit ...` without changing common Git settings; standalone clones may use `make install-hooks`. The staged-candidate dispatcher selects documented independent checks; application/unknown changes still require `make precommit` and the dashboard build. Hook failures must stay failures; do not substitute a plan or a delegated result for passed validation.
 3. **Minimal implementation** — change only task-related files; dashboard source is in `dashboard/`, build output in `src/octop/dashboard/` (run `make build-frontend` after UI changes).
-4. **Verify** — backend/ship bar: `make all` (`format-all` + `lint` + `typecheck` + `test`). After `dashboard/` changes, also run `cd dashboard && npx tsc -b` (and `npm run lint` when appropriate). After API route changes, glance at `/api/docs` for readable summaries and schemas. After i18n JSON changes, run `uv run pytest tests/unit/i18n -q`. Treat Windows CI as part of the bar: follow [§7 Cross-platform tests](#7-key-patterns).
+4. **Verify** — backend/ship bar: `make all` (format checks + `lint` + `typecheck` + `test`). After `dashboard/` changes, also run `cd dashboard && npx tsc -b` (and `npm run lint` when appropriate). After API route changes, glance at `/api/docs` for readable summaries and schemas. After i18n JSON changes, run `uv run pytest tests/unit/i18n -q`. Treat Windows CI as part of the bar: follow [§7 Cross-platform tests](#7-key-patterns).
 5. **Wrap up** — remove orphan symbols introduced in this change; do not commit or push unless asked.
 
 ### Branching & release
