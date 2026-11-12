@@ -142,7 +142,7 @@
     "rename": "重命名",
     "unchanged": "留空表示保持不变",
     "agentState": {
-      "running": "运行中",
+      "running": "正常",
       "stopped": "已停止",
       "failed": "启动失败",
       "starting": "启动中",
@@ -2737,6 +2737,9 @@
     "rangeStart": "开始日期",
     "rangeEnd": "结束日期",
     "exportExcel": "导出 Excel",
+    "exportStarted": "已开始下载 {{filename}}",
+    "exportSuccess": "已保存到 {{path}}",
+    "exportCancelled": "已取消导出",
     "exportFailed": "导出失败",
     "exportFilenamePrefix": "Token用量",
     "summary": "汇总",
