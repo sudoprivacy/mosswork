@@ -61,7 +61,7 @@ WINDOWS_VALIDATION_INPUTS = frozenset(
     }
 )
 WINDOWS_VALIDATION_RECIPE_SHA256 = (
-    "e2c3b07263c1bdfceff7c074c3ed13ab7d5d5b749d16faf063709e2fea72849a"
+    "2bed787f7feae2be4370346ed2f89ddf8f65b9afba77ffb0872c0ccdc56df4c2"
 )
 
 

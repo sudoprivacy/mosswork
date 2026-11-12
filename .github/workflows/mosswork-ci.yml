@@ -99,7 +99,7 @@ jobs:
           name: windows-validation-tools
           path: |
             ${{ runner.temp }}/mosswork-ci-tools-*/receipt.json
-            ${{ runner.temp }}/mosswork-ci-tools-*/public-source/*manifest*
+            ${{ runner.temp }}/mosswork-ci-tools-*/public-source/PUBLIC_SOURCE.json
           if-no-files-found: ignore
 
   acp-runtime-observations:
