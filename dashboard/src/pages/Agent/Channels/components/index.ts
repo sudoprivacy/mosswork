@@ -26,6 +26,7 @@ export {
   normalizeQqGroupContextConfig,
   hasRequiredCredentials,
   partitionChannelKeys,
+  fillChannelGridRow,
   isCollapsedChannelKey,
   type ChannelKey,
   type ChannelField,

@@ -2,7 +2,7 @@
  * Embeddable per-agent channels grid (preset cards + ChannelDrawer).
  * Lives under Agent/Channels — shared by Personalization tab and Experts drawer.
  */
-import { useCallback, useMemo, useState } from "react";
+import { useCallback, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { Form, Button, Empty } from "antd";
 import { message } from "@/utils/antdMessage";
 
@@ -23,6 +23,7 @@ import {
   normalizeChannelFieldValue,
   normalizeQqGroupContextConfig,
   partitionChannelKeys,
+  fillChannelGridRow,
   type ChannelKey,
 } from "./components";
 import type { ChannelRow } from "./useChannels";
@@ -107,6 +108,8 @@ export default function ChannelsPanel({ agentId }: ChannelsPanelProps) {
 
   const [hoverId, setHoverId] = useState<ChannelKey | null>(null);
   const [showMoreChannels, setShowMoreChannels] = useState(false);
+  const [gridColumnCount, setGridColumnCount] = useState(1);
+  const gridRef = useRef<HTMLDivElement>(null);
   const [enableLoadingKey, setEnableLoadingKey] = useState<ChannelKey | null>(
     null,
   );
@@ -146,9 +149,42 @@ export default function ChannelsPanel({ agentId }: ChannelsPanelProps) {
     return { featuredChannelKeys: featured, moreChannelKeys: more };
   }, [channelByKind]);
 
+  useLayoutEffect(() => {
+    const grid = gridRef.current;
+    if (!grid) return;
+
+    const measure = () => {
+      const firstCard = grid.firstElementChild as HTMLElement | null;
+      const gridWidth = grid.getBoundingClientRect().width;
+      const cardWidth = firstCard?.getBoundingClientRect().width ?? 0;
+      const columnGap =
+        Number.parseFloat(getComputedStyle(grid).columnGap) || 0;
+      if (gridWidth <= 0 || cardWidth <= 0) return;
+      const columns = Math.max(
+        1,
+        Math.round((gridWidth + columnGap) / (cardWidth + columnGap)),
+      );
+      setGridColumnCount((current) =>
+        current === columns ? current : columns,
+      );
+    };
+
+    measure();
+    if (typeof ResizeObserver === "undefined") return;
+    const observer = new ResizeObserver(measure);
+    observer.observe(grid);
+    return () => observer.disconnect();
+  }, [loading]);
+
+  const { visible: defaultChannelKeys, remaining: hiddenChannelKeys } = useMemo(
+    () =>
+      fillChannelGridRow(featuredChannelKeys, moreChannelKeys, gridColumnCount),
+    [featuredChannelKeys, moreChannelKeys, gridColumnCount],
+  );
+
   const visibleChannelKeys = showMoreChannels
-    ? [...featuredChannelKeys, ...moreChannelKeys]
-    : featuredChannelKeys;
+    ? [...defaultChannelKeys, ...hiddenChannelKeys]
+    : defaultChannelKeys;
 
   const openCreate = useCallback(
     (kind: ChannelKey) => {
@@ -437,7 +473,7 @@ export default function ChannelsPanel({ agentId }: ChannelsPanelProps) {
         </div>
       ) : (
         <div className={styles.channelsBody}>
-          <div className={styles.channelsGrid}>
+          <div ref={gridRef} className={styles.channelsGrid}>
             {visibleChannelKeys.map((key) => {
               const row = channelByKind.get(key);
               return (
@@ -459,7 +495,7 @@ export default function ChannelsPanel({ agentId }: ChannelsPanelProps) {
               );
             })}
           </div>
-          {moreChannelKeys.length > 0 && (
+          {hiddenChannelKeys.length > 0 && (
             <Button
               type="link"
               size="small"
@@ -469,7 +505,7 @@ export default function ChannelsPanel({ agentId }: ChannelsPanelProps) {
               {showMoreChannels
                 ? t("channels.hideMoreChannels")
                 : t("channels.showMoreChannels", {
-                    count: moreChannelKeys.length,
+                    count: hiddenChannelKeys.length,
                   })}
             </Button>
           )}

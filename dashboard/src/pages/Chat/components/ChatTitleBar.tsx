@@ -96,7 +96,7 @@ export default function ChatTitleBar({
       },
       {
         key: "fork",
-        label: t("chat.fork", "分叉"),
+        label: t("chat.fork", "复制"),
         icon: <GitFork size={14} />,
         disabled: forkDisabled,
         title: forkDisabled && forkDisabledHint ? forkDisabledHint : undefined,

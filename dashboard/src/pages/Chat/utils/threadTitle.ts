@@ -30,5 +30,8 @@ export function clipThreadTitle(
  * Normalize a thread title for display (same clipping as storage).
  */
 export function formatThreadTitle(title: string | null | undefined): string {
-  return clipThreadTitle(title);
+  const text = normalizeTitleBlank(title)
+    .replace(/（分叉）/g, "（复制）")
+    .replace(/ \(fork\)/gi, " (copy)");
+  return clipThreadTitle(text);
 }
