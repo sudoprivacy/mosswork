@@ -29,11 +29,22 @@ def test_format_checks_preserve_inputs_and_precede_typecheck_and_tests(
         pytest.skip("GNU Make is required; the actual Windows publication gate supplies it")
     assert make is not None, "Install GNU Make to validate the original publication recipes"
     root = tmp_path / "format gate"
-    for path in ("bin", "src/octop", "tests", "dashboard", "empty-hooks"):
+    for path in ("bin", "src/octop", "tests", "dashboard", "empty-hooks", "tools"):
         (root / path).mkdir(parents=True, exist_ok=True)
     shutil.copyfile(SOURCE / "Makefile", root / "Makefile")
+    shutil.copyfile(SOURCE / "tools/test_gate.py", root / "tools/test_gate.py")
     shutil.copyfile(SOURCE / "tests/support/testmon_staged_changes.py", root / "staged_changes.py")
-    (root / "conftest.py").write_text("import staged_changes\n", encoding="utf-8")
+    (root / "conftest.py").write_text(
+        "import staged_changes\nimport os, sys, json\nfrom pathlib import Path\n"
+        "pytest_plugins = ['tools.test_gate']\n"
+        "def pytest_sessionstart(session):\n"
+        "    if hasattr(session.config, 'workerinput'): return\n"
+        "    trace = Path(os.environ['FORMAT_TRACE'])\n"
+        "    rows = [json.loads(x) for x in trace.read_text().splitlines()] if trace.exists() else []\n"
+        "    if not any(r['args'][:1] == ['pytest'] for r in rows):\n"
+        "        with trace.open('a') as f: f.write(json.dumps({'kind':'backend','args':['pytest',*sys.argv[1:]]})+'\\n')\n",
+        encoding="utf-8",
+    )
     (root / "pyproject.toml").write_text(
         '[tool.pytest.ini_options]\ntestpaths = ["tests"]\n[tool.ruff]\ntarget-version = "py312"\n',
         encoding="utf-8",
@@ -126,6 +137,7 @@ else:
                 *extra,
                 goal,
                 "RUN=" + shlex.join([interpreter, control, "backend"]),
+                "TEST_PYTHON=" + shlex.quote(interpreter),
                 "PYTEST_JOBS=1",
             ],
             cwd=root,

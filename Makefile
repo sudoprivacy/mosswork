@@ -30,6 +30,7 @@ PYTHON := $(if $(UV),uv run python,python3)
 PIP  := $(if $(UV),uv pip,python3 -m pip)
 # Parallel workers for make test / make test-fast (override: make test PYTEST_JOBS=4)
 PYTEST_JOBS ?= auto
+TEST_PYTHON := $(if $(UV),uv run --frozen python,python3)
 # The shared pytest defaults also cover direct CI invocations.
 PYTEST_FAILURE_MESSAGE := previous failures/new files first; all cases retained. Stop after first failure; in-flight tests finish. For all failures: PYTEST_ADDOPTS=--maxfail=0
 FORMAT_GATE_MESSAGE := Resolve the reported lint/format errors. Run make format-all for available fixes; refresh staged/frozen inputs, then rerun this gate.
@@ -185,7 +186,7 @@ all:
 	@echo "[all] Checking backend lint and frontend formatting before validation..."
 	@$(MAKE) lint format-check-frontend || { echo "[all] $(FORMAT_GATE_MESSAGE)"; exit 1; }
 	$(MAKE) typecheck
-	$(MAKE) test
+	$(MAKE) test-current
 
 .PHONY: lint
 lint:
@@ -211,6 +212,12 @@ test:
 	@echo "[test] $(PYTEST_FAILURE_MESSAGE)"
 	$(RUN) pytest --testmon-noselect -n $(PYTEST_JOBS) -m "not live"
 
+.PHONY: test-current
+test-current:
+	@echo "[test-current] Reuse only verified real testmon history in this worktree; failed/unexecuted cases remain required. Unknown inputs use the full non-live suite."
+	@echo "[test-current] Previous failures/new files first within the selected scope; first failure stops queued work."
+	$(TEST_PYTHON) tools/test_gate.py --workers $(PYTEST_JOBS)
+
 .PHONY: test-fast
 test-fast:
 	@echo "[test-fast] pytest (not live, not slow, -n $(PYTEST_JOBS))..."
@@ -223,8 +230,8 @@ test-live:
 
 # Fast, change-aware gate for the local pre-commit hook. Runs ruff/mypy (cheap
 # and kept full for accuracy) plus only the tests affected by changed files via
-# pytest-testmon. The full suite still runs in CI (`make all`); this is local
-# feedback only, so a missed cross-module impact is caught there.
+# pytest-testmon. Explicit make test remains full; make all uses the source-bound
+# test-current gate and falls back to full when reuse cannot be proved.
 .PHONY: precommit
 precommit:
 	@echo "[precommit] Checking backend lint and frontend formatting before validation..."

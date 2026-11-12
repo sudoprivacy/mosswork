@@ -4,6 +4,8 @@ on:
   pull_request:
     paths:
       - '.github/workflows/mosswork-identity-ci.yml'
+      - 'conftest.py'
+      - 'tools/test_gate.py'
       - 'src/octop/infra/identity/**'
       - 'src/octop/infra/agents/personal_moss_*.py'
       - 'src/octop/infra/gateway/personal_moss_identity.py'
@@ -24,6 +26,8 @@ on:
     branches: [main]
     paths:
       - '.github/workflows/mosswork-identity-ci.yml'
+      - 'conftest.py'
+      - 'tools/test_gate.py'
       - 'src/octop/infra/identity/**'
       - 'src/octop/infra/agents/personal_moss_*.py'
       - 'src/octop/infra/gateway/personal_moss_identity.py'

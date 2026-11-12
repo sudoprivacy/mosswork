@@ -9,3 +9,5 @@ testmon's internals and is a safe no-op when testmon is absent.
 from __future__ import annotations
 
 import tests.support.testmon_staged_changes  # noqa: F401  (applies the patch)
+
+pytest_plugins = ["tools.test_gate"]
