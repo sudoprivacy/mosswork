@@ -79,26 +79,27 @@ def _chunk_artifact(chunk: dict[str, Any]) -> Any:
     return None
 
 
-class RecordingTracker(TurnHistoryTracker):
-    def __init__(self, archive: HistoryArchive, turn: dict[str, Any], seeds: list[Any]) -> None:
+class StreamHistoryTracker(TurnHistoryTracker):
+    """Assemble visible turn messages independently of their persistence adapter."""
+
+    def __init__(
+        self,
+        turn: dict[str, Any],
+        seeds: list[Any],
+        parts: list[dict[str, Any]] | None = None,
+    ) -> None:
         super().__init__(seed_messages=seeds)
-        self.archive = archive
         self.turn = turn
         self.paused = False
         self.failed = False
         self.decode_failed = bool(turn.get("error"))
         self._parts: list[dict[str, Any]] = []
         self._assistant: dict[str, Any] | None = None
-        self._saved_signatures: dict[int, bytes] = {}
-        self._write_failure: Exception | None = None
         self._identified = False
         self._sources: set[str] = set()
         restored = False
         if turn["format"] == "v2":
-            self._parts = [
-                doc["value"]
-                for doc in archive.store.documents(turn["thread_id"], "message", turn_id=turn["id"])
-            ]
+            self._parts = parts or []
             restored = bool(self._parts)
             if not self._parts:
                 for seed in seeds:
@@ -113,11 +114,6 @@ class RecordingTracker(TurnHistoryTracker):
                     self._identified = True
         self._indices = {id(part): index for index, part in enumerate(self._parts)}
         self._dirty: set[int] = set() if restored else set(self._indices.values())
-        if restored:
-            self._saved_signatures = {
-                index: hashlib.sha256(dumps(self._wire(part)).encode()).digest()
-                for index, part in enumerate(self._parts)
-            }
 
     def _append_part(self, wire: dict[str, Any]) -> None:
         index = len(self._parts)
@@ -164,8 +160,11 @@ class RecordingTracker(TurnHistoryTracker):
     def observe(self, chunk: dict[str, Any]) -> None:
         if _foreign_turn_speaker(self.turn, chunk):
             return
-        super().observe(chunk)
         kind = chunk.get("type")
+        # V2 already keeps message-scoped text below. The legacy fallback's
+        # second concatenated copy is unnecessary for either persistence port.
+        if self.turn["format"] != "v2" or kind not in ("token", "reasoning"):
+            super().observe(chunk)
         if kind in ("state_snapshot", "state_update"):
             from octop.infra.history.projection import (
                 _chunk_messages,  # noqa: PLC0415
@@ -391,6 +390,29 @@ class RecordingTracker(TurnHistoryTracker):
 
     def wires(self) -> list[dict[str, Any]]:
         return [self._wire(part) for part in self._parts]
+
+
+class RecordingTracker(StreamHistoryTracker):
+    def __init__(self, archive: HistoryArchive, turn: dict[str, Any], seeds: list[Any]) -> None:
+        self.archive = archive
+        parts = (
+            [
+                doc["value"]
+                for doc in archive.store.documents(turn["thread_id"], "message", turn_id=turn["id"])
+            ]
+            if turn["format"] == "v2"
+            else None
+        )
+        super().__init__(turn, seeds, parts)
+        self._write_failure: Exception | None = None
+        self._saved_signatures = (
+            {
+                index: hashlib.sha256(dumps(self._wire(part)).encode()).digest()
+                for index, part in enumerate(self._parts)
+            }
+            if parts
+            else {}
+        )
 
     async def flush(self) -> None:
         """Commit changed messages before the caller forwards the current event."""

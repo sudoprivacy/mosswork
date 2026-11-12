@@ -5,17 +5,50 @@ from __future__ import annotations
 import asyncio
 import contextlib
 import json
+import socket
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 from typing import Any
 from urllib.parse import unquote, urlsplit
 
 import httpx
+import uvicorn
 from starlette.websockets import WebSocketDisconnect
 
 # A single-loop session should never stall; the cap keeps a regression from
 # wedging the whole suite instead of failing this one test.
 _WS_RECEIVE_TIMEOUT_S = 20.0
+
+
+@asynccontextmanager
+async def serve_http(app: Any) -> AsyncIterator[str]:
+    """Serve a real incremental HTTP stream on the caller's existing event loop."""
+    with socket.socket() as listener:
+        listener.bind(("127.0.0.1", 0))
+        listener.listen()
+        host, port = listener.getsockname()
+        server = uvicorn.Server(
+            uvicorn.Config(
+                app,
+                lifespan="off",
+                log_level="warning",
+                access_log=False,
+                timeout_graceful_shutdown=5,
+            )
+        )
+        # The test runner retains ownership of process signals and app lifecycle.
+        server.capture_signals = contextlib.nullcontext
+        task = asyncio.create_task(server.serve(sockets=[listener]))
+        try:
+            async with asyncio.timeout(10):
+                while not server.started:
+                    if task.done():
+                        task.result()
+                    await asyncio.sleep(0.01)
+            yield f"http://{host}:{port}"
+        finally:
+            server.should_exit = True
+            await asyncio.wait_for(task, 10)
 
 
 def ws_token(auth: dict[str, str]) -> str:

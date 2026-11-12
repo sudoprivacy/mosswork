@@ -211,7 +211,12 @@ async def test_completed_execution_survives_sync_failure(
 
     async def interrupt(request, *args, **kwargs):
         nonlocal failed
-        if not failed and request.url.path.endswith(failed_path):
+        # The input receipt is now delivered before execution. This regression
+        # still interrupts the final receipt, after the real tool has run.
+        initial_input = (
+            request.url.path.endswith("/events") and json.loads(request.content)["seq"] == 1
+        )
+        if not failed and request.url.path.endswith(failed_path) and not initial_input:
             failed = True
             raise httpx.ReadError("temporary synchronization failure", request=request)
         return await send(request, *args, **kwargs)

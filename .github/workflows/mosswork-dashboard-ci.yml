@@ -6,11 +6,14 @@ on:
     paths:
       - 'dashboard/**'
       - 'src/octop/infra/company_runtime/**'
+      - 'src/octop/infra/history/**'
       - 'tests/integration/test_desktop_reconnect_browser.py'
       - 'tests/support/**'
       - 'tests/conftest.py'
       - 'tests/integration/conftest.py'
       - 'tests/unit/company_runtime/**'
+      - 'tests/unit/history/**'
+      - 'tests/unit/gateway/test_versioned_history.py'
       - '.github/workflows/mosswork-dashboard-ci.yml'
   workflow_dispatch:
 
@@ -82,6 +85,11 @@ jobs:
         # Hosted images already supply the native browser libraries. The actual
         # browser journey below still refuses any missing runtime dependency.
         run: uv run --locked playwright install chromium
+      - name: Check shared history and local runtime lifecycle
+        run: |
+          uv run --locked ruff check src/octop/infra/company_runtime src/octop/infra/history tests/unit/company_runtime tests/unit/history tests/unit/gateway/test_versioned_history.py
+          uv run --locked mypy src/octop/infra/company_runtime/runtime.py src/octop/infra/history/recorder.py --follow-imports=silent
+          uv run --locked pytest tests/unit/company_runtime/test_runtime.py tests/unit/company_runtime/test_resilience.py tests/unit/company_runtime/test_lifecycle.py tests/unit/company_runtime/test_memory_approvals.py tests/unit/company_runtime/test_steer.py tests/unit/company_runtime/test_ui_stream.py tests/unit/gateway/test_versioned_history.py tests/unit/history/test_projection.py -q
       - name: Check the built browser to local runtime journey
         env:
           MOSSWORK_RUN_BROWSER_ACCEPTANCE: '1'
