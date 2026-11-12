@@ -4,6 +4,8 @@ on:
   pull_request:
     paths:
       - '.github/workflows/mosswork-*.yml'
+      - 'conftest.py'
+      - 'tools/test_gate.py'
       - 'desktop/package-company.py'
       - 'desktop/*tools*'
       - 'desktop/tests/**'
@@ -173,6 +175,12 @@ jobs:
           uv run --frozen ruff check src/octop/infra/utils/frontmatter.py tests/unit/utils/test_frontmatter.py
           uv run --frozen ruff format --check src/octop/infra/utils/frontmatter.py tests/unit/utils/test_frontmatter.py
           uv run --frozen mypy --follow-imports=silent src/octop/infra/utils/frontmatter.py
+      - name: Check source-bound local acceptance
+        shell: bash
+        run: |
+          uv run --frozen ruff check tools/test_gate.py conftest.py tests/unit/deployment/test_test_gate.py
+          uv run --frozen ruff format --check tools/test_gate.py conftest.py tests/unit/deployment/test_test_gate.py
+          uv run --frozen mypy --strict tools/test_gate.py
       - name: Check shared fixture and cold CLI isolation
         run: |
           uv run --frozen pytest tests/unit/connectors/test_qcc_grant.py tests/unit/connectors/test_qcc_oauth_grant.py tests/unit/test_bundled_plugins_layout.py tests/unit/test_cli_main.py tests/unit/agents/test_memory_slim.py tests/unit/agents/test_agent_manager.py -q --junitxml "$RUNNER_TEMP/shared-isolation.xml"
@@ -227,7 +235,7 @@ jobs:
           # Linux deployment checks already run in release-checks; retain the other platforms here.
           connector_tests=(tests/unit/connectors/test_custom_mcp.py tests/unit/utils/test_frontmatter.py)
           if [ "$RUNNER_OS" != Linux ]; then
-            connector_tests+=(tests/unit/deployment/test_export_public_source.py tests/unit/deployment/test_precommit.py)
+            connector_tests+=(tests/unit/deployment/test_export_public_source.py tests/unit/deployment/test_precommit.py tests/unit/deployment/test_test_gate.py tests/unit/deployment/test_make_format_gate.py tests/unit/deployment/test_make_testmon.py)
           fi
           uv run --frozen pytest "${connector_tests[@]}" -q
           uv run --frozen pytest tests/integration/test_connectors_api.py -q -k 'patch_custom_mcp_server_default_open_only or shared_custom_mcp_is_visible_with_collision_safe_name or chat_rejects_unknown_mcp or chat_accepts_user_instance_mcp'
