@@ -77,7 +77,10 @@ def parse_frontmatter(text: str) -> tuple[dict[str, Any], str]:
     raw = text[start + 3 : end - 4]  # skip opening ---\n, exclude closing \n---
     body = text[end:].lstrip("\n")
     try:
-        meta = yaml.safe_load(raw) or {}
+        # Both loaders construct only standard YAML values; LibYAML avoids the
+        # repeated Python parser work when scanning the bundled catalogs.
+        loader = getattr(yaml, "CSafeLoader", yaml.SafeLoader)
+        meta = yaml.load(raw, Loader=loader) or {}
         if not isinstance(meta, dict):
             return {}, text
         return meta, body
