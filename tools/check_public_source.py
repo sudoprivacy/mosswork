@@ -220,8 +220,15 @@ def main() -> None:
     args = parser.parse_args()
     errors = check(args.root)
     if errors:
+        print(f"Source export check failed for: {args.root.resolve()}")
         for error in errors:
             print(error)
+        print(
+            "Correct the listed source inputs, export the complete current candidate with "
+            "tools/export_public_source.py --output <new-directory>, then rerun "
+            "tools/check_public_source.py --root <new-directory>. "
+            "Keep the failed export unchanged."
+        )
         raise SystemExit(1)
     print("Source manifest, documentation, expert references and distribution metadata: OK")
 

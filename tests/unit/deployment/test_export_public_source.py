@@ -6,6 +6,7 @@ import importlib.util
 import json
 import os
 import subprocess
+import sys
 from pathlib import Path
 
 import pytest
@@ -275,3 +276,35 @@ def test_export_preserves_internal_links_but_rejects_external_links(tmp_path: Pa
     (root / "external").symlink_to(tmp_path / "outside")
     with pytest.raises(ValueError, match="leaves public source"):
         exporter.export(root, tmp_path / "blocked")
+
+
+@pytest.mark.parametrize("failure", ["manifest-missing", "hash-mismatch"])
+def test_checker_cli_retains_errors_and_gives_the_exact_export_and_recovery_route(
+    tmp_path: Path, failure: str
+) -> None:
+    root = tmp_path / "failed public export"
+    root.mkdir()
+    if failure == "hash-mismatch":
+        (root / "README.md").write_text("changed source\n", encoding="utf-8")
+        (root / "PUBLIC_SOURCE.json").write_text(
+            json.dumps({"files": [{"path": "README.md", "sha256": "0" * 64}]}),
+            encoding="utf-8",
+        )
+    before = {p.name: p.read_bytes() for p in root.iterdir()}
+    result = subprocess.run(
+        [sys.executable, str(_PATH.with_name("check_public_source.py")), "--root", str(root)],
+        capture_output=True,
+        text=True,
+        encoding="utf-8",
+        check=False,
+    )
+    assert result.returncode == 1
+    assert str(root.resolve()) in result.stdout
+    expected = (
+        "hash mismatch: README.md" if failure == "hash-mismatch" else "PUBLIC_SOURCE.json missing"
+    )
+    assert expected in result.stdout
+    assert "tools/export_public_source.py --output <new-directory>" in result.stdout
+    assert "tools/check_public_source.py --root <new-directory>" in result.stdout
+    assert "Keep the failed export unchanged" in result.stdout
+    assert {p.name: p.read_bytes() for p in root.iterdir()} == before
