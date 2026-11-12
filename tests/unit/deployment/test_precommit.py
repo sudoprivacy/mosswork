@@ -448,7 +448,9 @@ def test_ci_scope_cli_uses_commits_without_inheriting_or_mutating_an_index(
     assert result.returncode == 0, result.stdout + result.stderr
     plan = json.loads(result.stdout.removeprefix("CI_SCOPE: "))
     assert plan["runtime_matrix"] is False and plan["paths"] == ["Makefile"]
-    assert output.read_text(encoding="utf-8") == "runtime_matrix=false\nwindows_validation=false\n"
+    assert output.read_text(encoding="utf-8") == (
+        "runtime_matrix=false\nwindows_validation=false\nvalidator_regressions=true\n"
+    )
     assert (repo / ".git/index").read_bytes() == index_before
     assert git(repo, "rev-parse", "HEAD") == head
 
@@ -818,3 +820,77 @@ def test_worktree_validation_preserves_failure_and_detects_untracked_source_drif
     assert receipt["passed"] is (outcome == "success")
     assert receipt["status"] == ("passed" if outcome == "success" else "failed")
     assert (repo / ".git/index").read_bytes() == index
+
+
+@pytest.mark.parametrize(
+    "path,required",
+    [
+        ("src/octop/domain.py", False),
+        ("packages/moss-harness/src/moss_harness/domain.py", False),
+        ("tests/unit/sudograph/test_domain.py", False),
+        ("tests/integration/test_acp_api.py", False),
+        ("src/outside.py", True),
+        ("src/octop/conftest.py", True),
+        ("tests/unit/deployment/test_test_gate.py", True),
+        ("tests/conftest.py", True),
+        ("tests/support/testmon_staged_changes.py", True),
+        ("Makefile", True),
+        ("pyproject.toml", True),
+        ("packages/moss-harness/pyproject.toml", True),
+        ("uv.lock", True),
+        ("tools/precommit.py", True),
+        (".github/workflows/mosswork-ci.yml", True),
+        ("docs/guide.md", True),
+    ],
+)
+def test_committed_payload_keeps_product_matrices_and_scopes_validator_regressions(
+    repo: Path, path: str, required: bool
+) -> None:
+    base = git(repo, "rev-parse", "HEAD")
+    stage(repo, path)
+    ci_commit(repo, "candidate")
+    plan = gate.ci_plan(repo, base, git(repo, "rev-parse", "HEAD"))
+    assert plan["validator_regressions"] is required
+    if not required:
+        assert plan["runtime_matrix"] is True
+        assert plan["windows_validation"] is False
+        assert plan["paths"] == [path]
+
+
+@pytest.mark.parametrize("extra", ["uv.lock", "conftest.py", "tools/test_gate.py", "docs/guide.md"])
+def test_mixed_product_changes_keep_the_complete_validator_regressions(
+    repo: Path, extra: str
+) -> None:
+    base = git(repo, "rev-parse", "HEAD")
+    stage(repo, "src/octop/domain.py")
+    stage(repo, extra)
+    ci_commit(repo, "mixed candidate")
+    plan = gate.ci_plan(repo, base, git(repo, "rev-parse", "HEAD"))
+    assert plan["validator_regressions"] is True
+    assert plan["runtime_matrix"] is True
+
+
+@pytest.mark.parametrize("operation", ["delete", "rename"])
+def test_missing_committed_payload_never_omits_validator_regressions(
+    repo: Path, operation: str
+) -> None:
+    stage(repo, "src/octop/domain.py")
+    ci_commit(repo, "baseline")
+    base = git(repo, "rev-parse", "HEAD")
+    if operation == "delete":
+        git(repo, "rm", "src/octop/domain.py")
+    else:
+        git(repo, "mv", "src/octop/domain.py", "src/octop/new.py")
+    ci_commit(repo, "candidate")
+    assert gate.ci_plan(repo, base, git(repo, "rev-parse", "HEAD"))["validator_regressions"] is True
+
+
+@pytest.mark.skipif(os.name == "nt", reason="Windows symlinks need additional OS privileges")
+def test_nonregular_product_payload_keeps_validator_regressions(repo: Path) -> None:
+    base = git(repo, "rev-parse", "HEAD")
+    path = repo / "src/octop/domain.py"
+    path.parent.mkdir(parents=True)
+    path.symlink_to(repo / "README.md")
+    git(repo, "add", ".")
+    ci_commit(repo, "linked product input")
+    assert gate.ci_plan(repo, base, git(repo, "rev-parse", "HEAD"))["validator_regressions"] is True

@@ -14,6 +14,8 @@ import {
   GitFork,
   Eye,
   EyeOff,
+  ChevronDown,
+  ChevronRight,
 } from "lucide-react";
 import type { Session } from "../hooks/useSessions";
 import type { MossworkAgent } from "../../../context/AgentContext";
@@ -271,6 +273,7 @@ function ActiveAgentCard({
 }: AgentCardProps) {
   const { t } = useTranslation();
   const accent = agent.color || "#6366f1";
+  const [sessionsCollapsed, setSessionsCollapsed] = useState(false);
 
   const filteredSessions = useMemo(() => {
     const q = searchQuery.trim().toLowerCase();
@@ -368,55 +371,72 @@ function ActiveAgentCard({
         </div>
       </div>
 
-      <div className={styles.agentCardSessions}>
-        {!sessionsEnabled ? (
-          <div className={styles.agentCardSessionsEmpty}>
-            {t("chat.agentNotRunningHint")}
-          </div>
-        ) : sessions.length === 0 ? (
-          <div className={styles.agentCardSessionsEmpty}>
-            {t("chat.noSessionsYet", "直接发消息即可开始对话")}
-          </div>
-        ) : filteredSessions.length === 0 ? (
-          <div className={styles.agentCardSessionsEmpty}>
-            {t("chat.noSearchResults", "没有匹配的会话")}
-          </div>
-        ) : (
-          <>
-            {filteredSessions.map((s) => (
-              <SessionItem
-                key={s.id}
-                session={s}
-                isActive={activeId === s.id}
-                workStatus={resolveSessionWorkStatus(s, liveWorkingIds)}
-                onSelect={(id) => onSelect(id, agent.agent_id)}
-                onDelete={onDelete}
-                onRename={onRename}
-                onPin={onPin}
-                onFork={onFork}
-                forkDisabled={
-                  activeId === s.id ? activeForkDisabled : undefined
-                }
-                forkDisabledHint={
-                  activeId === s.id ? activeForkDisabledHint : undefined
-                }
-              />
-            ))}
-            {showExpandMore ? (
-              <button
-                type="button"
-                className={styles.sessionLoadMore}
-                onClick={onLoadMore}
-                disabled={loadingMore}
-              >
-                {loadingMore
-                  ? t("common.loading")
-                  : t("chat.expandMore", "展开更多")}
-              </button>
-            ) : null}
-          </>
-        )}
-      </div>
+      {sessions.length > 0 ? (
+        <button
+          type="button"
+          className={styles.agentCardSessionsToggle}
+          onClick={() => setSessionsCollapsed((collapsed) => !collapsed)}
+          aria-expanded={!sessionsCollapsed}
+        >
+          {sessionsCollapsed ? (
+            <ChevronRight size={14} aria-hidden />
+          ) : (
+            <ChevronDown size={14} aria-hidden />
+          )}
+          <span>{t("chat.sessions", "会话")}</span>
+        </button>
+      ) : null}
+      {!sessionsCollapsed ? (
+        <div className={styles.agentCardSessions}>
+          {!sessionsEnabled ? (
+            <div className={styles.agentCardSessionsEmpty}>
+              {t("chat.agentNotRunningHint")}
+            </div>
+          ) : sessions.length === 0 ? (
+            <div className={styles.agentCardSessionsEmpty}>
+              {t("chat.noSessionsYet", "直接发消息即可开始对话")}
+            </div>
+          ) : filteredSessions.length === 0 ? (
+            <div className={styles.agentCardSessionsEmpty}>
+              {t("chat.noSearchResults", "没有匹配的会话")}
+            </div>
+          ) : (
+            <>
+              {filteredSessions.map((s) => (
+                <SessionItem
+                  key={s.id}
+                  session={s}
+                  isActive={activeId === s.id}
+                  workStatus={resolveSessionWorkStatus(s, liveWorkingIds)}
+                  onSelect={(id) => onSelect(id, agent.agent_id)}
+                  onDelete={onDelete}
+                  onRename={onRename}
+                  onPin={onPin}
+                  onFork={onFork}
+                  forkDisabled={
+                    activeId === s.id ? activeForkDisabled : undefined
+                  }
+                  forkDisabledHint={
+                    activeId === s.id ? activeForkDisabledHint : undefined
+                  }
+                />
+              ))}
+              {showExpandMore ? (
+                <button
+                  type="button"
+                  className={styles.sessionLoadMore}
+                  onClick={onLoadMore}
+                  disabled={loadingMore}
+                >
+                  {loadingMore
+                    ? t("common.loading")
+                    : t("chat.expandMore", "展开更多")}
+                </button>
+              ) : null}
+            </>
+          )}
+        </div>
+      ) : null}
     </div>
   );
 }

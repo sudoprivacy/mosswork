@@ -67,6 +67,7 @@ jobs:
     outputs:
       runtime_matrix: ${{ steps.scope.outputs.runtime_matrix }}
       windows_validation: ${{ steps.scope.outputs.windows_validation }}
+      validator_regressions: ${{ steps.scope.outputs.validator_regressions }}
     steps:
       - uses: actions/checkout@v4
         with:
@@ -149,6 +150,8 @@ jobs:
       matrix:
         os: [ubuntu-24.04, windows-2022]
     runs-on: ${{ matrix.os }}
+    env:
+      CI_VALIDATOR_REGRESSIONS: ${{ needs.ci-scope.outputs.validator_regressions }}
     defaults:
       run:
         shell: bash
@@ -238,10 +241,13 @@ jobs:
         run: |
           # Linux deployment checks already run in release-checks; retain the other platforms here.
           connector_tests=(tests/unit/connectors/test_custom_mcp.py tests/unit/utils/test_frontmatter.py)
-          if [ "$RUNNER_OS" != Linux ]; then
+          if [ "$RUNNER_OS" != Linux ] && [ "${CI_VALIDATOR_REGRESSIONS:-true}" != false ]; then
             connector_tests+=(tests/unit/deployment/test_export_public_source.py tests/unit/deployment/test_precommit.py tests/unit/deployment/test_test_gate.py tests/unit/deployment/test_ci_identity_reuse.py tests/unit/deployment/test_make_format_gate.py tests/unit/deployment/test_make_testmon.py)
           fi
           uv run --frozen pytest "${connector_tests[@]}" -q
+          if [ "$RUNNER_OS" != Linux ] && [ "${CI_VALIDATOR_REGRESSIONS:-true}" = false ]; then
+            uv run --frozen pytest tests/unit/deployment/test_make_testmon.py::test_full_make_records_real_baseline_and_preserves_failure -q
+          fi
           uv run --frozen pytest tests/integration/test_connectors_api.py -q -k 'patch_custom_mcp_server_default_open_only or shared_custom_mcp_is_visible_with_collision_safe_name or chat_rejects_unknown_mcp or chat_accepts_user_instance_mcp'
           uv run --frozen python tools/export_public_source.py --output "$RUNNER_TEMP/sudograph-public-source"
           uv run --frozen python tools/check_public_source.py --root "$RUNNER_TEMP/sudograph-public-source"
@@ -280,6 +286,8 @@ jobs:
   release-checks:
     needs: ci-scope
     runs-on: ubuntu-24.04
+    env:
+      CI_VALIDATOR_REGRESSIONS: ${{ needs.ci-scope.outputs.validator_regressions }}
     steps:
       - uses: actions/checkout@v4
       - uses: astral-sh/setup-uv@v6
@@ -294,7 +302,17 @@ jobs:
         run: uv run --no-project python tools/precommit.py --ci-tools "$CI_BASE" "$CI_HEAD"
       - name: Test packaging, exports and deployment
         if: needs.ci-scope.outputs.windows_validation != 'true'
-        run: uv run --frozen pytest tests/unit/deployment desktop/tests/test_package_company.py desktop/tests/test_company_tools.py tests/unit/infra/test_local_harness.py tests/unit/infra/test_local_components.py tests/unit/infra/test_brand_environment.py -q
+        run: |
+          validator_args=()
+          if [ "${CI_VALIDATOR_REGRESSIONS:-true}" = false ]; then
+            for module in test_export_public_source test_precommit test_test_gate test_ci_identity_reuse test_make_format_gate test_make_testmon; do
+              validator_args+=("--ignore=tests/unit/deployment/$module.py")
+            done
+          fi
+          uv run --frozen pytest tests/unit/deployment desktop/tests/test_package_company.py desktop/tests/test_company_tools.py tests/unit/infra/test_local_harness.py tests/unit/infra/test_local_components.py tests/unit/infra/test_brand_environment.py "${validator_args[@]}" -q
+          if [ "${CI_VALIDATOR_REGRESSIONS:-true}" = false ]; then
+            uv run --frozen pytest tests/unit/deployment/test_make_testmon.py::test_full_make_records_real_baseline_and_preserves_failure -q
+          fi
       - name: Check shell and workflow syntax
         run: |
           for script in scripts/install-moss-server.sh docker/deploy/*.sh docker/enterprise/{prepare.sh,deploy.sh,start.sh,stop.sh}; do
