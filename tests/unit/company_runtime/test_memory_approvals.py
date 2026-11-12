@@ -105,9 +105,29 @@ async def test_native_guard_pauses_before_removal_and_resumes_same_task(
         await runtime.close()
 
 
+@pytest.mark.parametrize("recall_times_out", [False, True])
 async def test_server_memory_capture_is_idempotent_and_automatic_recall_reaches_model(
-    company, tmp_path
+    company, tmp_path, monkeypatch, recall_times_out
 ):
+    from moss_memory.pipeline.recall import multi_source, timeout
+
+    class IntegrationClock(timeout.Stopwatch):
+        @property
+        def elapsed_ms(self):
+            return 0
+
+    deadline_calls = []
+
+    def controlled_deadline(fn, *, stage, budget_ms):
+        # Exercise real SQLite retrieval or the explicit timeout outcome. This
+        # integration checks recall delivery, independent of runner scheduling.
+        deadline_calls.append((stage, budget_ms))
+        if recall_times_out:
+            raise timeout.TimeoutExceededError(stage, budget_ms)
+        return fn()
+
+    monkeypatch.setattr(timeout, "Stopwatch", IntegrationClock)
+    monkeypatch.setattr(multi_source, "with_deadline", controlled_deadline)
     server, client, _, _ = company
     install_agent(server)
     memory = Memory(
@@ -168,11 +188,19 @@ async def test_server_memory_capture_is_idempotent_and_automatic_recall_reaches_
         )
         await asyncio.wait_for(runtime.work["thread1"], 15)
         assert runtime.tasks["thread1"]["status"] == "completed", events[-1]
-        assert any(
+        has_recall = any(
             "<memory-context>" in str(m.content) and "concise" in str(m.content)
             for m in seen
             if isinstance(m, HumanMessage)
         )
+        assert has_recall is (not recall_times_out)
+        assert any(
+            "What reports do I prefer?" in str(message.content)
+            for message in seen
+            if isinstance(message, HumanMessage)
+        )
+        assert ("atom", timeout.DEFAULT_ATOM_BUDGET_MS) in deadline_calls
+        assert all(0 < budget <= 50 for _stage, budget in deadline_calls)
         captured = memory.list_raw(thread_id="thread1")
         assert captured and all("<memory-context>" not in e.content for e in captured)
         assert not list(runtime.workspace.rglob("*.sqlite"))
