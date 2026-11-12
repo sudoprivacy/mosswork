@@ -1,0 +1,3 @@
+#!/bin/sh
+# Run the actual test gate in the same Git shell from Make and pre-commit.
+exec "$@"

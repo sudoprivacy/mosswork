@@ -209,7 +209,9 @@ else:
         assert ["mypy", "src/octop"] in [row["args"] for row in calls]
         pytest_args = [row["args"] for row in calls if row["args"][:1] == ["pytest"]]
         assert len(pytest_args) == 1
-        assert ("--testmon-noselect" if target == "all" else "--testmon") in pytest_args[0]
+        # Both entries require a complete run without matching source-bound history.
+        assert "--testmon-noselect" in pytest_args[0]
+        assert ("-m" in pytest_args[0]) is (target == "all")
 
     # Restore automatic formatting as a prerequisite: the old behavior runs
     # validators successfully while changing the frozen input's raw bytes.

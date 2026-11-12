@@ -29,6 +29,7 @@ on:
       - 'tools/package_sudograph_worker.py'
       - 'tools/precommit.py'
       - '.githooks/pre-commit'
+      - '.githooks/test-gate'
       - '.gitattributes'
       - 'AGENTS.md'
       - 'Makefile'
@@ -319,6 +320,7 @@ jobs:
             bash -n "$script"
           done
           bash -n tools/publish-release-to-cos.sh
+          sh -n .githooks/test-gate
           shellcheck scripts/install-moss-server.sh tools/publish-release-to-cos.sh docker/deploy/*.sh docker/enterprise/{prepare.sh,deploy.sh,start.sh,stop.sh}
           go run github.com/rhysd/actionlint/cmd/actionlint@v1.7.7 .github/workflows/mosswork-ci.yml .github/workflows/mosswork-release.yml .github/workflows/mosswork-cos-publish.yml .github/workflows/mosswork-desktop-update.yml
       - name: Validate public source export

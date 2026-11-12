@@ -183,15 +183,39 @@ def test_source_drift_rejects_an_otherwise_successful_real_pytest_run(
     assert baseline.read_bytes() == before
 
 
+@pytest.mark.parametrize("with_git_shell", [False, True])
 def test_source_archive_without_git_keeps_the_original_full_nonlive_run(
     gate_repo: tuple[Path, dict[str, str]],
+    with_git_shell: bool,
 ) -> None:
     root, env = gate_repo
+    if with_git_shell:
+        (root / ".githooks").mkdir()
+        shutil.copyfile(SOURCE / ".githooks/test-gate", root / ".githooks/test-gate")
     (root / ".git").rename(root / "output/retained-git")
     result, plan, calls = execute(root, env, "archive")
     assert result.returncode == 0, result.stdout + result.stderr
     assert "no reusable baseline" in result.stdout and not plan
     assert sorted(calls) == ["first", "second"]
+
+
+def test_git_shell_zero_without_actual_gate_cannot_accept_validation(
+    gate_repo: tuple[Path, dict[str, str]],
+) -> None:
+    root, env = gate_repo
+    hooks = root / ".githooks"
+    hooks.mkdir()
+    shutil.copyfile(SOURCE / ".githooks/test-gate", hooks / "test-gate")
+    (hooks / "test-gate").chmod(0o755)
+    original, _, calls = execute(root, env, "original-actual-gate")
+    assert original.returncode == 0 and sorted(calls) == ["first", "second"]
+    storage = root / ".git/mosswork-test-gate"
+    baseline = (storage / "baseline.json").read_bytes()
+    (hooks / "test-gate").write_text("#!/bin/sh\nexit 0\n", encoding="utf-8")
+    refused, _, calls = execute(root, env, "zero-shell")
+    assert refused.returncode != 0 and "zero shell exit cannot replace validation" in refused.stderr
+    assert calls == [] and (storage / "baseline.json").read_bytes() == baseline
+    assert not list(storage.glob("launch-*.json"))
 
 
 def test_real_make_uses_the_gate_and_explicit_full_target_keeps_every_case(
@@ -234,6 +258,159 @@ def test_real_make_uses_the_gate_and_explicit_full_target_keeps_every_case(
     assert (root / "output/observed").read_text().splitlines().count("first") == 2
     assert (root / "output/observed").read_text().splitlines().count("second") == 2
     assert not (root / "output/LIVE-RAN").exists()
+
+
+@pytest.mark.parametrize("inherited_hook_route", [False, True])
+def test_fresh_make_and_real_commit_share_history_without_losing_live_or_policy_checks(
+    gate_repo: tuple[Path, dict[str, str]],
+    inherited_hook_route: bool,
+) -> None:
+    make = shutil.which("make") or shutil.which("mingw32-make")
+    if make is None and os.name == "nt":
+        pytest.skip("GNU Make is required; the Windows publication route supplies it")
+    assert make is not None
+    root, environment = gate_repo
+    if inherited_hook_route:
+        environment["GIT_CONFIG_PARAMETERS"] = "'core.hooksPath'='.githooks'"
+    hooks = root / ".githooks"
+    hooks.mkdir()
+    shutil.copyfile(SOURCE / ".githooks/test-gate", hooks / "test-gate")
+    (hooks / "test-gate").chmod(0o755)
+    (root / "tests/test_live.py").write_text(
+        "import pytest\nfrom pathlib import Path\n\n@pytest.mark.live\ndef test_live():\n"
+        "    with Path('output/observed').open('a') as f: f.write('live\\n')\n",
+        encoding="utf-8",
+    )
+    arguments = [
+        make,
+        "PYTEST_JOBS=1",
+        "TEST_PYTHON=" + shlex.quote(Path(sys.executable).as_posix()),
+        "RUN=" + shlex.quote(Path(sys.executable).as_posix()) + " -m",
+    ]
+    # This private hook isolates the actual Make test boundary; the application's
+    # original lint/typecheck/build hook still qualifies publication separately.
+    (hooks / "pre-commit").write_text(
+        "#!/bin/sh\nexec " + shlex.join([*arguments, "test-affected"]) + "\n",
+        encoding="utf-8",
+    )
+    (hooks / "pre-commit").chmod(0o755)
+    subprocess.run(["git", "add", "."], cwd=root, env=environment, check=True)
+    subprocess.run(
+        [
+            "git",
+            "-c",
+            "core.hooksPath=" + str(root / "empty-hooks"),
+            "commit",
+            "-qm",
+            "shared entry fixture",
+        ],
+        cwd=root,
+        env=environment,
+        capture_output=True,
+        check=True,
+    )
+    marker = root / "output/observed"
+
+    def invoke(*argv: str) -> tuple[dict, list[str]]:
+        before = marker.read_text().splitlines() if marker.exists() else []
+        result = subprocess.run(
+            list(argv),
+            cwd=root,
+            env=environment,
+            capture_output=True,
+            text=True,
+            encoding="utf-8",
+            check=False,
+        )
+        assert result.returncode == 0, result.stdout + result.stderr
+        receipt = json.loads((root / ".git/mosswork-test-gate/history.json").read_text())
+        assert receipt["passed"]
+        return receipt, marker.read_text().splitlines()[len(before) :]
+
+    full, observed = invoke(*arguments, "test-current")
+    assert full["mode"] == "full" and sorted(observed) == ["first", "second"]
+    graph = full["graph"]
+    hook, observed = invoke(
+        "git", "-c", "core.hooksPath=.githooks", "commit", "--allow-empty", "-qm", "checked"
+    )
+    assert hook["mode"] == "affected" and observed == ["live"]
+    assert hook["graph"] == graph and hook["scope"] == "including-live"
+    assert not (root / ".testmondata").exists()
+    unchanged, observed = invoke(
+        "git", "-c", "core.hooksPath=.githooks", "commit", "--allow-empty", "-qm", "unchanged"
+    )
+    assert unchanged["mode"] == "affected" and observed == []
+    assert unchanged["pytest_session"]["collected"] == 0
+    assert unchanged["pytest_session"]["exit_code"] == 0
+    nonlive, observed = invoke(*arguments, "test-current")
+    assert nonlive["mode"] == "affected" and observed == []
+    unchanged, observed = invoke(
+        "git", "-c", "core.hooksPath=.githooks", "commit", "--allow-empty", "-qm", "same scopes"
+    )
+    assert unchanged["mode"] == "affected" and observed == []
+
+    live = root / "tests/test_live.py"
+    live.write_text(
+        live.read_text(encoding="utf-8")
+        + "\n@pytest.mark.live\ndef test_live_added():\n"
+        + "    with Path('output/observed').open('a') as f: f.write('new-live\\n')\n",
+        encoding="utf-8",
+    )
+    subprocess.run(["git", "add", "tests/test_live.py"], cwd=root, env=environment, check=True)
+    nonlive, observed = invoke(*arguments, "test-current")
+    assert nonlive["mode"] == "affected" and observed == []
+    eligible, observed = invoke(
+        "git", "-c", "core.hooksPath=.githooks", "commit", "-qm", "required new live case"
+    )
+    assert eligible["mode"] == "affected" and observed.count("new-live") == 1
+    assert not {"first", "second"}.intersection(observed)
+
+    (root / "src/first.py").write_text("def value():\n    return 1 + 0\n", encoding="utf-8")
+    subprocess.run(["git", "add", "src/first.py"], cwd=root, env=environment, check=True)
+    staged, observed = invoke(
+        "git", "-c", "core.hooksPath=.githooks", "commit", "-qm", "staged source"
+    )
+    assert staged["mode"] == "affected" and observed == ["first"]
+
+    policy, observed = invoke(
+        "git",
+        "-c",
+        "core.hooksPath=.githooks",
+        "-c",
+        "mosswork.fixture-policy=changed",
+        "commit",
+        "--allow-empty",
+        "-qm",
+        "different actual Git policy",
+    )
+    assert policy["mode"] == "full" and sorted(observed) == ["first", "live", "new-live", "second"]
+    assert "GIT_CONFIG_PARAMETERS" in policy["environment_variables"]
+    baseline = root / ".git/mosswork-test-gate/baseline.json"
+    passed_baseline = baseline.read_bytes()
+    (root / "tests/test_live.py").write_text(
+        "import pytest\n\n@pytest.mark.live\ndef test_live():\n"
+        "    raise AssertionError('controlled live failure must stop the commit')\n",
+        encoding="utf-8",
+    )
+    failed = subprocess.run(
+        [
+            "git",
+            "-c",
+            "core.hooksPath=.githooks",
+            "commit",
+            "--allow-empty",
+            "-qm",
+            "refused live failure",
+        ],
+        cwd=root,
+        env=environment,
+        capture_output=True,
+        text=True,
+        encoding="utf-8",
+        check=False,
+    )
+    assert failed.returncode != 0 and "controlled live failure" in failed.stdout + failed.stderr
+    assert baseline.read_bytes() == passed_baseline
 
 
 def test_zero_exit_without_an_actual_pytest_session_cannot_create_a_baseline(
