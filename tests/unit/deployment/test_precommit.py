@@ -507,7 +507,9 @@ def seed_windows_validation_workflow(repo: Path) -> None:
         ("packages/moss-harness/src/moss_harness/config.py", True),
         ("pyproject.toml", True),
         ("uv.lock", True),
-        ("tools/precommit.py", True),
+        ("tools/precommit.py", False),
+        ("tools/frontend_gate.py", False),
+        ("tests/unit/deployment/test_frontend_gate.py", False),
         (".github/workflows/mosswork-ci.yml", True),
         (".github/workflows/mosswork-identity-ci.yml", True),
         ("tests/conftest.py", True),
@@ -599,6 +601,7 @@ def test_ci_scope_cli_uses_commits_without_inheriting_or_mutating_an_index(
     assert plan["runtime_matrix"] is False and plan["paths"] == ["Makefile"]
     assert output.read_text(encoding="utf-8") == (
         "runtime_matrix=false\nwindows_validation=false\nvalidator_regressions=true\n"
+        "linux_validation=false\n"
     )
     assert (repo / ".git/index").read_bytes() == index_before
     assert git(repo, "rev-parse", "HEAD") == head
@@ -628,6 +631,7 @@ def test_committed_validation_tools_keep_windows_checks_without_runtime_jobs(
     plan = gate.ci_plan(repo, base, git(repo, "rev-parse", "HEAD"))
     assert plan["runtime_matrix"] is False
     assert plan["windows_validation"] is True
+    assert plan["linux_validation"] is (path in gate.DUAL_PLATFORM_VALIDATION_INPUTS)
     assert set(plan["paths"]) == {path, "CONTRIBUTING.md"}
 
 
@@ -640,6 +644,7 @@ def test_committed_validation_tools_keep_windows_checks_without_runtime_jobs(
         "planner-changed",
         "linux-command",
         "linux-selection",
+        "linux-tool-condition",
     ],
 )
 def test_windows_tool_scope_keeps_runtime_jobs_for_unqualified_workflow(
@@ -659,6 +664,10 @@ def test_windows_tool_scope_keeps_runtime_jobs_for_unqualified_workflow(
                 "      - name: Check independent validation tools and the complete current source",
                 "      - name: Removed independent tool check",
             ),
+            "linux-tool-condition": (
+                " || needs.ci-scope.outputs.linux_validation == 'true'",
+                "",
+            ),
             "linux-selection": (
                 "  release-checks:\n    needs: ci-scope",
                 "  release-checks:\n    needs: other-selector",
@@ -676,7 +685,7 @@ def test_windows_tool_scope_keeps_runtime_jobs_for_unqualified_workflow(
     assert "recipe" in plan["reason"]
 
 
-@pytest.mark.parametrize("operation", ["delete", "rename", "runtime", "dispatcher", "worker"])
+@pytest.mark.parametrize("operation", ["delete", "rename", "runtime", "execution-helper", "worker"])
 def test_windows_tool_scope_refuses_missing_or_mixed_runtime_inputs(
     repo: Path, operation: str
 ) -> None:
@@ -692,7 +701,7 @@ def test_windows_tool_scope_refuses_missing_or_mixed_runtime_inputs(
         stage(repo, path, "# Changed tool\n")
         extra = {
             "runtime": "src/octop/config.py",
-            "dispatcher": "tools/precommit.py",
+            "execution-helper": "tools/test_gate.py",
             "worker": "tools/accept_sudograph_worker.py",
         }[operation]
         stage(repo, extra)

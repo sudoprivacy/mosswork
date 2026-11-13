@@ -74,6 +74,7 @@ jobs:
     outputs:
       runtime_matrix: ${{ steps.scope.outputs.runtime_matrix }}
       windows_validation: ${{ steps.scope.outputs.windows_validation }}
+      linux_validation: ${{ steps.scope.outputs.linux_validation }}
       validator_regressions: ${{ steps.scope.outputs.validator_regressions }}
     steps:
       - uses: actions/checkout@v4
@@ -319,7 +320,8 @@ jobs:
           CI_HEAD: ${{ github.event.pull_request.head.sha }}
         run: uv run --no-project python tools/precommit.py --ci-tools "$CI_BASE" "$CI_HEAD"
       - name: Test packaging, exports and deployment
-        if: needs.ci-scope.outputs.windows_validation != 'true'
+        # Validator implementations keep their real Git/Make checks on both hosts.
+        if: needs.ci-scope.outputs.windows_validation != 'true' || needs.ci-scope.outputs.linux_validation == 'true'
         run: |
           validator_args=()
           if [ "${CI_VALIDATOR_REGRESSIONS:-true}" = false ]; then
