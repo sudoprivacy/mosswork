@@ -788,6 +788,8 @@ async function loadThreadHistory(
     history.artifact_refs,
   );
   if (offset === 0) {
+    chatStore.setThreadExecutionMode(threadId, history.execution_mode);
+    chatStore.setThreadProjectBinding(threadId, history.project_binding);
     syncSessionArtifacts(threadId, artifacts);
     syncSessionConversationMode(
       threadId,

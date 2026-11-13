@@ -2127,6 +2127,18 @@ def _ensure_source_definition_trigger(db: DatabasePool) -> None:
             conn.execute(statement)
 
 
+def _ensure_resource_market_schema(db: DatabasePool) -> None:
+    """Apply the unreleased v30 DDL to existing development databases too."""
+    suffix = ".pg.sql" if db.dialect == "postgresql" else ".sql"
+    sql = (_MIGRATIONS_DIR / ("030_employee_knowledge" + suffix)).read_text(encoding="utf-8")
+    block = sql.split("-- Resource market schema:", 1)[1].split(
+        "-- End resource market schema.", 1
+    )[0]
+    block = block.split("\n", 1)[1]
+    with db.transaction() as conn:
+        _apply_postgresql_migration(conn, block)
+
+
 def run_migrations(db: DatabasePool) -> None:
     if isinstance(db, PostgresPool):
         # One initialization job at a time, including compatibility repairs.
@@ -2194,4 +2206,5 @@ def _run_migrations(db: DatabasePool) -> None:
     _ensure_retained_session_projection_schema(db)
     _ensure_optional_model_limit(db)
     _ensure_source_definition_trigger(db)
+    _ensure_resource_market_schema(db)
     _grant_default_nav_permissions(db)

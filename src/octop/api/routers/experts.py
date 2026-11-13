@@ -13,6 +13,7 @@ from __future__ import annotations
 
 import asyncio
 import json
+import mimetypes
 from typing import Any, Literal
 
 from fastapi import APIRouter, Depends, Response
@@ -21,7 +22,7 @@ from pydantic import BaseModel, Field
 from octop.api.common.agent import require_agent_owner_row, user_owns_agent
 from octop.api.common.agent_runtime import AgentRuntimeFields, runtime_field_updates
 from octop.api.common.validators import assert_user_backend_root_dirs
-from octop.api.deps import current_user, get_server
+from octop.api.deps import current_user, get_server, require_permission
 from octop.infra.agents.experts.avatar import (
     display_published_expert_icon_url,
     public_portrait_icon_url,
@@ -74,6 +75,9 @@ from octop.infra.agents.experts.skillhub_market import (
 )
 from octop.infra.errors import ErrorCode, MossworkError
 from octop.infra.history.trajectory.settings import apply_enable_trajectory
+from octop.infra.market.expert_installation import LocalExpertMarket
+from octop.infra.market.packages import invalid
+from octop.infra.utils.asyncio import offload
 from octop.infra.utils.locale import resolve_user_locale
 
 router = APIRouter()
@@ -688,6 +692,127 @@ async def install_published_expert(
     )
     result.update(report.as_api_fields())
     return result
+
+
+class LocalExpertCard(BaseModel):
+    resource_id: str
+    version_id: str
+    version: str
+    object_sha256: str
+    name: str
+    description: str
+    dependencies: list[dict[str, str]]
+    icon_url: str | None = None
+
+
+class LocalExpertCatalog(BaseModel):
+    items: list[LocalExpertCard]
+    can_create: bool
+
+
+class LocalExpertDetail(LocalExpertCard):
+    lock: list[dict[str, str]]
+    file_contents: list[ComposerFileOverrideBody]
+    welcome_message: dict[str, str] | str | None = None
+    quick_prompts: list[dict[str, Any]]
+
+
+class LocalExpertCreated(BaseModel):
+    agent_id: str
+    name: str
+    version_id: str
+    bootstrap_pending: bool
+
+
+@router.get(
+    "/experts/market",
+    response_model=LocalExpertCatalog,
+    summary="List recommended experts published in this deployment",
+)
+async def local_expert_catalog(
+    user: Any = Depends(require_permission("experts")),
+    server: Any = Depends(get_server),
+) -> Any:
+    return await offload(LocalExpertMarket(server.services).catalog, user.id)
+
+
+@router.get(
+    "/experts/market/{version_id}/icon",
+    response_class=Response,
+    summary="Serve an offline icon from a published local expert release",
+)
+async def local_expert_icon(
+    version_id: str,
+    _user: Any = Depends(require_permission("experts")),
+    server: Any = Depends(get_server),
+) -> Response:
+    path, payload = await offload(LocalExpertMarket(server.services).icon, version_id)
+    media_type = mimetypes.guess_type(path)[0] or "application/octet-stream"
+    return Response(
+        payload,
+        media_type=media_type,
+        headers={"Cache-Control": "public, max-age=31536000, immutable"},
+    )
+
+
+@router.get(
+    "/experts/market/{version_id}",
+    response_model=LocalExpertDetail,
+    summary="Preview an immutable expert release and its exact skill dependencies",
+)
+async def local_expert_detail(
+    version_id: str,
+    user: Any = Depends(require_permission("experts")),
+    server: Any = Depends(get_server),
+) -> Any:
+    return await offload(LocalExpertMarket(server.services).detail, version_id)
+
+
+@router.post(
+    "/experts/market/{version_id}/install",
+    status_code=201,
+    response_model=LocalExpertCreated,
+    summary="Create a private Agent from a fixed local expert release",
+    description="Copies the published definition and exact skill dependency closure. Requires expert creation access. Does not download external packages or upgrade existing Agents.",
+)
+async def install_local_expert(
+    version_id: str,
+    body: InstallPublishedExpertBody,
+    user: Any = Depends(require_permission("experts")),
+    server: Any = Depends(get_server),
+) -> Any:
+    assert_user_backend_root_dirs(user, body.backend, policy_repo=server.services.user_policy_repo)
+    registry = server.app_runtime.agent_registry
+    kb_ids, servers = _validated_session_defaults(
+        registry,
+        user.id,
+        knowledge_base_ids=body.knowledge_base_ids,
+        mcp_servers=body.mcp_servers,
+    )
+    if body.file_overrides or body.omit_files or body.hub_skills or body.copy_skills:
+        raise invalid("locked_release")
+    return await LocalExpertMarket(server.services).install(
+        registry,
+        user,
+        version_id,
+        PublishedExpertInstallOptions(
+            name=body.name,
+            description=body.description,
+            providers=body.providers,
+            default_model=body.default_model,
+            backend=body.backend,
+            skill_package_ids=body.skill_package_ids,
+            knowledge_base_ids=kb_ids,
+            mcp_servers=servers,
+            color=body.color,
+            agent_id=body.agent_id,
+            welcome_message=body.welcome_message,
+            runtime_config=runtime_field_updates(body, exclude_unset=True),
+            enable_trajectory=body.enable_trajectory,
+            conversation_mode=body.conversation_mode,
+            quick_prompts=_quick_prompts_from_body(body),
+        ),
+    )
 
 
 @router.get("/experts")

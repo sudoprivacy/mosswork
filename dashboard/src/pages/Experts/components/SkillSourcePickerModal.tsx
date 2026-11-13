@@ -7,10 +7,7 @@ import { useAgent } from "../../../context/AgentContext";
 import { ownedSoloExperts } from "../../../utils/sharedExpert";
 import { apiErrorMessage } from "../../../utils/apiError";
 import { message } from "@/utils/antdMessage";
-import SkillHubTab, {
-  hubInstallPresentation,
-} from "../../Agent/Skills/components/SkillHubTab";
-import type { SkillHubSkill } from "../../Agent/Skills/components/SkillHubDetailDrawer";
+import ResourceMarketEntry from "../../../components/ResourceMarketEntry";
 import { parseSkillPreviewFromMarkdown } from "../../Agent/Skills/skillMarkdown";
 import styles from "../index.module.less";
 
@@ -55,7 +52,6 @@ export default function SkillSourcePickerModal({
   excludeAgentId,
   loadContent = true,
   onClose,
-  onPickHub,
   onPickAgentSkill,
 }: SkillSourcePickerModalProps) {
   const { t } = useTranslation();
@@ -122,19 +118,6 @@ export default function SkillSourcePickerModal({
     });
   }, [excludeSlugs, query, skills]);
 
-  const handlePickHub = (skill: SkillHubSkill) => {
-    if (excludeSlugs.has(skill.slug)) return;
-    const presentation = hubInstallPresentation(skill);
-    onPickHub({
-      skill_name: skill.slug,
-      display_name: skill.name,
-      icon_url: skill.iconUrl ?? "",
-      label: presentation.label,
-      summary: presentation.summary,
-    });
-    onClose();
-  };
-
   const handleCopySkill = async (skill: SkillSummary) => {
     if (!selectedAgentId) return;
     const slug = skill.slug ?? skill.name;
@@ -184,17 +167,13 @@ export default function SkillSourcePickerModal({
         value={tab}
         onChange={(value) => setTab(value === "agents" ? "agents" : "hub")}
         options={[
-          { label: t("experts.addSkillFromHub"), value: "hub" },
+          { label: t("nav.resourceMarket"), value: "hub" },
           { label: t("experts.addSkillFromAgent"), value: "agents" },
         ]}
         style={{ marginBottom: 16 }}
       />
       {tab === "hub" ? (
-        <SkillHubTab
-          target={{ type: "browse" }}
-          onPick={handlePickHub}
-          pickedSlugs={excludeSlugs}
-        />
+        <ResourceMarketEntry />
       ) : selectedAgentId ? (
         <>
           <div

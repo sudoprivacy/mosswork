@@ -75,6 +75,7 @@ class SkillPackageRepo:
         created_by: str,
         icon_name: str = "",
         icon_url: str = "",
+        skill_count: int = 0,
     ) -> SkillPackageRow:
         ts = str(now_ts())
         with self._db.transaction() as conn:
@@ -82,8 +83,8 @@ class SkillPackageRepo:
                 "INSERT INTO skill_packages("
                 "skill_package_id, name, description, created_by, skill_count, "
                 "icon_name, icon_url, created_at, updated_at"
-                ") VALUES (?, ?, ?, ?, 0, ?, ?, ?, ?)",
-                (id, name, description, created_by, icon_name, icon_url, ts, ts),
+                ") VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                (id, name, description, created_by, skill_count, icon_name, icon_url, ts, ts),
             )
         row = self.get(id)
         if row is None:

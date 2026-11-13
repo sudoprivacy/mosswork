@@ -52,6 +52,17 @@ export interface MossworkThread {
   is_active?: boolean;
   has_messages?: boolean;
   execution_location?: "desktop" | "server";
+  execution_mode?: "server" | "local";
+  continuation_of_thread_id?: string | null;
+  project_binding?: {
+    project_id: string;
+    display_name?: string;
+    state: string;
+    binding_revision: number;
+    device_id?: string | null;
+    grant_id?: string | null;
+    grant_version?: number | null;
+  } | null;
   local_device_id?: string | null;
   local_task_status?: string | null;
   pinned?: boolean;
@@ -76,6 +87,8 @@ export interface MossworkThreadHistory {
   local_artifact_turns?: import("../desktopRuntime").LocalArtifactTurn[];
   local_artifacts?: import("../desktopRuntime").LocalArtifact[];
   execution_location?: "desktop" | "server";
+  execution_mode?: "server" | "local";
+  continuation_of_thread_id?: string | null;
   local_device_id?: string | null;
   local_task_status?: string | null;
   thread_id: string;
@@ -113,6 +126,15 @@ export interface MossworkThreadHistory {
   artifacts?: Array<string | ThreadArtifact>;
   /** Structured refs with producer ``agent_id``. */
   artifact_refs?: ThreadArtifact[];
+  project_binding?: {
+    project_id: string;
+    display_name?: string;
+    state: string;
+    binding_revision: number;
+    device_id?: string | null;
+    grant_id?: string | null;
+    grant_version?: number | null;
+  } | null;
 }
 
 export interface MossworkThreadPatch {
@@ -166,10 +188,43 @@ export const mossworkThreadsApi = {
       `/agents/${encodeURIComponent(agentId)}/threads?limit=${limit}`,
     ),
 
-  create: (agentId: string) =>
-    request<{ thread_id: string; session_key: string }>(
-      `/agents/${encodeURIComponent(agentId)}/threads`,
+  create: (agentId: string, executionMode: "server" = "server") =>
+    request<{
+      thread_id: string;
+      session_key: string;
+      execution_mode: "server" | "local";
+    }>(`/agents/${encodeURIComponent(agentId)}/threads`, {
+      method: "POST",
+      body: JSON.stringify({ execution_mode: executionMode }),
+    }),
+
+  continueServer: (agentId: string, threadId: string) =>
+    request<{
+      thread_id: string;
+      session_key: string;
+      execution_mode: "server";
+      continuation_of_thread_id: string;
+    }>(
+      `/agents/${encodeURIComponent(agentId)}/threads/${encodeURIComponent(
+        threadId,
+      )}/continue-server`,
       { method: "POST" },
+    ),
+
+  project: (agentId: string, threadId: string) =>
+    request<{
+      thread_id: string;
+      project_id?: string;
+      display_name?: string;
+      state: string;
+      binding_revision?: number;
+      device_id?: string | null;
+      grant_id?: string | null;
+      grant_version?: number | null;
+    }>(
+      `/agents/${encodeURIComponent(agentId)}/threads/${encodeURIComponent(
+        threadId,
+      )}/project`,
     ),
 
   cancel: (agentId: string, threadId: string, signal?: AbortSignal) =>
@@ -280,6 +335,8 @@ export const mossworkThreadsApi = {
       thread_id: string;
       session_key: string;
       source_thread_id: string;
+      execution_mode?: "server" | "local";
+      continuation_of_thread_id?: string;
       copied_messages: number;
       title: string | null;
       last_active: number;

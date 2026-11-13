@@ -3,13 +3,10 @@
  *
  * Tab A: user's experts, shown as a card grid with start/stop/edit/delete.
  * Tab B: built-in expert templates, shown as a card grid with create-from-template drawer.
- * Tab C: SkillHub expert market, shown as remote skillset cards.
+ * Tab C: deployment-local resource market entry.
  *
  * API (all via request() which already prefixes /api):
  *   GET  /experts                         → ExpertSummary[]
- *   GET  /experts/hub                     → SkillHub market cards (+ scenes)
- *   GET  /experts/hub/{slug}              → market detail + quick prompts
- *   POST /experts/hub/{slug}/install      → create agent from market
  *   GET  /agents                          → via AgentContext
  *   POST /agents/from-expert/{id}         → create agent (via CreateFromExpertDrawer)
  *   POST /agents/{id}/start|stop          → lifecycle (via AgentCard)
@@ -58,7 +55,7 @@ import type { TeamRecord } from "../../api/modules/teams";
 import { TeamCard } from "./components/TeamCard";
 import { PublishedExpertCard } from "./components/PublishedExpertCard";
 import AgentExpertsTable from "./components/AgentExpertsTable";
-import ExpertMarketTab from "./components/ExpertMarketTab";
+import LocalExpertMarketTab from "./components/LocalExpertMarketTab";
 import { MossworkEmptyMascot } from "../../components/EmptyState";
 import { pickLocale } from "../../utils/localizedText";
 import { isOwnedExpert, ownedExperts } from "../../utils/sharedExpert";
@@ -809,17 +806,10 @@ export default function ExpertsPage() {
     visiblePublishedExperts,
   ]);
 
-  const marketContent = useMemo(
-    () => (
-      <ExpertMarketTab
-        lang={lang}
-        installedExpertIds={agentExpertIds}
-        onRequestCreate={(expert) =>
-          setCreateSource({ kind: "market", expert })
-        }
-      />
-    ),
-    [agentExpertIds, lang],
+  const marketContent = (
+    <LocalExpertMarketTab
+      onCreate={(expert) => setCreateSource({ kind: "local-market", expert })}
+    />
   );
 
   return (

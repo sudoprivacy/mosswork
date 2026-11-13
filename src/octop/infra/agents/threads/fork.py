@@ -245,6 +245,8 @@ async def fork_dashboard_thread(
         session_key=session_key,
         title=None,
         last_active=0,
+        execution_mode=source.execution_mode,
+        continuation_of_thread_id=source.thread_id,
     )
     try:
         if device_repo is not None:
@@ -291,6 +293,8 @@ async def fork_dashboard_thread(
         "thread_id": dest_id,
         "session_key": session_key,
         "source_thread_id": source.thread_id,
+        "execution_mode": row.execution_mode if row is not None else source.execution_mode,
+        "continuation_of_thread_id": source.thread_id,
         "copied_messages": copied,
         "title": row.title if row is not None else None,
         "last_active": row.last_active if row is not None else 0,

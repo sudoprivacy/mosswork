@@ -1123,3 +1123,57 @@ async def test_platform_policy_postcommit_withdrawal_preserves_sql_without_ack_o
         assert _stored_organization_policies(environment.path) == organizations
 
     await _policy_foreground(selected, isolated_boot, monkeypatch, exercise)
+
+
+async def test_canonical_boot_does_not_seed_an_unavailable_standalone_market(
+    configuration, isolated_boot, monkeypatch
+):
+    seed = Mock(
+        side_effect=AssertionError("Standalone market data is unavailable in canonical mode")
+    )
+    monkeypatch.setattr("octop.infra.market.skillhub_defaults.seed_skillhub_market", seed)
+    before = digest(configuration.database_path)
+    server = MossworkServer(isolated_boot, canonical_configuration=configuration)
+    await server.start()
+    try:
+        bound = server.canonical
+        assert bound is not None
+        app = build_app(
+            server, **bound.business.app_kwargs(), canonical_admissions=bound.admissions
+        )
+        async with httpx.AsyncClient(
+            transport=httpx.ASGITransport(app=app), base_url="http://test"
+        ) as client:
+            assert (await client.get("/api/identity/status")).json()["mode"] == "canonical"
+            unavailable = await client.get("/api/market")
+            assert unavailable.status_code == 503
+            assert unavailable.json() == {"canonical_resource_unavailable": True}
+        seed.assert_not_called()
+        assert digest(configuration.database_path) == before
+    finally:
+        await server.stop()
+
+
+async def test_standalone_boot_retains_its_market_seed_path(isolated_boot, monkeypatch):
+    isolated_boot.mkdir()
+    product_db = isolated_boot / "product.db"
+    sqlite3.connect(product_db).close()
+    (isolated_boot / "config.json").write_text(
+        json.dumps({"database": {"driver": "sqlite", "sqlite_path": str(product_db)}}),
+        encoding="utf-8",
+    )
+    original = RuntimeError("Standalone market seed reached")
+    seed = Mock(side_effect=original)
+    monkeypatch.setattr("octop.infra.market.skillhub_defaults.seed_skillhub_market", seed)
+    server = MossworkServer(isolated_boot)
+    try:
+        with pytest.raises(RuntimeError) as failure:
+            await server.start()
+        assert failure.value is original
+        seed.assert_called_once()
+        assert server.canonical is None
+    finally:
+        await server.stop()
+        if server.services is not None:
+            server.services.db.close()
+        await server.management_io.drain()

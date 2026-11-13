@@ -111,6 +111,11 @@ def _msg_value(msg: Any, key: str) -> Any:
 
 def _message_usage(msg: Any) -> tuple[str, dict[str, Any]] | None:
     usage_metadata = _msg_value(msg, "usage_metadata")
+    # Some gateway/history serializers expose LangChain usage metadata as
+    # ``usage``. Accept both shapes so provider usage is still recorded after
+    # a state snapshot has crossed the execution boundary.
+    if not isinstance(usage_metadata, dict):
+        usage_metadata = _msg_value(msg, "usage")
     response_metadata = _msg_value(msg, "response_metadata")
     model = ""
     wire_usage: dict[str, Any] = {}

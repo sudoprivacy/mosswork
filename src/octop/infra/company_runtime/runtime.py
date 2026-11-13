@@ -280,6 +280,10 @@ class EnterpriseRuntime:
                 "hitl_policy",
                 "knowledge_base_ids",
                 "edit_message_id",
+                "project_id",
+                "binding_revision",
+                "grant_id",
+                "grant_version",
             )
             if key in params
         }

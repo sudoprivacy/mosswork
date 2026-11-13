@@ -43,23 +43,25 @@ def product(tmp_path: Path) -> Iterator[SqlitePool]:
         pool.close()
 
 
-def test_fresh_and_existing_v30_product_migrations_preserve_bindings(product: SqlitePool) -> None:
+def test_fresh_and_existing_product_migrations_preserve_bindings(product: SqlitePool) -> None:
     repo = CanonicalIdentityProjectionRepo(product)
     expected = repo.get_or_create(**_KEY)
+    with product.connect() as conn:
+        original_version = conn.execute("SELECT version FROM _schema_version").fetchone()[0]
     run_migrations(product)
     run_migrations(product)
     assert repo.get(**_KEY) == expected
     assert UserRepo(product).count() == 1
     with product.connect() as conn:
-        assert conn.execute("SELECT version FROM _schema_version").fetchone()[0] == 30
+        assert conn.execute("SELECT version FROM _schema_version").fetchone()[0] == original_version
         assert not conn.execute(
             "SELECT name FROM sqlite_master WHERE name IN "
             "('human_accounts', 'human_account_memberships', 'moss_member_access')"
         ).fetchall()
 
 
-@pytest.mark.parametrize("prior_version", [29, 30])
-def test_missing_projection_schema_is_repaired_without_version_bump(
+@pytest.mark.parametrize("prior_version", [29, 30, 31])
+def test_missing_projection_schema_is_repaired_at_current_product_version(
     product: SqlitePool, prior_version: int
 ) -> None:
     with product.transaction() as conn:
@@ -69,7 +71,7 @@ def test_missing_projection_schema_is_repaired_without_version_bump(
     run_migrations(product)
     assert CanonicalIdentityProjectionRepo(product).get(**_KEY) is None
     with product.connect() as conn:
-        assert conn.execute("SELECT version FROM _schema_version").fetchone()[0] == 30
+        assert conn.execute("SELECT version FROM _schema_version").fetchone()[0] == 31
 
 
 def test_postgresql_and_sqlite_use_same_idempotent_v30_binding_constraints() -> None:
@@ -106,7 +108,7 @@ def test_postgresql_and_sqlite_use_same_idempotent_v30_binding_constraints() -> 
         encoding="utf-8"
     )
     assert ddl in sqlite_sql
-    assert max(version for version, _ in migrate._discover("postgresql")) == 30
+    assert max(version for version, _ in migrate._discover("postgresql")) == 31
     assert len({version for version, _ in migrate._discover("postgresql")}) == len(
         migrate._discover("postgresql")
     )

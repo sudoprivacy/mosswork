@@ -71,6 +71,7 @@ def test_categories_match_nav_groups() -> None:
         "messaging",
         "groups_create",
         "contacts",
+        "resource_market",
     }
     assert PERMISSIONS["envs"].page == "advanced"
     assert PERMISSIONS["voice"].page == "models"

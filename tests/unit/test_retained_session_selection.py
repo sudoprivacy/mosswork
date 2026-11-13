@@ -232,9 +232,10 @@ async def test_change_during_product_commit_refuses_and_keeps_original_reference
         await selections.current(actor, ports.selection)
 
 
-async def test_existing_v30_repair_preserves_identity_mapping(mapped, product):
+async def test_existing_product_repair_preserves_identity_mapping(mapped, product):
     _ports, actor, owner, products, _selections = mapped
     with product.transaction() as conn:
+        original_version = conn.execute("SELECT version FROM _schema_version").fetchone()[0]
         conn.execute("DROP TABLE retained_session_projections")
     run_migrations(product)
     run_migrations(product)
@@ -252,7 +253,7 @@ async def test_existing_v30_repair_preserves_identity_mapping(mapped, product):
         == owner.local_user_id
     )
     with product.connect() as conn:
-        assert conn.execute("SELECT version FROM _schema_version").fetchone()[0] == 30
+        assert conn.execute("SELECT version FROM _schema_version").fetchone()[0] == original_version
 
 
 async def test_two_product_threads_cannot_claim_same_original_app(mapped, product):

@@ -14,6 +14,7 @@ from octop.api.common.agent_workspace import resolve_agent_workspace_dir
 from octop.api.deps import current_user, get_server
 from octop.api.routers.chat.models import (
     CancelThreadResponse,
+    CreateThreadBody,
     ForkThreadBody,
     RebindSessionBody,
     RenameThreadBody,
@@ -137,11 +138,18 @@ async def list_threads(
                 if hasattr(server.services, "company_runtime_repo")
                 else {}
             ),
+            "project_binding": (
+                server.services.company_runtime_repo.project_binding(r.thread_id)
+                if hasattr(server.services, "company_runtime_repo")
+                else None
+            ),
             "session_key": r.session_key,
             "last_active": r.last_active,
             "created_at": r.created_at,
             "is_active": r.thread_id == bound,
             "has_messages": thread_row_has_messages(r),
+            "execution_mode": r.execution_mode,
+            "continuation_of_thread_id": r.continuation_of_thread_id,
             "pinned": r.pinned,
             "model_ref": r.model_ref,
             "reasoning_mode": r.reasoning_mode,
@@ -234,6 +242,7 @@ async def start_history_migration(
 @router.post("/agents/{agent_id}/threads", status_code=201, summary="New thread")
 async def create_thread(
     agent_id: str,
+    body: CreateThreadBody | None = None,
     as_user: int | None = None,
     user: Any = Depends(current_user),
     server: Any = Depends(get_server),
@@ -242,13 +251,67 @@ async def create_thread(
     require_agent_row(agent_id, user=user, as_user=as_user, server=server)
     effective_uid = as_user if as_user is not None else user.id
     sk = ThreadRegistry.dashboard_key(agent_id=agent_id, user_id=effective_uid)
+    body = body or CreateThreadBody()
+    if body.execution_mode != "server":
+        raise MossworkError(ErrorCode.FORBIDDEN, "web_can_only_create_server_threads", status=403)
+    if body.continuation_of_thread_id:
+        parent = _require_thread(server, agent_id, body.continuation_of_thread_id, user, as_user)
+    else:
+        parent = None
     tid = await server.app_runtime.gateway.thread_registry.reset(
         agent_id=agent_id,
         user_id=effective_uid,
         channel_type=ThreadRegistry.CHANNEL_DASHBOARD,
         channel_subject_id=str(effective_uid),
+        execution_mode="server",
+        continuation_of_thread_id=parent.thread_id if parent else None,
     )
-    return {"thread_id": tid, "session_key": sk}
+    return {"thread_id": tid, "session_key": sk, "execution_mode": "server"}
+
+
+@router.post(
+    "/agents/{agent_id}/threads/{thread_id}/continue-server",
+    status_code=201,
+    summary="Continue a thread on the server",
+)
+async def continue_server_thread(
+    agent_id: str,
+    thread_id: str,
+    user: Any = Depends(current_user),
+    server: Any = Depends(get_server),
+) -> dict[str, Any]:
+    """Create a server thread when a local thread is viewed in the browser."""
+    parent = _require_thread(server, agent_id, thread_id, user, as_user=None)
+    registry = server.app_runtime.gateway.thread_registry
+    tid = await registry.reset(
+        agent_id=agent_id,
+        user_id=user.id,
+        channel_type=ThreadRegistry.CHANNEL_DASHBOARD,
+        channel_subject_id=str(user.id),
+        execution_mode="server",
+        continuation_of_thread_id=parent.thread_id,
+    )
+    return {
+        "thread_id": tid,
+        "session_key": ThreadRegistry.dashboard_key(agent_id=agent_id, user_id=user.id),
+        "execution_mode": "server",
+        "continuation_of_thread_id": parent.thread_id,
+    }
+
+
+@router.get(
+    "/agents/{agent_id}/threads/{thread_id}/project",
+    summary="Read a thread project binding",
+)
+async def get_thread_project(
+    agent_id: str,
+    thread_id: str,
+    user: Any = Depends(current_user),
+    server: Any = Depends(get_server),
+) -> dict[str, Any]:
+    _require_thread(server, agent_id, thread_id, user, as_user=None)
+    binding = server.services.company_runtime_repo.project_binding(thread_id)
+    return binding or {"thread_id": thread_id, "state": "unbound"}
 
 
 @router.post(
@@ -446,11 +509,15 @@ async def get_thread_history(
         local_artifacts = list(
             {file["path"]: file for turn in local_artifact_turns for file in turn["files"]}.values()
         )
+    project_binding = local_repo.project_binding(thread_id) if local_repo is not None else None
     return {
         **local_state,
         "local_artifacts": local_artifacts,
         "local_artifact_turns": local_artifact_turns,
         "thread_id": thread_id,
+        "execution_mode": row.execution_mode,
+        "continuation_of_thread_id": row.continuation_of_thread_id,
+        "project_binding": project_binding,
         "messages": messages,
         "has_more": has_more,
         "limit": page_limit,

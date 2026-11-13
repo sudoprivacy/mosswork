@@ -48,6 +48,10 @@ export interface RuntimeStart {
   reasoning_effort?: string;
   conversation_mode?: string;
   hitl_policy?: { mode: string; tools?: string[] } | null;
+  project_id?: string;
+  binding_revision?: number;
+  grant_id?: string | null;
+  grant_version?: number | null;
 }
 export interface DesktopRuntimeBridge {
   version: 1;

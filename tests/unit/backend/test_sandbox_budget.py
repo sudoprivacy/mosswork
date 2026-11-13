@@ -89,7 +89,7 @@ def test_v29_repair_is_idempotent_and_preserves_live_reservations(budget):
     run_migrations(pool)
     assert repo.sandbox_budget()["limit_bytes"] == 0
     with pool.connect() as conn:
-        assert conn.execute("SELECT version FROM _schema_version").fetchone()[0] == 30
+        assert conn.execute("SELECT version FROM _schema_version").fetchone()[0] == 31
 
 
 def test_new_stop_verifier_can_confirm_old_workers_before_schema_repair(budget):

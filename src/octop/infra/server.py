@@ -457,6 +457,11 @@ class MossworkServer:
             self.canonical = self.canonical_configuration.build(self.services)
             self.execution = self.canonical.execution
             self._managed_backend = self.canonical.backend
+        # Canonical mode does not expose the standalone resource-market API.
+        if self.role != "worker" and self.canonical_configuration is None:
+            from octop.infra.market.skillhub_defaults import seed_skillhub_market  # noqa: PLC0415
+
+            seed_skillhub_market(self.services)
         if self.role == "monolith" and self.services.execution_repo.mode() == "distributed-v1":
             db.close()
             raise ValueError(
@@ -555,6 +560,10 @@ class MossworkServer:
             db.close()
             raise
         self.services = build_shared_services(db=db, paths=self.paths, config=config)
+        if self.role != "worker":
+            from octop.infra.market.skillhub_defaults import seed_skillhub_market  # noqa: PLC0415
+
+            seed_skillhub_market(self.services)
         from octop.infra.auth.captcha import boot_from_services  # noqa: PLC0415
 
         boot_from_services(self.services.settings_repo, self.services.secret_repo)

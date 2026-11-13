@@ -56,6 +56,7 @@ export const SIDEBAR_NAV_KEYS = [
   "messages",
   "contacts",
   "experts",
+  "resource-market",
   "tasks",
   "token-usage",
   "personalization",
@@ -170,6 +171,14 @@ export function buildNavSections(
       path: "/experts",
       icon: <GraduationCap size={iconSize} strokeWidth={iconStroke} />,
       labelKey: "nav.experts",
+    });
+  }
+  if (navAllowed(user, "resource-market")) {
+    topItems.push({
+      key: "resource-market",
+      path: "/resource-market",
+      icon: <Package size={iconSize} strokeWidth={iconStroke} />,
+      labelKey: "nav.resourceMarket",
     });
   }
   if (navAllowed(user, "tasks")) {

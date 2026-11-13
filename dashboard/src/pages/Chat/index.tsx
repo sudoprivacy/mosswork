@@ -433,7 +433,12 @@ function ChatPageInner() {
     focusToolUiTab,
     closeTab: closeDockTab,
     setActiveTab: setDockActiveTab,
-  } = useChatDockPanel(isMobile, resolvedAgentId);
+  } = useChatDockPanel(
+    isMobile,
+    resolvedAgentId,
+    activeThreadId,
+    !sharedExpertViewer,
+  );
 
   const chromeCheckInFlightRef = useRef(false);
   const bridgeConnectionId =
@@ -549,9 +554,7 @@ function ChatPageInner() {
 
   const companyHistoryReadOnly =
     Boolean(activeAgent?.history_only) ||
-    (isCompanyDesktop() &&
-      composerSession?.executionLocation === "server" &&
-      Boolean(composerSession.hasMessages));
+    (!isCompanyDesktop() && composerSession?.executionMode === "local");
 
   const panelFilePaths = useMemo(() => {
     const fromTabs = openTabs
@@ -943,6 +946,22 @@ function ChatPageInner() {
     clearQueued();
     startNewChat();
   }, [clearQueued, startNewChat]);
+
+  const handleContinueServer = useCallback(async () => {
+    if (!resolvedAgentId || !activeThreadId) return;
+    try {
+      const created = await mossworkThreadsApi.continueServer(
+        resolvedAgentId,
+        activeThreadId,
+      );
+      await ensureThreadInList(created.thread_id);
+      navigate(`/chat/${resolvedAgentId}/${created.thread_id}`);
+    } catch (error) {
+      antMessage.error(
+        error instanceof Error ? error.message : "继续到服务端失败",
+      );
+    }
+  }, [activeThreadId, ensureThreadInList, navigate, resolvedAgentId]);
 
   useEffect(() => {
     if (!pageVisible) return;
@@ -1850,11 +1869,13 @@ function ChatPageInner() {
                 message={
                   activeAgent?.history_only
                     ? t("expertAccess.historyOnlyHint")
-                    : "此会话的历史由服务器执行，仅供查看。请新建会话开始本机任务。"
+                    : "此会话为本地执行，会话历史可查看但不能在 Web 端执行。"
                 }
                 action={
                   activeAgent?.history_only ? undefined : (
-                    <Button onClick={handleNewChat}>新建本机会话</Button>
+                    <Button onClick={() => void handleContinueServer()}>
+                      在服务端继续
+                    </Button>
                   )
                 }
               />

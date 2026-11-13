@@ -429,6 +429,7 @@ func main() {
 		Services: []application.Service{
 			application.NewService(api),
 		},
+		RawMessageHandler: api.handleRawMessage,
 		Assets: application.AssetOptions{
 			Handler: application.BundledAssetFileServer(assets),
 		},

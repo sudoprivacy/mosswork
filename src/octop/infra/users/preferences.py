@@ -32,6 +32,7 @@ SIDEBAR_NAV_KEYS = frozenset(
         "channels",
         "connectors",
         "skill-packages",
+        "resource-market",
         "knowledge-bases",
         "bridge",
         "workbench",

@@ -41,6 +41,7 @@ import { useIsMobile } from "../../../hooks/useIsMobile";
 import { UsageStats, type UsageStatItem } from "./UsageStats";
 import { useUserRole } from "../../../hooks/useUserRole";
 import { request, requestBlob } from "../../../api/request";
+import { saveBlobWithNativeDialog } from "../../../api/nativeFileSave";
 import { useAgent } from "../../../context/AgentContext";
 import { useTheme } from "../../../context/ThemeContext";
 import { brandPrimary } from "../../../styles/themePalettes";
@@ -1002,15 +1003,31 @@ export default function TokenUsagePage() {
       const blob = await requestBlob(
         usageExportPath(windowKey, agentFilter, adminUserFilter),
       );
-      const url = URL.createObjectURL(blob);
-      const link = document.createElement("a");
-      link.href = url;
-      link.download = usageExportFilename(
+      const filename = usageExportFilename(
         t("tokenUsage.exportFilenamePrefix"),
         windowKey,
       );
+      const nativePath = await saveBlobWithNativeDialog(blob, filename);
+      if (nativePath !== undefined) {
+        if (nativePath === null) {
+          message.info(t("tokenUsage.exportCancelled"));
+        } else {
+          message.success(t("tokenUsage.exportSuccess", { path: nativePath }));
+        }
+        return;
+      }
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement("a");
+      link.href = url;
+      link.download = filename;
+      // Keep the anchor in the document until the browser has started the
+      // download. Revoking the object URL immediately after ``click()`` can
+      // cancel the download in Safari and some embedded browsers.
+      document.body.appendChild(link);
       link.click();
-      URL.revokeObjectURL(url);
+      document.body.removeChild(link);
+      setTimeout(() => URL.revokeObjectURL(url), 100);
+      message.success(t("tokenUsage.exportStarted", { filename }));
     } catch {
       message.error(t("tokenUsage.exportFailed"));
     } finally {

@@ -444,7 +444,8 @@ async def accept(
                         await panel.goto(
                             origin + f"/chat/{agent}/{thread}", wait_until="domcontentloaded"
                         )
-                        await panel.get_by_role("button", name="查看浏览器", exact=True).click()
+                        await panel.get_by_role("button", name="添加面板", exact=True).click()
+                        await panel.get_by_role("menuitem", name="远程浏览器", exact=True).click()
                         panel_canvas = await ready(panel)
                         await panel.wait_for_function(
                             "url => [...document.querySelectorAll('input')].some(el => el.value === url)",

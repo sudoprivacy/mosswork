@@ -59,6 +59,7 @@ _SKILL_PACKAGES_DIR = "skill-packages"
 _PLUGINS_DIR = "plugins"
 _KNOWLEDGE_DIR = "knowledge"
 _COMPANY_SKILLS_DIR = "company-runtime-skills"
+_MARKET_OBJECTS_DIR = "resource-market/objects"
 _MANIFEST_NAME = "manifest.json"
 _SQLITE_DB_ARC = f"{_DB_DIR}/mosswork.db"
 _PG_DUMP_ARC = f"{_DB_DIR}/mosswork.dump"
@@ -121,7 +122,7 @@ def _add_dir(
         if not path.is_file():
             continue
         rel = path.relative_to(src)
-        if arc_root == _COMPANY_SKILLS_DIR and (
+        if arc_root in {_COMPANY_SKILLS_DIR, _MARKET_OBJECTS_DIR} and (
             not re.fullmatch(r"[0-9a-f]{64}", rel.as_posix()) or path.is_symlink()
         ):
             # In-flight writes have private temporary names and no durable hash.
@@ -191,6 +192,7 @@ def _build_manifest(
         includes_knowledge=include_knowledge,
         includes_chats=include_chats,
         includes_company_runtime_skills=(paths.root / _COMPANY_SKILLS_DIR).is_dir(),
+        includes_resource_market=(paths.root / _MARKET_OBJECTS_DIR).is_dir(),
         external_components=["desktop_projects", "external_secrets"]
         + (["sandbox_volumes"] if isolation_enabled() else [])
         + (
@@ -339,6 +341,10 @@ def create_system_backup(
                 if manifest.includes_company_runtime_skills:
                     _add_dir(
                         tf, paths.root / _COMPANY_SKILLS_DIR, _COMPANY_SKILLS_DIR, skip_chats=False
+                    )
+                if manifest.includes_resource_market:
+                    _add_dir(
+                        tf, paths.root / _MARKET_OBJECTS_DIR, _MARKET_OBJECTS_DIR, skip_chats=False
                     )
                 if include_skill_packages and paths.skill_packages_dir.is_dir():
                     _add_dir(
@@ -521,6 +527,15 @@ def restore_system_backup(
                             ErrorCode.SLASH_BAD_ARGS, "invalid company skill digest"
                         )
 
+        if manifest.includes_resource_market:
+            for relative, item in _iter_extracted_files(extracted, _MARKET_OBJECTS_DIR):
+                with item.open("rb") as stream:
+                    if (
+                        not re.fullmatch(r"[0-9a-f]{64}", Path(relative).name)
+                        or Path(relative).name != hashlib.file_digest(stream, "sha256").hexdigest()
+                    ):
+                        raise MossworkError.localized(ErrorCode.MARKET_CONTENT_CORRUPT)
+
         saved_chats = (
             capture_chat_tables(pool, Path(tmp) / "preserved-chats.sqlite")
             if not manifest.includes_chats
@@ -671,6 +686,14 @@ def restore_system_backup(
                 store_asset(paths.root / _COMPANY_SKILLS_DIR, data)
                 restored_company_skill_files += 1
 
+        restored_market_objects = 0
+        if manifest.includes_resource_market:
+            from octop.infra.utils.immutable_files import store_object
+
+            for _relative, item in _iter_extracted_files(extracted, _MARKET_OBJECTS_DIR):
+                store_object(paths.root / _MARKET_OBJECTS_DIR, item.read_bytes())
+                restored_market_objects += 1
+
         preserved_chat_rows, skipped_chat_rows = (
             restore_preserved_chats(pool, saved_chats) if saved_chats is not None else (0, 0)
         )
@@ -685,6 +708,7 @@ def restore_system_backup(
         "plugin_files": restored_plugin_files,
         "knowledge_files": restored_knowledge_files,
         "company_skill_files": restored_company_skill_files,
+        "resource_market_objects": restored_market_objects,
         "external_components": manifest.external_components,
         "restore_config": restore_config,
         "chats_restored": manifest.includes_chats,

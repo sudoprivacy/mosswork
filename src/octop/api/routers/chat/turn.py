@@ -310,7 +310,11 @@ async def _prepare_dashboard_turn(
         session_key=turn.session_key,
     )
     runtime_repo = getattr(server.services, "company_runtime_repo", None)
-    if runtime_repo is not None and runtime_repo.binding(thread_id):
+    get_thread = getattr(thread_registry, "get_thread", None)
+    thread_row = get_thread(thread_id) if callable(get_thread) else None
+    if (thread_row is not None and thread_row.execution_mode == "local") or (
+        runtime_repo is not None and runtime_repo.binding(thread_id)
+    ):
         raise MossworkError(
             ErrorCode.FORBIDDEN,
             "company_local_thread_read_only_on_server",
