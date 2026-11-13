@@ -11,6 +11,7 @@ on:
       - 'tests/integration/test_local_expert_market.py'
       - 'tests/integration/test_local_skill_market.py'
       - 'tools/test_gate.py'
+      - 'tools/frontend_gate.py'
       - 'tools/ci_identity_reuse.py'
       - 'desktop/package-company.py'
       - 'desktop/*tools*'
@@ -252,7 +253,7 @@ jobs:
           connector_tests=(tests/unit/connectors/test_custom_mcp.py tests/unit/utils/test_frontmatter.py)
           validator_workers=()
           if [ "$RUNNER_OS" != Linux ] && [ "${CI_VALIDATOR_REGRESSIONS:-true}" != false ]; then
-            connector_tests+=(tests/unit/deployment/test_export_public_source.py tests/unit/deployment/test_precommit.py tests/unit/deployment/test_test_gate.py tests/unit/deployment/test_ci_identity_reuse.py tests/unit/deployment/test_make_format_gate.py tests/unit/deployment/test_make_testmon.py)
+            connector_tests+=(tests/unit/deployment/test_export_public_source.py tests/unit/deployment/test_precommit.py tests/unit/deployment/test_test_gate.py tests/unit/deployment/test_ci_identity_reuse.py tests/unit/deployment/test_make_format_gate.py tests/unit/deployment/test_make_testmon.py tests/unit/deployment/test_frontend_gate.py)
             # These validators use private Git, Make and pytest fixture roots.
             validator_workers=(-n 2)
           fi
@@ -303,6 +304,9 @@ jobs:
       CI_VALIDATOR_REGRESSIONS: ${{ needs.ci-scope.outputs.validator_regressions }}
     steps:
       - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
       - uses: astral-sh/setup-uv@v6
         with:
           python-version: '3.12'
@@ -318,7 +322,7 @@ jobs:
         run: |
           validator_args=()
           if [ "${CI_VALIDATOR_REGRESSIONS:-true}" = false ]; then
-            for module in test_export_public_source test_precommit test_test_gate test_ci_identity_reuse test_make_format_gate test_make_testmon; do
+            for module in test_export_public_source test_precommit test_test_gate test_ci_identity_reuse test_make_format_gate test_make_testmon test_frontend_gate; do
               validator_args+=("--ignore=tests/unit/deployment/$module.py")
             done
           fi

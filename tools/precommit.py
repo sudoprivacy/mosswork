@@ -1,4 +1,4 @@
-"""Run independent documentation/tool checks, or request the legacy full gate.
+"""Run scoped documentation/tool/frontend checks, or request the application gate.
 
 Exit 3 means the caller must execute its existing application checks.
 Validation failures always exit 1 and must never select that fallback.
@@ -33,11 +33,13 @@ ROOT_DOCS = frozenset(
 )
 TOOL_FILES = (
     "tools/precommit.py",
+    "tools/frontend_gate.py",
     "tools/check_public_source.py",
     "tools/export_public_source.py",
     "tools/accept_sudograph_worker.py",
     "tools/ci_identity_reuse.py",
     "tests/unit/deployment/test_precommit.py",
+    "tests/unit/deployment/test_frontend_gate.py",
     "tests/unit/deployment/test_export_public_source.py",
     "tests/unit/deployment/test_ci_identity_reuse.py",
     "tests/unit/deployment/test_make_format_gate.py",
@@ -46,6 +48,7 @@ TOOL_FILES = (
 TOOL_SCOPE = frozenset(TOOL_FILES) | {
     ".githooks/pre-commit",
     ".github/workflows/mosswork-ci.yml",
+    ".github/workflows/mosswork-dashboard-ci.yml",
     "AGENTS.md",
     "Makefile",
 }
@@ -68,7 +71,7 @@ WINDOWS_VALIDATION_INPUTS = frozenset(
     }
 )
 WINDOWS_VALIDATION_RECIPE_SHA256 = (
-    "187fa9c597f427ff3daf44084769343d54429a786a0ae95afdec5922f086c251"
+    "0761d3e2fe072ed8ec3187833b2caba0ac47f103d8ec72418725cef6858b5a86"
 )
 
 
@@ -277,6 +280,27 @@ def documentation(path: str) -> bool:
     )
 
 
+def frontend_only(root: Path, changed: list[str]) -> bool:
+    """Only regular authored frontend files can select the frontend gate."""
+    source = root / "tools/frontend_gate.py"
+    if not source.is_file() or source.is_symlink() or not changed:
+        return False
+    spec = importlib.util.spec_from_file_location("mosswork_frontend_paths", source)
+    assert spec is not None and spec.loader is not None
+    helper = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(helper)
+    accepts_path = getattr(helper, "frontend_path", None)
+    if not callable(accepts_path):
+        return False
+    for name in changed:
+        path = root / name
+        if not accepts_path(name) or path.is_symlink() or not path.is_file():
+            return False
+        if not path.resolve().is_relative_to(root.resolve()):
+            return False
+    return True
+
+
 def profile(root: Path, changed: list[str]) -> str:
     if not changed:
         return "empty"
@@ -302,6 +326,8 @@ def profile(root: Path, changed: list[str]) -> str:
         (root / path).is_file() for path in TOOL_FILES
     ):
         return "tools"
+    if frontend_only(root, changed):
+        return "frontend"
     return "full"
 
 
@@ -323,6 +349,8 @@ def assert_staged_content(root: Path, changed: list[str]) -> None:
 
 
 def commands(selected: str, changed: list[str] | None = None) -> list[list[str]]:
+    if selected == "frontend":
+        return [["uv", "run", "--frozen", "python", "tools/frontend_gate.py"]]
     if selected != "tools":
         return []
     tests = [
@@ -330,6 +358,14 @@ def commands(selected: str, changed: list[str] | None = None) -> list[list[str]]
         "tests/unit/deployment/test_export_public_source.py",
         "tests/unit/deployment/test_ci_identity_reuse.py",
     ]
+    if changed is None or set(changed) & {
+        "tools/frontend_gate.py",
+        "tools/precommit.py",
+        "tests/unit/deployment/test_frontend_gate.py",
+        ".github/workflows/mosswork-dashboard-ci.yml",
+        "Makefile",
+    }:
+        tests.append("tests/unit/deployment/test_frontend_gate.py")
     if changed is None or set(changed) & {
         "Makefile",
         "tools/precommit.py",
@@ -562,6 +598,14 @@ def main() -> int:
     else:
         changed = staged_paths(root)
     selected = profile(root, changed)
+    if selected == "frontend":
+        complete, frontend_base, frontend_reason = worktree_paths(root)
+        if frontend_base is None or not frontend_only(root, complete):
+            selected = "full"
+        else:
+            changed = complete
+            baseline, reason = frontend_base, frontend_reason
+            snapshot = worktree_inputs(root)
     if args.worktree:
         if baseline is None or not changed:
             selected = "full"
@@ -590,6 +634,16 @@ def main() -> int:
         }
         if args.worktree:
             plan["delegated_commands"] = [{"cwd": ".", "argv": ["make", "validate-application"]}]
+    if selected == "frontend":
+        plan.update(
+            baseline=baseline,
+            scope="complete-branch-and-worktree",
+            reason=reason,
+            test_selection={
+                "mode": "full-frontend",
+                "scope": "All frontend tests and build; backend tests are outside this frontend-only profile",
+            },
+        )
     if args.plan:
         print(json.dumps(plan, ensure_ascii=True))
         return 0
@@ -601,6 +655,12 @@ def main() -> int:
     try:
         if not args.worktree:
             assert_staged_content(root, changed)
+            if selected == "frontend" and paths(
+                git(root, "ls-files", "--others", "--exclude-standard", "-z")
+            ):
+                raise ValueError(
+                    "Stage every intended frontend input before committing; untracked source cannot qualify the indexed candidate"
+                )
         else:
             print("WORKTREE_VALIDATION: " + json.dumps(plan, ensure_ascii=True), flush=True)
         if selected == "full":
@@ -633,6 +693,19 @@ def main() -> int:
         if changed:
             result["checks"].append({"name": "documentation and expert references", "passed": True})
         run_commands(root, commands(selected, changed), result["checks"])
+        if selected == "frontend":
+            after = worktree_inputs(root)
+
+            def authored(values):
+                return {
+                    name: value
+                    for name, value in values.items()
+                    if not name.startswith("src/octop/dashboard/")
+                }
+
+            if authored(after) != authored(snapshot):
+                raise ValueError("Authored source changed during frontend validation")
+            snapshot = after
         if args.worktree:
             if worktree_inputs(root) != snapshot:
                 raise ValueError(

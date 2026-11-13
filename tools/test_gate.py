@@ -38,8 +38,13 @@ VOLATILE_ENV = GIT_CONTEXT | {
 }
 
 
-def git_launch_context(root: Path, arguments: list[str], options: dict[str, Any]) -> int | None:
+def git_launch_context(
+    root: Path, arguments: list[str], options: dict[str, Any], *, entry: str = "tools/test_gate.py"
+) -> int | None:
     """Use the same Git shell for Make and commits, preserving Git policy inputs."""
+    frontend = entry == "tools/frontend_gate.py"
+    if entry not in {"tools/test_gate.py", "tools/frontend_gate.py"}:
+        raise ValueError("Unknown validation entry")
     hook = root / ".githooks/test-gate"
     if not hook.is_file():
         return None
@@ -49,9 +54,8 @@ def git_launch_context(root: Path, arguments: list[str], options: dict[str, Any]
         if top != root:
             return None
         before = inputs(root)
-        storage = (
-            Path(git(root, "rev-parse", "--absolute-git-dir").decode().strip())
-            / "mosswork-test-gate"
+        storage = Path(git(root, "rev-parse", "--absolute-git-dir").decode().strip()) / (
+            "mosswork-frontend-gate" if frontend else "mosswork-test-gate"
         )
         storage.mkdir(exist_ok=True)
     except (OSError, ValueError, subprocess.CalledProcessError):
@@ -87,7 +91,7 @@ def git_launch_context(root: Path, arguments: list[str], options: dict[str, Any]
         "test-gate",
         "--",
         sys.executable,
-        str(root / "tools/test_gate.py"),
+        str(root / entry),
         "--git-context",
         "--launch-id",
         (launch_id := uuid.uuid4().hex),
@@ -109,13 +113,41 @@ def git_launch_context(root: Path, arguments: list[str], options: dict[str, Any]
                 "Git shell did not complete the requested actual test gate. "
                 "Restore .githooks/test-gate and rerun make all; a zero shell exit cannot replace validation."
             )
-        if inputs(root) != before:
+        after = inputs(root)
+        if frontend:
+            before = {
+                name: value
+                for name, value in before.items()
+                if not name.startswith("src/octop/dashboard/")
+            }
+            after = {
+                name: value
+                for name, value in after.items()
+                if not name.startswith("src/octop/dashboard/")
+            }
+        if after != before:
             raise ValueError(
                 "Source changed across the Git shell; preserve the output and rerun the frozen gate"
             )
         return 0
     finally:
         marker.unlink(missing_ok=True)
+
+
+def complete_git_launch(
+    root: Path, launch_id: str, options: dict[str, Any], *, entry: str = "tools/test_gate.py"
+) -> None:
+    if (
+        entry not in {"tools/test_gate.py", "tools/frontend_gate.py"}
+        or re.fullmatch(r"[a-f0-9]{32}", launch_id) is None
+    ):
+        raise ValueError("Invalid validation launch completion")
+    root = root.resolve()
+    storage = Path(git(root, "rev-parse", "--absolute-git-dir").decode().strip()) / (
+        "mosswork-frontend-gate" if entry == "tools/frontend_gate.py" else "mosswork-test-gate"
+    )
+    with (storage / ("launch-" + launch_id + ".json")).open("x", encoding="utf-8") as marker:
+        json.dump({"launch_id": launch_id, "root": str(root), "options": options}, marker)
 
 
 def normalize_launch_environment() -> None:
@@ -156,6 +188,8 @@ def normalize_launch_environment() -> None:
     ]
     if not all(path.is_dir() for path in directories) or not (git_root / "bin/git.exe").is_file():
         return
+    if not os.environ.get("EXEPATH"):
+        os.environ["EXEPATH"] = str(git_root / "bin")
     prefix = [os.path.normcase(os.path.normpath(str(path))) for path in directories]
     result = list(prefix)
     seen = set(prefix)
@@ -684,17 +718,7 @@ def main() -> int:
             args.include_live,
         )
         if status == 0 and args.launch_id is not None:
-            root = Path.cwd().resolve()
-            storage = (
-                Path(git(root, "rev-parse", "--absolute-git-dir").decode().strip())
-                / "mosswork-test-gate"
-            )
-            with (storage / ("launch-" + args.launch_id + ".json")).open(
-                "x", encoding="utf-8"
-            ) as marker:
-                json.dump(
-                    {"launch_id": args.launch_id, "root": str(root), "options": options}, marker
-                )
+            complete_git_launch(Path.cwd(), args.launch_id, options)
         return status
     except (OSError, ValueError, subprocess.SubprocessError) as error:
         print("TEST_GATE_REFUSED: " + str(error), file=sys.stderr, flush=True)
