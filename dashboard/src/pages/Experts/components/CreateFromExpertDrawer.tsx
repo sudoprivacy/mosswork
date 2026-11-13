@@ -210,8 +210,7 @@ function sourceIcon(source: CreateFromTemplateSource | null): {
   iconUrl: string | null;
   iconName: string | null;
 } {
-  if (!source)
-    return { iconUrl: null, iconName: null };
+  if (!source) return { iconUrl: null, iconName: null };
   if (source.kind === "local-market") {
     return {
       iconUrl: source.expert.icon_url ?? null,

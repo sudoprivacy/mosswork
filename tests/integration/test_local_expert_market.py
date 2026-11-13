@@ -102,7 +102,9 @@ async def test_skillhub_snapshot_expert_is_local_and_serves_its_icon(env):
     response = await client.get("/api/experts/market", headers=auth)
     assert response.status_code == 200, response.text
     item = next(
-        item for item in response.json()["items"] if item["resource_id"] == "skillhub-expert-tech-test-automation"
+        item
+        for item in response.json()["items"]
+        if item["resource_id"] == "skillhub-expert-tech-test-automation"
     )
     assert item["icon_url"]
     icon = await client.get(item["icon_url"], headers=auth)

@@ -61,28 +61,31 @@ function LocalSkillCatalog({ initialVersionId, onInstalled }: Props) {
   const [packageName, setPackageName] = useState("");
   const [installing, setInstalling] = useState(false);
   const loadSequence = useRef(0);
-  const load = useCallback(async (append = false) => {
-    const sequence = ++loadSequence.current;
-    setLoading(true);
-    setError("");
-    try {
-      const offset = append ? itemsRef.current.length : 0;
-      const result = await localSkillMarketApi.list(offset);
-      if (loadSequence.current === sequence) {
-        const nextItems = append
-          ? [...itemsRef.current, ...result.items]
-          : result.items;
-        itemsRef.current = nextItems;
-        setItems(nextItems);
-        setNextOffset(result.next_offset ?? null);
+  const load = useCallback(
+    async (append = false) => {
+      const sequence = ++loadSequence.current;
+      setLoading(true);
+      setError("");
+      try {
+        const offset = append ? itemsRef.current.length : 0;
+        const result = await localSkillMarketApi.list(offset);
+        if (loadSequence.current === sequence) {
+          const nextItems = append
+            ? [...itemsRef.current, ...result.items]
+            : result.items;
+          itemsRef.current = nextItems;
+          setItems(nextItems);
+          setNextOffset(result.next_offset ?? null);
+        }
+      } catch (err) {
+        if (loadSequence.current === sequence)
+          setError(apiErrorMessage(err, t("localSkillMarket.loadFailed"), t));
+      } finally {
+        if (loadSequence.current === sequence) setLoading(false);
       }
-    } catch (err) {
-      if (loadSequence.current === sequence)
-        setError(apiErrorMessage(err, t("localSkillMarket.loadFailed"), t));
-    } finally {
-      if (loadSequence.current === sequence) setLoading(false);
-    }
-  }, [t]);
+    },
+    [t],
+  );
   useEffect(() => {
     void load();
     return () => {

@@ -165,7 +165,12 @@ export default function LocalExpertMarketTab({
                     <img
                       src={iconUrls[expert.version_id]}
                       alt=""
-                      style={{ width: 28, height: 28, objectFit: "cover", borderRadius: 8 }}
+                      style={{
+                        width: 28,
+                        height: 28,
+                        objectFit: "cover",
+                        borderRadius: 8,
+                      }}
                     />
                   ) : (
                     <GraduationCap size={22} />

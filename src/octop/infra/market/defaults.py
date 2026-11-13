@@ -260,7 +260,9 @@ def build_bundled_releases(library_root: Path | None = None) -> list[DefaultRele
                 )
             ).strip()
         ]
-        for expert_slug in [source_slug if source_slug not in skill_ids else f"{source_slug}-expert"]
+        for expert_slug in [
+            source_slug if source_slug not in skill_ids else f"{source_slug}-expert"
+        ]
         for release in [_expert_release(expert_dir, skill_ids, expert_slug)]
         if release is not None
     ]

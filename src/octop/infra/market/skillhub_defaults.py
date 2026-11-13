@@ -55,9 +55,7 @@ def build_skillhub_releases(snapshot_root: Path | None = None) -> list[DefaultRe
     return releases
 
 
-def seed_skillhub_market(
-    services: SharedServices, snapshot_root: Path | None = None
-) -> int:
+def seed_skillhub_market(services: SharedServices, snapshot_root: Path | None = None) -> int:
     """Publish downloaded SkillHub snapshot releases, if one is bundled."""
     root = snapshot_root or SNAPSHOT_ROOT
     seeded = 0

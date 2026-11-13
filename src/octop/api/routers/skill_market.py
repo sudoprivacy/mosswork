@@ -118,7 +118,9 @@ async def icon(
     server: MossworkServer = Depends(get_server),
 ) -> Response:
     assert server.services is not None
-    path, payload = await offload(LocalSkillMarket(server.services).releases.icon, version_id, kind="skill")
+    path, payload = await offload(
+        LocalSkillMarket(server.services).releases.icon, version_id, kind="skill"
+    )
     media_type = mimetypes.guess_type(path)[0] or "application/octet-stream"
     return Response(
         payload,

@@ -75,7 +75,9 @@ export default function MarketIcon({
         justifyContent: "center",
         overflow: "hidden",
         borderRadius: 10,
-        background: objectUrl ? "transparent" : "var(--ant-color-fill-quaternary, #f5f5f5)",
+        background: objectUrl
+          ? "transparent"
+          : "var(--ant-color-fill-quaternary, #f5f5f5)",
       }}
     >
       {objectUrl ? (

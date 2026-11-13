@@ -748,7 +748,11 @@ async def local_expert_icon(
 ) -> Response:
     path, payload = await offload(LocalExpertMarket(server.services).icon, version_id)
     media_type = mimetypes.guess_type(path)[0] or "application/octet-stream"
-    return Response(payload, media_type=media_type, headers={"Cache-Control": "public, max-age=31536000, immutable"})
+    return Response(
+        payload,
+        media_type=media_type,
+        headers={"Cache-Control": "public, max-age=31536000, immutable"},
+    )
 
 
 @router.get(
