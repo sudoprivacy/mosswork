@@ -2,7 +2,7 @@
  * SkillsTabs — the full three-tab skills surface (已安装 / 内置 / 技能市场):
  *   1. Customized Skills  (workspace kind, editable + deletable)
  *   2. Built-in Skills    (builtin kind, toggle only)
- *   3. Skill Market       (SkillHub marketplace)
+ *   3. Resource Market    (deployment-local catalog)
  *
  * Extracted from the Skills page so it can be embedded both on the dedicated
  * `/skills` route and inside drawers (e.g. the expert skill catalog). It takes
@@ -18,7 +18,7 @@ import TabBar, {
 } from "../../../../components/TabLabel/TabBar";
 import InstalledSkillsTab from "./InstalledSkillsTab";
 import SkillPackagesTab from "./SkillPackagesTab";
-import SkillHubTab from "./SkillHubTab";
+import ResourceMarketEntry from "../../../../components/ResourceMarketEntry";
 import { useSkills } from "../useSkills";
 import styles from "../index.module.less";
 import { useCurrentUser } from "../../../../hooks/useCurrentUser";
@@ -29,7 +29,7 @@ type SkillsTab = "custom" | "builtin" | "skillhub" | "packages";
 const SKILL_TABS: TabBarItem<SkillsTab>[] = [
   { key: "custom", labelKey: "skills.customizedSkills", icon: Sparkles },
   { key: "builtin", labelKey: "skills.builtinSkills", icon: Blocks },
-  { key: "skillhub", labelKey: "skills.tencentSkillHub", icon: Store },
+  { key: "skillhub", labelKey: "nav.resourceMarket", icon: Store },
   { key: "packages", labelKey: "skills.skillPackages", icon: Package },
 ];
 
@@ -48,12 +48,15 @@ export default function SkillsTabs({ agentId }: SkillsTabsProps) {
   const tabs = useMemo(
     () =>
       SKILL_TABS.filter(
-        (tab) => tab.key !== "packages" || (canSkillPackages && !remoteAgent),
+        (tab) =>
+          (tab.key !== "packages" && tab.key !== "skillhub") ||
+          (canSkillPackages && !remoteAgent),
       ),
     [canSkillPackages, remoteAgent],
   );
   const resolvedTab =
-    activeTab === "packages" && (!canSkillPackages || remoteAgent)
+    (activeTab === "packages" || activeTab === "skillhub") &&
+    (!canSkillPackages || remoteAgent)
       ? "custom"
       : activeTab;
   const onInstalledTab =
@@ -86,7 +89,7 @@ export default function SkillsTabs({ agentId }: SkillsTabsProps) {
             noAgent
           )
         ) : resolvedTab === "skillhub" && agentId ? (
-          <SkillHubTab key={agentId} target={{ type: "agent", agentId }} />
+          <ResourceMarketEntry onInstalled={() => setActiveTab("packages")} />
         ) : resolvedTab === "packages" && agentId && canSkillPackages ? (
           <SkillPackagesTab
             key={agentId}

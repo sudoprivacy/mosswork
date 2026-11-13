@@ -10,10 +10,17 @@ import {
   Input,
   Select,
   Spin,
+  Tag,
+  Typography,
 } from "antd";
 import { message } from "@/utils/antdMessage";
 
 import { request } from "../../../api/request";
+import {
+  localExpertMarketApi,
+  type LocalExpertDetail,
+  type LocalMarketExpert,
+} from "../../../api/modules/localExpertMarket";
 import { mossworkAgentsApi } from "../../../api/modules/mossworkAgents";
 import {
   expertMarketApi,
@@ -107,7 +114,8 @@ interface ExpertDetail {
 export type CreateFromTemplateSource =
   | { kind: "builtin"; expert: ExpertSummary }
   | { kind: "published"; expert: PublishedExpert }
-  | { kind: "market"; expert: MarketExpert };
+  | { kind: "market"; expert: MarketExpert }
+  | { kind: "local-market"; expert: LocalMarketExpert };
 
 interface CreateFromExpertDrawerProps {
   open: boolean;
@@ -124,6 +132,8 @@ function sourceTitle(
   if (source.kind === "builtin") {
     return pickLocale(source.expert.label, lang) || source.expert.id;
   }
+  if (source.kind === "local-market")
+    return `${source.expert.name} · v${source.expert.version}`;
   if (source.kind === "published") {
     return source.expert.name;
   }
@@ -139,6 +149,13 @@ function sourceDefaults(
   color: string | null;
   welcome_message: string;
 } {
+  if (source.kind === "local-market")
+    return {
+      name: source.expert.name,
+      description: source.expert.description,
+      color: null,
+      welcome_message: "",
+    };
   if (source.kind === "builtin") {
     return {
       name: pickLocale(source.expert.label, lang) || source.expert.id,
@@ -184,14 +201,23 @@ function warnComposerPartial(
 }
 
 function sourceQuickPrompts(source: CreateFromTemplateSource): QuickPrompt[] {
-  return normalizeQuickPrompts(source.expert.quick_prompts);
+  return source.kind === "local-market"
+    ? []
+    : normalizeQuickPrompts(source.expert.quick_prompts);
 }
 
 function sourceIcon(source: CreateFromTemplateSource | null): {
   iconUrl: string | null;
   iconName: string | null;
 } {
-  if (!source) return { iconUrl: null, iconName: null };
+  if (!source)
+    return { iconUrl: null, iconName: null };
+  if (source.kind === "local-market") {
+    return {
+      iconUrl: source.expert.icon_url ?? null,
+      iconName: null,
+    };
+  }
   if (source.kind === "builtin") {
     return {
       iconUrl: source.expert.icon_url ?? null,
@@ -243,6 +269,9 @@ export default function CreateFromExpertDrawer({
   const [pathMappings, setPathMappings] = useState<PathMapping[]>([]);
 
   const [fileContents, setFileContents] = useState<FileContent[]>([]);
+  const [lockedDependencies, setLockedDependencies] = useState<
+    LocalExpertDetail["lock"]
+  >([]);
   const [originalFileContents, setOriginalFileContents] = useState<
     FileContent[]
   >([]);
@@ -256,6 +285,8 @@ export default function CreateFromExpertDrawer({
   const [subagentPickerOpen, setSubagentPickerOpen] = useState(false);
   const [localEditPath, setLocalEditPath] = useState<string | null>(null);
   const [detailLoading, setDetailLoading] = useState(false);
+  const [detailError, setDetailError] = useState(false);
+  const fixedRelease = source?.kind === "local-market";
   const [skillPackages, setSkillPackages] = useState<SkillPackage[]>([]);
   const [skillPackagesLoading, setSkillPackagesLoading] = useState(false);
   const [colorPalette, setColorPalette] = useState<string>("rose");
@@ -282,6 +313,8 @@ export default function CreateFromExpertDrawer({
 
   const sourceKey = useMemo(() => {
     if (!source) return "";
+    if (source.kind === "local-market")
+      return `local:${source.expert.version_id}`;
     if (source.kind === "builtin") return `builtin:${source.expert.id}`;
     if (source.kind === "published") return `published:${source.expert.id}`;
     return `market:${source.expert.slug}`;
@@ -300,6 +333,7 @@ export default function CreateFromExpertDrawer({
     if (!open || !source) return;
     let cancelled = false;
 
+    setDetailError(false);
     setPathMappings([]);
     const defaults = sourceDefaults(source, lang);
     setColorPalette(parseStoredColor(defaults.color) ?? DEFAULT_PALETTE);
@@ -325,6 +359,7 @@ export default function CreateFromExpertDrawer({
 
     setPendingHubSkills([]);
     setPendingCopySkills([]);
+    setLockedDependencies([]);
     setLocalEditPath(null);
     setSubagentPickerOpen(false);
     setDetailPrompts(null);
@@ -336,27 +371,43 @@ export default function CreateFromExpertDrawer({
     }
 
     setDetailLoading(true);
-    const detailPath =
-      source.kind === "builtin"
-        ? `/experts/${encodeURIComponent(source.expert.id)}`
-        : `/experts/published/${encodeURIComponent(source.expert.id)}`;
-    request<ExpertDetail>(detailPath)
+    const detailRequest =
+      source.kind === "local-market"
+        ? localExpertMarketApi.detail(source.expert.version_id)
+        : request<ExpertDetail>(
+            source.kind === "builtin"
+              ? `/experts/${encodeURIComponent(source.expert.id)}`
+              : `/experts/published/${encodeURIComponent(source.expert.id)}`,
+          );
+    detailRequest
       .then((data) => {
         if (cancelled) return;
         const files = data.file_contents ?? [];
-        setFileContents(ensurePromptFiles(files));
+        setFileContents(
+          source.kind === "local-market" ? files : ensurePromptFiles(files),
+        );
+        if (source.kind === "local-market") {
+          setLockedDependencies((data as LocalExpertDetail).lock);
+        }
         setOriginalFileContents(files);
         setDetailPrompts(normalizeQuickPrompts(data.quick_prompts));
         const welcome = data.welcome_message;
-        const welcomeText = pickLocale(welcome, lang);
+        const welcomeText =
+          typeof welcome === "string"
+            ? welcome
+            : pickLocale(welcome ?? undefined, lang);
         if (welcomeText) {
           form.setFieldsValue({
             welcome_message: welcomeText,
           });
         }
       })
-      .catch(() => {
+      .catch((err) => {
         if (!cancelled) {
+          setDetailError(true);
+          message.error(
+            apiErrorMessage(err, t("experts.localMarket.loadFailed"), t),
+          );
           setFileContents([]);
           setOriginalFileContents([]);
         }
@@ -368,7 +419,7 @@ export default function CreateFromExpertDrawer({
     return () => {
       cancelled = true;
     };
-  }, [open, source, sourceKey, lang, form]);
+  }, [open, source, sourceKey, lang, form, t]);
 
   useEffect(() => {
     if (!open) return;
@@ -490,6 +541,11 @@ export default function CreateFromExpertDrawer({
         );
       } else if (source.kind === "published") {
         body = await publishedExpertsApi.install(source.expert.id, payload);
+      } else if (source.kind === "local-market") {
+        body = await localExpertMarketApi.install(
+          source.expert.version_id,
+          payload,
+        );
       } else {
         const created = await expertMarketApi.install(
           source.expert.slug,
@@ -556,11 +612,14 @@ export default function CreateFromExpertDrawer({
     models,
     t("experts.defaultModelAuto"),
   );
-  const createBlocked = submitting || hasNoModels;
+  const createBlocked =
+    submitting ||
+    hasNoModels ||
+    (fixedRelease && (detailLoading || detailError));
 
   const { configFiles, skillGroups, subagentFiles } =
     groupExpertFiles(fileContents);
-  const showFilePreview = true;
+  const showFilePreview = !fixedRelease;
   const selectedSkillSlugs = useMemo(() => {
     const slugs = new Set(skillGroups.map((group) => group.name));
     for (const skill of pendingHubSkills) slugs.add(skill.skill_name);
@@ -651,6 +710,14 @@ export default function CreateFromExpertDrawer({
         />
       )}
 
+      {fixedRelease && (
+        <Alert
+          type="info"
+          showIcon
+          message={t("experts.localMarket.locked")}
+          style={{ marginBottom: 16 }}
+        />
+      )}
       <Form form={form} layout="vertical" size="middle">
         <Form.Item
           name="name"
@@ -812,7 +879,9 @@ export default function CreateFromExpertDrawer({
           name="skill_package_ids"
           label={t("experts.skillPackagesLabel")}
           extra={
-            skillPackagesSupported
+            fixedRelease
+              ? t("experts.localMarket.locked")
+              : skillPackagesSupported
               ? t("experts.skillPackagesHint")
               : t("experts.skillPackagesUnsupportedHint")
           }
@@ -820,7 +889,7 @@ export default function CreateFromExpertDrawer({
           <Select
             mode="multiple"
             allowClear
-            disabled={!skillPackagesSupported}
+            disabled={fixedRelease || !skillPackagesSupported}
             loading={skillPackagesLoading}
             options={skillPackages.map((pack) => ({
               value: pack.id,
@@ -843,6 +912,51 @@ export default function CreateFromExpertDrawer({
         />
       </Form>
 
+      {fixedRelease && (
+        <Collapse
+          items={[
+            {
+              key: "release",
+              label: t("experts.mdFilesTitle"),
+              children: detailLoading ? (
+                <Spin />
+              ) : (
+                <div style={{ display: "grid", gap: 12 }}>
+                  <div>
+                    <Typography.Text strong>
+                      {t("experts.localMarket.lockedDependencies")}
+                    </Typography.Text>
+                    <div style={{ marginTop: 8 }}>
+                      {lockedDependencies.map((dependency) => (
+                        <Tag key={dependency.version_id}>
+                          {dependency.resource_id} · v{dependency.version}
+                        </Tag>
+                      ))}
+                    </div>
+                  </div>
+                  <Collapse
+                    items={fileContents.map((file) => ({
+                      key: file.name,
+                      label: file.name,
+                      children: (
+                        <pre
+                          style={{
+                            whiteSpace: "pre-wrap",
+                            maxHeight: 240,
+                            overflow: "auto",
+                          }}
+                        >
+                          {file.content}
+                        </pre>
+                      ),
+                    }))}
+                  />
+                </div>
+              ),
+            },
+          ]}
+        />
+      )}
       {showFilePreview &&
         (detailLoading ? (
           <div style={{ textAlign: "center", padding: "16px 0" }}>

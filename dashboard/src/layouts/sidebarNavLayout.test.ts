@@ -47,6 +47,7 @@ describe("sidebarNavLayout", () => {
       "contacts",
       "chat",
       "experts",
+      "resource-market",
       "tasks",
       "token-usage",
     ]);
@@ -110,6 +111,7 @@ describe("sidebarNavLayout", () => {
       "contacts",
       "chat",
       "experts",
+      "resource-market",
       "tasks",
       "token-usage",
     ]);
@@ -242,6 +244,7 @@ it("keeps the retired messages menu out and respects explicitly hidden company e
     "contacts",
     "chat",
     "experts",
+    "resource-market",
     "tasks",
     "token-usage",
   ]);

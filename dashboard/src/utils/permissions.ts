@@ -16,6 +16,7 @@ export const PERM = {
   channels: ["channels"],
   connectors: ["connectors"],
   skillPackages: ["skill_packages"],
+  resourceMarket: ["resource_market"],
   knowledgeBases: ["knowledge_bases"],
   knowledgeSettings: ["knowledge_settings"],
   knowledgeBasesPage: ["knowledge_bases", "knowledge_settings"],
@@ -45,6 +46,7 @@ export const NAV_PERMISSIONS = {
   channels: PERM.channels,
   connectors: PERM.connectors,
   "skill-packages": PERM.skillPackages,
+  "resource-market": PERM.resourceMarket,
   "knowledge-bases": PERM.knowledgeBasesPage,
   workbench: PERM.workbench,
   "remote-desktop": ["desktop", "mobile"],
@@ -139,6 +141,11 @@ export function userCanKey(
  * ``null`` means no special gate.
  */
 export function pathPermissionKeys(pathname: string): PermissionKeys | null {
+  if (
+    pathname === "/resource-market" ||
+    pathname.startsWith("/resource-market/")
+  )
+    return PERM.resourceMarket;
   if (pathname === "/messages" || pathname.startsWith("/messages/"))
     return PERM.messaging;
   if (pathname === "/contacts" || pathname.startsWith("/contacts/"))

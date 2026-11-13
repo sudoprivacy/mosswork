@@ -12,6 +12,7 @@
 | 员工登录、工作目录、任务和成果        | [企业客户端指南](enterprise-client.md)           |
 | 从源码构建 Windows / macOS 企业客户端 | [桌面构建说明](../desktop/README.md)（English）             |
 | 权限配置变更与软件更新                | [更新说明](updates.md)                           |
+| 专家与技能市场试用、发布和安装          | [资源市场试用操作手册](resource-market-trial-guide.md) |
 | 开发环境和代码验证                    | [参与开发](../CONTRIBUTING.md)                   |
 
 管理员从本仓库源码部署企业服务器并构建匹配的客户端，员工安装企业提供的客户端。软件升级按[更新说明](updates.md)执行。

@@ -403,6 +403,10 @@ class MossworkServer:
         else:
             run_migrations(db)
         self.services = build_shared_services(db=db, paths=self.paths, config=config)
+        if self.role != "worker":
+            from octop.infra.market.skillhub_defaults import seed_skillhub_market  # noqa: PLC0415
+
+            seed_skillhub_market(self.services)
         if self.role == "monolith" and self.services.execution_repo.mode() == "distributed-v1":
             db.close()
             raise ValueError(
@@ -492,6 +496,10 @@ class MossworkServer:
             db.close()
             raise
         self.services = build_shared_services(db=db, paths=self.paths, config=config)
+        if self.role != "worker":
+            from octop.infra.market.skillhub_defaults import seed_skillhub_market  # noqa: PLC0415
+
+            seed_skillhub_market(self.services)
         from octop.infra.auth.captcha import boot_from_services  # noqa: PLC0415
 
         boot_from_services(self.services.settings_repo, self.services.secret_repo)
