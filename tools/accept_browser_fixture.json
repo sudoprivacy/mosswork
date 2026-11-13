@@ -1,0 +1,26 @@
+{
+  "format": "mosswork-published-browser-fixture-inputs/v1",
+  "repository": "sudoprivacy/mosswork",
+  "source_head": "470342373fb45477d1f7820dc290220ffd37f7ba",
+  "source_tree": "69bc0a9048272a347fee4b4ac29cde8e1593a5fd",
+  "merge": "093e38714b427c3afc66dcb6d33b733712978ff0",
+  "run_id": 42885264342,
+  "platforms": {
+    "Windows": {
+      "artifact_id": 13795907755,
+      "archive_bytes": 807985,
+      "archive_sha256": "6ab1bc67bd0b8cf00f860dd54f9cdb8c6ac9cc749b46527137bcd0a3d01d0ac3",
+      "parent_sha256": "d76e3c669ad021323e1fabcafd5efb5a7c39ba35dabb34fa08db2ef3d83bd6c9",
+      "manifest_sha256": "56d95780f49b26daeb65a20593c29309e513136aa6b31ca80c35116e2973e965",
+      "acceptance_script_sha256": "f6dfa3d3d12ef55dbc373d6704247573d23661f099b16b48f88577682a3ca8b0"
+    },
+    "Linux": {
+      "artifact_id": 13795872137,
+      "archive_bytes": 807557,
+      "archive_sha256": "f289e70b09b0170b7c4753f97ebd9612d4d880ff7d1c75f65dbbf706890c3381",
+      "parent_sha256": "0752b7f496178560f8a57da0442ed0fbc0ab8bbfe60a0139068aa877c75602fd",
+      "manifest_sha256": "7028ecf34bb3545458aab4fb7fdd00224483e91a44511a16bb6f258c581c050c",
+      "acceptance_script_sha256": "cdaa2fc45b3df2a2cb49ce19a9adf6fa8b3d0b1777117d0fcd0d5e80e8dc5db1"
+    }
+  }
+}

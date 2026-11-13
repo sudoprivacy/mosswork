@@ -23,6 +23,7 @@ import ChannelCatalogDrawer from "./ChannelCatalogDrawer";
 import MemoryCatalogDrawer from "./MemoryCatalogDrawer";
 import { teamsApi } from "../../../api/modules/teams";
 import { request } from "../../../api/request";
+import { apiErrorMessage } from "../../../utils/apiError";
 import type { MossworkAgent } from "../../../context/AgentContext";
 import { useAgent } from "../../../context/AgentContext";
 import { ExpertIcon } from "./iconForName";
@@ -190,8 +191,8 @@ export const TeamCard = memo(function TeamCard({
       await teamsApi.remove(agent.agent_id);
       message.success(t("experts.agentDeleted", { name: agent.name }));
       onDeleted(agent.agent_id);
-    } catch {
-      message.error(t("experts.agentDeleteFailed"));
+    } catch (error) {
+      message.error(apiErrorMessage(error, t("experts.agentDeleteFailed"), t));
     }
   }, [agent.agent_id, agent.name, t, onDeleted]);
 

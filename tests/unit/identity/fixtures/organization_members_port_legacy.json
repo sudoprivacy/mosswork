@@ -1,0 +1,4316 @@
+{
+  "sourceCommit": "d0b84d4c8fd5905d9ec3f7c160f2ce633f535d0d",
+  "sourceHashes": {
+    "src/server/auth/service.ts": "4670964f241ed457d3104c6b2b92abe020dea37b6cff393e9aab797309be71fa",
+    "src/server/authCenter/db.ts": "f83b7ad772d28b54160315f96a7e3cd20648006cef4da5afd6082241c5571b0d",
+    "src/server/identity/accountMemberships.ts": "50fbf5a23d9f3cbc56977acbefcc1b11dd00dd1b86b1a4fa5e7eefc9a77dc647",
+    "src/server/identity/identityRepository.ts": "ff4b194eb4860812079ef847d76486bb99a4441943a4d5e6c6d7014153d672ea",
+    "src/server/identity/unifiedIdentityService.ts": "859b566c1ae5834bad69f84637d730e016e504476c2278f3ecbf13173e59dac4",
+    "src/server/application/commandContext.ts": "44cb61bdfde2d4e2e3bf8fc838e58c8f8293f1f5e89cfeefd17c136537074537",
+    "src/server/billing/pointUnits.ts": "dc2e62d35a486ace865bb6459eab07992faeaf7a852987885de2ecb041a22378",
+    "src/server/db/compatibilitySchema.ts": "d3eb36cb80ab85eafc71ca725bb38aa691b88bf2a469cb57f59688e18dc80287",
+    "src/server/auth/token.ts": "825bc53f4037f7fdc90b8e46e1a4f1a73390e0070db1c6bd39f5691383f0bbb8",
+    "src/server/auth/phoneAuth.ts": "880550dc2d9d5bcd59452a9ed0f22b98f4896a20d4d82b5bfdb599b75480834d"
+  },
+  "producer": "Exact original addOrganizationMember, UnifiedIdentityService, AccountMemberships and IdentityRepository with original AuthCenterDb SQL methods against real node:sqlite; fixture auth/projection wrappers only",
+  "supplementalSchema": "\n      CREATE TABLE IF NOT EXISTS organization_profiles (\n        org_id TEXT PRIMARY KEY REFERENCES organizations(id),\n        code TEXT NOT NULL UNIQUE,\n        login_method TEXT NOT NULL DEFAULT 'password' CHECK (login_method IN ('sms', 'password', 'cas')),\n        local_enabled INTEGER NOT NULL DEFAULT 1,\n        cloud_enabled INTEGER NOT NULL DEFAULT 1,\n        client_cron_enabled INTEGER NOT NULL DEFAULT 1,\n        logo TEXT,\n        app_name TEXT,\n        top_name TEXT,\n        about_name TEXT,\n        app_company_name TEXT,\n        login_description TEXT,\n        created_at INTEGER NOT NULL,\n        updated_at INTEGER NOT NULL\n      );\n\n      CREATE TABLE IF NOT EXISTS user_auth_identities (\n        id TEXT PRIMARY KEY,\n        org_id TEXT NOT NULL REFERENCES organizations(id),\n        user_id TEXT NOT NULL REFERENCES users(id),\n        provider TEXT NOT NULL,\n        issuer TEXT NOT NULL,\n        normalized_subject TEXT NOT NULL,\n        metadata_json TEXT NOT NULL DEFAULT '{}',\n        created_at INTEGER NOT NULL,\n        updated_at INTEGER NOT NULL,\n        UNIQUE (provider, issuer, normalized_subject),\n        UNIQUE (user_id, provider, issuer)\n      );\n      CREATE INDEX IF NOT EXISTS user_auth_identities_org_idx ON user_auth_identities (org_id, user_id);\n\n      CREATE TABLE IF NOT EXISTS resource_numeric_aliases (\n        namespace TEXT NOT NULL,\n        legacy_id INTEGER NOT NULL,\n        resource_id TEXT NOT NULL,\n        org_id TEXT NOT NULL REFERENCES organizations(id),\n        migration_run_id TEXT,\n        created_at INTEGER NOT NULL,\n        PRIMARY KEY (namespace, legacy_id),\n        UNIQUE (namespace, resource_id)\n      );\n      CREATE INDEX IF NOT EXISTS resource_numeric_aliases_org_idx\n        ON resource_numeric_aliases (org_id, namespace, resource_id);\n\n      CREATE TABLE IF NOT EXISTS invitations (\n        id TEXT PRIMARY KEY,\n        org_id TEXT NOT NULL REFERENCES organizations(id),\n        code TEXT NOT NULL UNIQUE,\n        status TEXT NOT NULL DEFAULT 'pending' CHECK (status IN ('pending', 'used', 'revoked')),\n        initial_credit_units INTEGER NOT NULL DEFAULT 0,\n        legacy_initial_quota_usd REAL,\n        used_by_user_id TEXT REFERENCES users(id),\n        created_at INTEGER NOT NULL,\n        used_at INTEGER\n      );\n      CREATE INDEX IF NOT EXISTS invitations_org_status_idx ON invitations (org_id, status, created_at DESC);\n\n      CREATE TABLE IF NOT EXISTS wallets (\n        owner_type TEXT NOT NULL CHECK (owner_type IN ('organization', 'user')),\n        owner_id TEXT NOT NULL,\n        balance_units INTEGER NOT NULL DEFAULT 0,\n        version INTEGER NOT NULL DEFAULT 0,\n        created_at INTEGER NOT NULL,\n        updated_at INTEGER NOT NULL,\n        PRIMARY KEY (owner_type, owner_id)\n      );\n\n      CREATE TABLE IF NOT EXISTS outbox_events (\n        id TEXT PRIMARY KEY,\n        event_type TEXT NOT NULL,\n        aggregate_type TEXT NOT NULL,\n        aggregate_id TEXT NOT NULL,\n        payload_json TEXT NOT NULL,\n        status TEXT NOT NULL CHECK (status IN ('pending', 'suppressed', 'completed', 'failed')),\n        context_source TEXT NOT NULL CHECK (context_source IN ('online', 'migration', 'replay')),\n        idempotency_key TEXT NOT NULL UNIQUE,\n        suppress_reason TEXT,\n        attempts INTEGER NOT NULL DEFAULT 0,\n        created_at INTEGER NOT NULL,\n        completed_at INTEGER\n      );\n      CREATE INDEX IF NOT EXISTS outbox_events_status_idx ON outbox_events (status, created_at);\n\n      CREATE TABLE IF NOT EXISTS command_executions (\n        command_type TEXT NOT NULL,\n        idempotency_key TEXT NOT NULL,\n        context_source TEXT NOT NULL CHECK (context_source IN ('online', 'migration', 'replay')),\n        request_fingerprint TEXT,\n        result_json TEXT NOT NULL,\n        created_at INTEGER NOT NULL,\n        PRIMARY KEY (command_type, idempotency_key)\n      );\n\n      CREATE TABLE IF NOT EXISTS operation_audit_events (\n        id TEXT PRIMARY KEY,\n        legacy_id INTEGER NOT NULL UNIQUE,\n        org_id TEXT NOT NULL,\n        actor_user_id TEXT,\n        actor_legacy_id INTEGER,\n        actor_name TEXT,\n        action TEXT NOT NULL,\n        resource TEXT NOT NULL,\n        resource_id TEXT,\n        method TEXT,\n        path TEXT,\n        legacy_params_raw TEXT,\n        legacy_request_data_raw TEXT,\n        legacy_response_data_raw TEXT,\n        request_data_json TEXT,\n        response_data_json TEXT,\n        response_status INTEGER,\n        ip_address TEXT,\n        user_agent TEXT,\n        duration_ms INTEGER,\n        error_message TEXT,\n        idempotency_key TEXT NOT NULL UNIQUE,\n        created_at INTEGER NOT NULL\n      );\n      CREATE INDEX IF NOT EXISTS operation_audit_org_time_idx\n        ON operation_audit_events (org_id, created_at DESC, id DESC);\n      CREATE INDEX IF NOT EXISTS operation_audit_actor_time_idx\n        ON operation_audit_events (actor_user_id, created_at DESC, id DESC);\n      CREATE INDEX IF NOT EXISTS operation_audit_action_time_idx\n        ON operation_audit_events (action, created_at DESC, id DESC);\n\n      CREATE TABLE IF NOT EXISTS integration_connections (\n        id TEXT PRIMARY KEY,\n        org_id TEXT NOT NULL REFERENCES organizations(id),\n        provider_type TEXT NOT NULL,\n        name TEXT NOT NULL,\n        enabled INTEGER NOT NULL DEFAULT 1,\n        secret_ref TEXT,\n        config_json TEXT NOT NULL DEFAULT '{}',\n        created_at INTEGER NOT NULL,\n        updated_at INTEGER NOT NULL,\n        UNIQUE (org_id, provider_type, id)\n      );\n      CREATE INDEX IF NOT EXISTS integration_connections_org_provider_idx\n        ON integration_connections (org_id, provider_type, enabled);\n    \nCREATE TABLE IF NOT EXISTS compatibility_id_counters (\n      counter_key TEXT PRIMARY KEY,\n      last_value INTEGER NOT NULL\n    );\nALTER TABLE users ADD COLUMN display_name TEXT;\nALTER TABLE users ADD COLUMN local_auth INTEGER NOT NULL DEFAULT 0;\nALTER TABLE users ADD COLUMN token_limit INTEGER;\nALTER TABLE users ADD COLUMN ext_user_id TEXT;\nALTER TABLE users ADD COLUMN local_execution_allowed INTEGER NOT NULL DEFAULT 1;",
+  "now": 2000000000123,
+  "org": "4ce65010-7331-415a-abaa-4d47387d845e",
+  "otherOrg": "d3f29104-c19b-4594-859c-a92734c82dbb",
+  "actor": "c2cc8374-8cdf-4936-8967-d891fb500634",
+  "account": "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb",
+  "existingMember": "cccccccc-cccc-4ccc-8ccc-cccccccccccc",
+  "phone": "13900000002",
+  "tables": [
+    "users",
+    "human_accounts",
+    "human_account_memberships",
+    "resource_numeric_aliases",
+    "compatibility_id_counters",
+    "wallets",
+    "outbox_events",
+    "command_executions",
+    "user_auth_identities"
+  ],
+  "cases": [
+    {
+      "name": "new_profile",
+      "before": {
+        "users": [
+          {
+            "id": "c2cc8374-8cdf-4936-8967-d891fb500634",
+            "org_id": "4ce65010-7331-415a-abaa-4d47387d845e",
+            "email": "home@example.test",
+            "name": "home",
+            "department_id": null,
+            "role": "admin",
+            "status": "active",
+            "membership_revision": 0,
+            "password_hash": "original-hash",
+            "password_updated_at": null,
+            "last_login_at": null,
+            "created_at": 1,
+            "phone": null,
+            "display_name": null,
+            "local_auth": 1,
+            "token_limit": null,
+            "ext_user_id": null,
+            "local_execution_allowed": 1
+          },
+          {
+            "id": "cccccccc-cccc-4ccc-8ccc-cccccccccccc",
+            "org_id": "d3f29104-c19b-4594-859c-a92734c82dbb",
+            "email": "existing@example.test",
+            "name": "original-opc",
+            "department_id": null,
+            "role": "admin",
+            "status": "active",
+            "membership_revision": 0,
+            "password_hash": "private-original-hash",
+            "password_updated_at": null,
+            "last_login_at": null,
+            "created_at": 1,
+            "phone": "13900000002",
+            "display_name": "  Original Name  ",
+            "local_auth": 1,
+            "token_limit": null,
+            "ext_user_id": null,
+            "local_execution_allowed": 1
+          }
+        ],
+        "human_accounts": [
+          {
+            "id": "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb",
+            "phone": "13900000002",
+            "status": "active",
+            "created_at": 1
+          }
+        ],
+        "human_account_memberships": [
+          {
+            "account_id": "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb",
+            "org_id": "d3f29104-c19b-4594-859c-a92734c82dbb",
+            "user_id": "cccccccc-cccc-4ccc-8ccc-cccccccccccc",
+            "created_at": 1
+          }
+        ],
+        "resource_numeric_aliases": [
+          {
+            "namespace": "user",
+            "legacy_id": 17,
+            "resource_id": "cccccccc-cccc-4ccc-8ccc-cccccccccccc",
+            "org_id": "d3f29104-c19b-4594-859c-a92734c82dbb",
+            "migration_run_id": null,
+            "created_at": 1
+          }
+        ],
+        "compatibility_id_counters": [],
+        "wallets": [
+          {
+            "owner_type": "user",
+            "owner_id": "cccccccc-cccc-4ccc-8ccc-cccccccccccc",
+            "balance_units": 12345,
+            "version": 7,
+            "created_at": 1,
+            "updated_at": 2
+          }
+        ],
+        "outbox_events": [],
+        "command_executions": [],
+        "user_auth_identities": [
+          {
+            "id": "old-phone",
+            "org_id": "d3f29104-c19b-4594-859c-a92734c82dbb",
+            "user_id": "cccccccc-cccc-4ccc-8ccc-cccccccccccc",
+            "provider": "phone",
+            "issuer": "sudowork",
+            "normalized_subject": "13900000002",
+            "metadata_json": "{}",
+            "created_at": 1,
+            "updated_at": 1
+          }
+        ]
+      },
+      "result": {
+        "id": "aaaaaaaa-aaaa-4aaa-8aaa-000000000003",
+        "created": true
+      },
+      "error": null,
+      "after": {
+        "users": [
+          {
+            "id": "c2cc8374-8cdf-4936-8967-d891fb500634",
+            "org_id": "4ce65010-7331-415a-abaa-4d47387d845e",
+            "email": "home@example.test",
+            "name": "home",
+            "department_id": null,
+            "role": "admin",
+            "status": "active",
+            "membership_revision": 0,
+            "password_hash": "original-hash",
+            "password_updated_at": null,
+            "last_login_at": null,
+            "created_at": 1,
+            "phone": null,
+            "display_name": null,
+            "local_auth": 1,
+            "token_limit": null,
+            "ext_user_id": null,
+            "local_execution_allowed": 1
+          },
+          {
+            "id": "cccccccc-cccc-4ccc-8ccc-cccccccccccc",
+            "org_id": "d3f29104-c19b-4594-859c-a92734c82dbb",
+            "email": "existing@example.test",
+            "name": "original-opc",
+            "department_id": null,
+            "role": "admin",
+            "status": "active",
+            "membership_revision": 0,
+            "password_hash": "private-original-hash",
+            "password_updated_at": null,
+            "last_login_at": null,
+            "created_at": 1,
+            "phone": "13900000002",
+            "display_name": "  Original Name  ",
+            "local_auth": 1,
+            "token_limit": null,
+            "ext_user_id": null,
+            "local_execution_allowed": 1
+          },
+          {
+            "id": "aaaaaaaa-aaaa-4aaa-8aaa-000000000003",
+            "org_id": "4ce65010-7331-415a-abaa-4d47387d845e",
+            "email": "aaaaaaaa-aaaa-4aaa-8aaa-000000000003@users.internal.moss",
+            "name": "member-aaaaaaaa-aaaa-4aaa-8aaa-000000000001",
+            "department_id": null,
+            "role": "user",
+            "status": "active",
+            "membership_revision": 0,
+            "password_hash": null,
+            "password_updated_at": null,
+            "last_login_at": null,
+            "created_at": 2000000000123,
+            "phone": null,
+            "display_name": "Original Name",
+            "local_auth": 0,
+            "token_limit": null,
+            "ext_user_id": null,
+            "local_execution_allowed": 1
+          }
+        ],
+        "human_accounts": [
+          {
+            "id": "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb",
+            "phone": "13900000002",
+            "status": "active",
+            "created_at": 1
+          }
+        ],
+        "human_account_memberships": [
+          {
+            "account_id": "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb",
+            "org_id": "d3f29104-c19b-4594-859c-a92734c82dbb",
+            "user_id": "cccccccc-cccc-4ccc-8ccc-cccccccccccc",
+            "created_at": 1
+          },
+          {
+            "account_id": "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb",
+            "org_id": "4ce65010-7331-415a-abaa-4d47387d845e",
+            "user_id": "aaaaaaaa-aaaa-4aaa-8aaa-000000000003",
+            "created_at": 2000000000123
+          }
+        ],
+        "resource_numeric_aliases": [
+          {
+            "namespace": "user",
+            "legacy_id": 17,
+            "resource_id": "cccccccc-cccc-4ccc-8ccc-cccccccccccc",
+            "org_id": "d3f29104-c19b-4594-859c-a92734c82dbb",
+            "migration_run_id": null,
+            "created_at": 1
+          },
+          {
+            "namespace": "user",
+            "legacy_id": 2000000000,
+            "resource_id": "aaaaaaaa-aaaa-4aaa-8aaa-000000000003",
+            "org_id": "4ce65010-7331-415a-abaa-4d47387d845e",
+            "migration_run_id": null,
+            "created_at": 2000000000123
+          }
+        ],
+        "compatibility_id_counters": [
+          {
+            "counter_key": "resource_numeric_aliases:user",
+            "last_value": 2000000000
+          }
+        ],
+        "wallets": [
+          {
+            "owner_type": "user",
+            "owner_id": "cccccccc-cccc-4ccc-8ccc-cccccccccccc",
+            "balance_units": 12345,
+            "version": 7,
+            "created_at": 1,
+            "updated_at": 2
+          },
+          {
+            "owner_type": "user",
+            "owner_id": "aaaaaaaa-aaaa-4aaa-8aaa-000000000003",
+            "balance_units": 0,
+            "version": 0,
+            "created_at": 2000000000123,
+            "updated_at": 2000000000123
+          }
+        ],
+        "outbox_events": [
+          {
+            "id": "aaaaaaaa-aaaa-4aaa-8aaa-000000000004",
+            "event_type": "user.welcome",
+            "aggregate_type": "user",
+            "aggregate_id": "aaaaaaaa-aaaa-4aaa-8aaa-000000000003",
+            "payload_json": "{\"userId\":\"aaaaaaaa-aaaa-4aaa-8aaa-000000000003\",\"orgId\":\"4ce65010-7331-415a-abaa-4d47387d845e\"}",
+            "status": "pending",
+            "context_source": "online",
+            "idempotency_key": "welcome:account-membership:aaaaaaaa-aaaa-4aaa-8aaa-000000000002",
+            "suppress_reason": null,
+            "attempts": 0,
+            "created_at": 2000000000123,
+            "completed_at": null
+          }
+        ],
+        "command_executions": [
+          {
+            "command_type": "identity.create_user",
+            "idempotency_key": "account-membership:aaaaaaaa-aaaa-4aaa-8aaa-000000000002",
+            "context_source": "online",
+            "request_fingerprint": null,
+            "result_json": "{\"userId\":\"aaaaaaaa-aaaa-4aaa-8aaa-000000000003\",\"legacyUserId\":2000000000}",
+            "created_at": 2000000000123
+          }
+        ],
+        "user_auth_identities": [
+          {
+            "id": "old-phone",
+            "org_id": "d3f29104-c19b-4594-859c-a92734c82dbb",
+            "user_id": "cccccccc-cccc-4ccc-8ccc-cccccccccccc",
+            "provider": "phone",
+            "issuer": "sudowork",
+            "normalized_subject": "13900000002",
+            "metadata_json": "{}",
+            "created_at": 1,
+            "updated_at": 1
+          }
+        ]
+      }
+    },
+    {
+      "name": "new_fallback_profile",
+      "before": {
+        "users": [
+          {
+            "id": "c2cc8374-8cdf-4936-8967-d891fb500634",
+            "org_id": "4ce65010-7331-415a-abaa-4d47387d845e",
+            "email": "home@example.test",
+            "name": "home",
+            "department_id": null,
+            "role": "admin",
+            "status": "active",
+            "membership_revision": 0,
+            "password_hash": "original-hash",
+            "password_updated_at": null,
+            "last_login_at": null,
+            "created_at": 1,
+            "phone": null,
+            "display_name": null,
+            "local_auth": 1,
+            "token_limit": null,
+            "ext_user_id": null,
+            "local_execution_allowed": 1
+          },
+          {
+            "id": "cccccccc-cccc-4ccc-8ccc-cccccccccccc",
+            "org_id": "d3f29104-c19b-4594-859c-a92734c82dbb",
+            "email": "existing@example.test",
+            "name": "original-opc",
+            "department_id": null,
+            "role": "admin",
+            "status": "active",
+            "membership_revision": 0,
+            "password_hash": "private-original-hash",
+            "password_updated_at": null,
+            "last_login_at": null,
+            "created_at": 1,
+            "phone": null,
+            "display_name": "  Original Name  ",
+            "local_auth": 1,
+            "token_limit": null,
+            "ext_user_id": null,
+            "local_execution_allowed": 1
+          }
+        ],
+        "human_accounts": [
+          {
+            "id": "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb",
+            "phone": "13900000002",
+            "status": "active",
+            "created_at": 1
+          }
+        ],
+        "human_account_memberships": [
+          {
+            "account_id": "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb",
+            "org_id": "d3f29104-c19b-4594-859c-a92734c82dbb",
+            "user_id": "cccccccc-cccc-4ccc-8ccc-cccccccccccc",
+            "created_at": 1
+          }
+        ],
+        "resource_numeric_aliases": [
+          {
+            "namespace": "user",
+            "legacy_id": 17,
+            "resource_id": "cccccccc-cccc-4ccc-8ccc-cccccccccccc",
+            "org_id": "d3f29104-c19b-4594-859c-a92734c82dbb",
+            "migration_run_id": null,
+            "created_at": 1
+          }
+        ],
+        "compatibility_id_counters": [],
+        "wallets": [
+          {
+            "owner_type": "user",
+            "owner_id": "cccccccc-cccc-4ccc-8ccc-cccccccccccc",
+            "balance_units": 12345,
+            "version": 7,
+            "created_at": 1,
+            "updated_at": 2
+          }
+        ],
+        "outbox_events": [],
+        "command_executions": [],
+        "user_auth_identities": [
+          {
+            "id": "old-phone",
+            "org_id": "d3f29104-c19b-4594-859c-a92734c82dbb",
+            "user_id": "cccccccc-cccc-4ccc-8ccc-cccccccccccc",
+            "provider": "phone",
+            "issuer": "sudowork",
+            "normalized_subject": "13900000002",
+            "metadata_json": "{}",
+            "created_at": 1,
+            "updated_at": 1
+          }
+        ]
+      },
+      "result": {
+        "id": "aaaaaaaa-aaaa-4aaa-8aaa-000000000003",
+        "created": true
+      },
+      "error": null,
+      "after": {
+        "users": [
+          {
+            "id": "c2cc8374-8cdf-4936-8967-d891fb500634",
+            "org_id": "4ce65010-7331-415a-abaa-4d47387d845e",
+            "email": "home@example.test",
+            "name": "home",
+            "department_id": null,
+            "role": "admin",
+            "status": "active",
+            "membership_revision": 0,
+            "password_hash": "original-hash",
+            "password_updated_at": null,
+            "last_login_at": null,
+            "created_at": 1,
+            "phone": null,
+            "display_name": null,
+            "local_auth": 1,
+            "token_limit": null,
+            "ext_user_id": null,
+            "local_execution_allowed": 1
+          },
+          {
+            "id": "cccccccc-cccc-4ccc-8ccc-cccccccccccc",
+            "org_id": "d3f29104-c19b-4594-859c-a92734c82dbb",
+            "email": "existing@example.test",
+            "name": "original-opc",
+            "department_id": null,
+            "role": "admin",
+            "status": "active",
+            "membership_revision": 0,
+            "password_hash": "private-original-hash",
+            "password_updated_at": null,
+            "last_login_at": null,
+            "created_at": 1,
+            "phone": null,
+            "display_name": "  Original Name  ",
+            "local_auth": 1,
+            "token_limit": null,
+            "ext_user_id": null,
+            "local_execution_allowed": 1
+          },
+          {
+            "id": "aaaaaaaa-aaaa-4aaa-8aaa-000000000003",
+            "org_id": "4ce65010-7331-415a-abaa-4d47387d845e",
+            "email": "aaaaaaaa-aaaa-4aaa-8aaa-000000000003@users.internal.moss",
+            "name": "member-aaaaaaaa-aaaa-4aaa-8aaa-000000000001",
+            "department_id": null,
+            "role": "user",
+            "status": "active",
+            "membership_revision": 0,
+            "password_hash": null,
+            "password_updated_at": null,
+            "last_login_at": null,
+            "created_at": 2000000000123,
+            "phone": null,
+            "display_name": "Original Name",
+            "local_auth": 0,
+            "token_limit": null,
+            "ext_user_id": null,
+            "local_execution_allowed": 1
+          }
+        ],
+        "human_accounts": [
+          {
+            "id": "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb",
+            "phone": "13900000002",
+            "status": "active",
+            "created_at": 1
+          }
+        ],
+        "human_account_memberships": [
+          {
+            "account_id": "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb",
+            "org_id": "d3f29104-c19b-4594-859c-a92734c82dbb",
+            "user_id": "cccccccc-cccc-4ccc-8ccc-cccccccccccc",
+            "created_at": 1
+          },
+          {
+            "account_id": "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb",
+            "org_id": "4ce65010-7331-415a-abaa-4d47387d845e",
+            "user_id": "aaaaaaaa-aaaa-4aaa-8aaa-000000000003",
+            "created_at": 2000000000123
+          }
+        ],
+        "resource_numeric_aliases": [
+          {
+            "namespace": "user",
+            "legacy_id": 17,
+            "resource_id": "cccccccc-cccc-4ccc-8ccc-cccccccccccc",
+            "org_id": "d3f29104-c19b-4594-859c-a92734c82dbb",
+            "migration_run_id": null,
+            "created_at": 1
+          },
+          {
+            "namespace": "user",
+            "legacy_id": 2000000000,
+            "resource_id": "aaaaaaaa-aaaa-4aaa-8aaa-000000000003",
+            "org_id": "4ce65010-7331-415a-abaa-4d47387d845e",
+            "migration_run_id": null,
+            "created_at": 2000000000123
+          }
+        ],
+        "compatibility_id_counters": [
+          {
+            "counter_key": "resource_numeric_aliases:user",
+            "last_value": 2000000000
+          }
+        ],
+        "wallets": [
+          {
+            "owner_type": "user",
+            "owner_id": "cccccccc-cccc-4ccc-8ccc-cccccccccccc",
+            "balance_units": 12345,
+            "version": 7,
+            "created_at": 1,
+            "updated_at": 2
+          },
+          {
+            "owner_type": "user",
+            "owner_id": "aaaaaaaa-aaaa-4aaa-8aaa-000000000003",
+            "balance_units": 0,
+            "version": 0,
+            "created_at": 2000000000123,
+            "updated_at": 2000000000123
+          }
+        ],
+        "outbox_events": [
+          {
+            "id": "aaaaaaaa-aaaa-4aaa-8aaa-000000000004",
+            "event_type": "user.welcome",
+            "aggregate_type": "user",
+            "aggregate_id": "aaaaaaaa-aaaa-4aaa-8aaa-000000000003",
+            "payload_json": "{\"userId\":\"aaaaaaaa-aaaa-4aaa-8aaa-000000000003\",\"orgId\":\"4ce65010-7331-415a-abaa-4d47387d845e\"}",
+            "status": "pending",
+            "context_source": "online",
+            "idempotency_key": "welcome:account-membership:aaaaaaaa-aaaa-4aaa-8aaa-000000000002",
+            "suppress_reason": null,
+            "attempts": 0,
+            "created_at": 2000000000123,
+            "completed_at": null
+          }
+        ],
+        "command_executions": [
+          {
+            "command_type": "identity.create_user",
+            "idempotency_key": "account-membership:aaaaaaaa-aaaa-4aaa-8aaa-000000000002",
+            "context_source": "online",
+            "request_fingerprint": null,
+            "result_json": "{\"userId\":\"aaaaaaaa-aaaa-4aaa-8aaa-000000000003\",\"legacyUserId\":2000000000}",
+            "created_at": 2000000000123
+          }
+        ],
+        "user_auth_identities": [
+          {
+            "id": "old-phone",
+            "org_id": "d3f29104-c19b-4594-859c-a92734c82dbb",
+            "user_id": "cccccccc-cccc-4ccc-8ccc-cccccccccccc",
+            "provider": "phone",
+            "issuer": "sudowork",
+            "normalized_subject": "13900000002",
+            "metadata_json": "{}",
+            "created_at": 1,
+            "updated_at": 1
+          }
+        ]
+      }
+    },
+    {
+      "name": "new_no_profile",
+      "before": {
+        "users": [
+          {
+            "id": "c2cc8374-8cdf-4936-8967-d891fb500634",
+            "org_id": "4ce65010-7331-415a-abaa-4d47387d845e",
+            "email": "home@example.test",
+            "name": "home",
+            "department_id": null,
+            "role": "admin",
+            "status": "active",
+            "membership_revision": 0,
+            "password_hash": "original-hash",
+            "password_updated_at": null,
+            "last_login_at": null,
+            "created_at": 1,
+            "phone": null,
+            "display_name": null,
+            "local_auth": 1,
+            "token_limit": null,
+            "ext_user_id": null,
+            "local_execution_allowed": 1
+          }
+        ],
+        "human_accounts": [
+          {
+            "id": "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb",
+            "phone": "13900000002",
+            "status": "active",
+            "created_at": 1
+          }
+        ],
+        "human_account_memberships": [],
+        "resource_numeric_aliases": [],
+        "compatibility_id_counters": [],
+        "wallets": [],
+        "outbox_events": [],
+        "command_executions": [],
+        "user_auth_identities": []
+      },
+      "result": {
+        "id": "aaaaaaaa-aaaa-4aaa-8aaa-000000000003",
+        "created": true
+      },
+      "error": null,
+      "after": {
+        "users": [
+          {
+            "id": "c2cc8374-8cdf-4936-8967-d891fb500634",
+            "org_id": "4ce65010-7331-415a-abaa-4d47387d845e",
+            "email": "home@example.test",
+            "name": "home",
+            "department_id": null,
+            "role": "admin",
+            "status": "active",
+            "membership_revision": 0,
+            "password_hash": "original-hash",
+            "password_updated_at": null,
+            "last_login_at": null,
+            "created_at": 1,
+            "phone": null,
+            "display_name": null,
+            "local_auth": 1,
+            "token_limit": null,
+            "ext_user_id": null,
+            "local_execution_allowed": 1
+          },
+          {
+            "id": "aaaaaaaa-aaaa-4aaa-8aaa-000000000003",
+            "org_id": "4ce65010-7331-415a-abaa-4d47387d845e",
+            "email": "aaaaaaaa-aaaa-4aaa-8aaa-000000000003@users.internal.moss",
+            "name": "member-aaaaaaaa-aaaa-4aaa-8aaa-000000000001",
+            "department_id": null,
+            "role": "user",
+            "status": "active",
+            "membership_revision": 0,
+            "password_hash": null,
+            "password_updated_at": null,
+            "last_login_at": null,
+            "created_at": 2000000000123,
+            "phone": null,
+            "display_name": "13900000002",
+            "local_auth": 0,
+            "token_limit": null,
+            "ext_user_id": null,
+            "local_execution_allowed": 1
+          }
+        ],
+        "human_accounts": [
+          {
+            "id": "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb",
+            "phone": "13900000002",
+            "status": "active",
+            "created_at": 1
+          }
+        ],
+        "human_account_memberships": [
+          {
+            "account_id": "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb",
+            "org_id": "4ce65010-7331-415a-abaa-4d47387d845e",
+            "user_id": "aaaaaaaa-aaaa-4aaa-8aaa-000000000003",
+            "created_at": 2000000000123
+          }
+        ],
+        "resource_numeric_aliases": [
+          {
+            "namespace": "user",
+            "legacy_id": 2000000000,
+            "resource_id": "aaaaaaaa-aaaa-4aaa-8aaa-000000000003",
+            "org_id": "4ce65010-7331-415a-abaa-4d47387d845e",
+            "migration_run_id": null,
+            "created_at": 2000000000123
+          }
+        ],
+        "compatibility_id_counters": [
+          {
+            "counter_key": "resource_numeric_aliases:user",
+            "last_value": 2000000000
+          }
+        ],
+        "wallets": [
+          {
+            "owner_type": "user",
+            "owner_id": "aaaaaaaa-aaaa-4aaa-8aaa-000000000003",
+            "balance_units": 0,
+            "version": 0,
+            "created_at": 2000000000123,
+            "updated_at": 2000000000123
+          }
+        ],
+        "outbox_events": [
+          {
+            "id": "aaaaaaaa-aaaa-4aaa-8aaa-000000000004",
+            "event_type": "user.welcome",
+            "aggregate_type": "user",
+            "aggregate_id": "aaaaaaaa-aaaa-4aaa-8aaa-000000000003",
+            "payload_json": "{\"userId\":\"aaaaaaaa-aaaa-4aaa-8aaa-000000000003\",\"orgId\":\"4ce65010-7331-415a-abaa-4d47387d845e\"}",
+            "status": "pending",
+            "context_source": "online",
+            "idempotency_key": "welcome:account-membership:aaaaaaaa-aaaa-4aaa-8aaa-000000000002",
+            "suppress_reason": null,
+            "attempts": 0,
+            "created_at": 2000000000123,
+            "completed_at": null
+          }
+        ],
+        "command_executions": [
+          {
+            "command_type": "identity.create_user",
+            "idempotency_key": "account-membership:aaaaaaaa-aaaa-4aaa-8aaa-000000000002",
+            "context_source": "online",
+            "request_fingerprint": null,
+            "result_json": "{\"userId\":\"aaaaaaaa-aaaa-4aaa-8aaa-000000000003\",\"legacyUserId\":2000000000}",
+            "created_at": 2000000000123
+          }
+        ],
+        "user_auth_identities": []
+      }
+    },
+    {
+      "name": "new_blank_profile",
+      "before": {
+        "users": [
+          {
+            "id": "c2cc8374-8cdf-4936-8967-d891fb500634",
+            "org_id": "4ce65010-7331-415a-abaa-4d47387d845e",
+            "email": "home@example.test",
+            "name": "home",
+            "department_id": null,
+            "role": "admin",
+            "status": "active",
+            "membership_revision": 0,
+            "password_hash": "original-hash",
+            "password_updated_at": null,
+            "last_login_at": null,
+            "created_at": 1,
+            "phone": null,
+            "display_name": null,
+            "local_auth": 1,
+            "token_limit": null,
+            "ext_user_id": null,
+            "local_execution_allowed": 1
+          },
+          {
+            "id": "cccccccc-cccc-4ccc-8ccc-cccccccccccc",
+            "org_id": "d3f29104-c19b-4594-859c-a92734c82dbb",
+            "email": "existing@example.test",
+            "name": "",
+            "department_id": null,
+            "role": "admin",
+            "status": "active",
+            "membership_revision": 0,
+            "password_hash": "private-original-hash",
+            "password_updated_at": null,
+            "last_login_at": null,
+            "created_at": 1,
+            "phone": "13900000002",
+            "display_name": "",
+            "local_auth": 1,
+            "token_limit": null,
+            "ext_user_id": null,
+            "local_execution_allowed": 1
+          }
+        ],
+        "human_accounts": [
+          {
+            "id": "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb",
+            "phone": "13900000002",
+            "status": "active",
+            "created_at": 1
+          }
+        ],
+        "human_account_memberships": [
+          {
+            "account_id": "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb",
+            "org_id": "d3f29104-c19b-4594-859c-a92734c82dbb",
+            "user_id": "cccccccc-cccc-4ccc-8ccc-cccccccccccc",
+            "created_at": 1
+          }
+        ],
+        "resource_numeric_aliases": [
+          {
+            "namespace": "user",
+            "legacy_id": 17,
+            "resource_id": "cccccccc-cccc-4ccc-8ccc-cccccccccccc",
+            "org_id": "d3f29104-c19b-4594-859c-a92734c82dbb",
+            "migration_run_id": null,
+            "created_at": 1
+          }
+        ],
+        "compatibility_id_counters": [],
+        "wallets": [
+          {
+            "owner_type": "user",
+            "owner_id": "cccccccc-cccc-4ccc-8ccc-cccccccccccc",
+            "balance_units": 12345,
+            "version": 7,
+            "created_at": 1,
+            "updated_at": 2
+          }
+        ],
+        "outbox_events": [],
+        "command_executions": [],
+        "user_auth_identities": [
+          {
+            "id": "old-phone",
+            "org_id": "d3f29104-c19b-4594-859c-a92734c82dbb",
+            "user_id": "cccccccc-cccc-4ccc-8ccc-cccccccccccc",
+            "provider": "phone",
+            "issuer": "sudowork",
+            "normalized_subject": "13900000002",
+            "metadata_json": "{}",
+            "created_at": 1,
+            "updated_at": 1
+          }
+        ]
+      },
+      "result": {
+        "id": "aaaaaaaa-aaaa-4aaa-8aaa-000000000003",
+        "created": true
+      },
+      "error": null,
+      "after": {
+        "users": [
+          {
+            "id": "c2cc8374-8cdf-4936-8967-d891fb500634",
+            "org_id": "4ce65010-7331-415a-abaa-4d47387d845e",
+            "email": "home@example.test",
+            "name": "home",
+            "department_id": null,
+            "role": "admin",
+            "status": "active",
+            "membership_revision": 0,
+            "password_hash": "original-hash",
+            "password_updated_at": null,
+            "last_login_at": null,
+            "created_at": 1,
+            "phone": null,
+            "display_name": null,
+            "local_auth": 1,
+            "token_limit": null,
+            "ext_user_id": null,
+            "local_execution_allowed": 1
+          },
+          {
+            "id": "cccccccc-cccc-4ccc-8ccc-cccccccccccc",
+            "org_id": "d3f29104-c19b-4594-859c-a92734c82dbb",
+            "email": "existing@example.test",
+            "name": "",
+            "department_id": null,
+            "role": "admin",
+            "status": "active",
+            "membership_revision": 0,
+            "password_hash": "private-original-hash",
+            "password_updated_at": null,
+            "last_login_at": null,
+            "created_at": 1,
+            "phone": "13900000002",
+            "display_name": "",
+            "local_auth": 1,
+            "token_limit": null,
+            "ext_user_id": null,
+            "local_execution_allowed": 1
+          },
+          {
+            "id": "aaaaaaaa-aaaa-4aaa-8aaa-000000000003",
+            "org_id": "4ce65010-7331-415a-abaa-4d47387d845e",
+            "email": "aaaaaaaa-aaaa-4aaa-8aaa-000000000003@users.internal.moss",
+            "name": "member-aaaaaaaa-aaaa-4aaa-8aaa-000000000001",
+            "department_id": null,
+            "role": "user",
+            "status": "active",
+            "membership_revision": 0,
+            "password_hash": null,
+            "password_updated_at": null,
+            "last_login_at": null,
+            "created_at": 2000000000123,
+            "phone": null,
+            "display_name": "13900000002",
+            "local_auth": 0,
+            "token_limit": null,
+            "ext_user_id": null,
+            "local_execution_allowed": 1
+          }
+        ],
+        "human_accounts": [
+          {
+            "id": "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb",
+            "phone": "13900000002",
+            "status": "active",
+            "created_at": 1
+          }
+        ],
+        "human_account_memberships": [
+          {
+            "account_id": "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb",
+            "org_id": "d3f29104-c19b-4594-859c-a92734c82dbb",
+            "user_id": "cccccccc-cccc-4ccc-8ccc-cccccccccccc",
+            "created_at": 1
+          },
+          {
+            "account_id": "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb",
+            "org_id": "4ce65010-7331-415a-abaa-4d47387d845e",
+            "user_id": "aaaaaaaa-aaaa-4aaa-8aaa-000000000003",
+            "created_at": 2000000000123
+          }
+        ],
+        "resource_numeric_aliases": [
+          {
+            "namespace": "user",
+            "legacy_id": 17,
+            "resource_id": "cccccccc-cccc-4ccc-8ccc-cccccccccccc",
+            "org_id": "d3f29104-c19b-4594-859c-a92734c82dbb",
+            "migration_run_id": null,
+            "created_at": 1
+          },
+          {
+            "namespace": "user",
+            "legacy_id": 2000000000,
+            "resource_id": "aaaaaaaa-aaaa-4aaa-8aaa-000000000003",
+            "org_id": "4ce65010-7331-415a-abaa-4d47387d845e",
+            "migration_run_id": null,
+            "created_at": 2000000000123
+          }
+        ],
+        "compatibility_id_counters": [
+          {
+            "counter_key": "resource_numeric_aliases:user",
+            "last_value": 2000000000
+          }
+        ],
+        "wallets": [
+          {
+            "owner_type": "user",
+            "owner_id": "cccccccc-cccc-4ccc-8ccc-cccccccccccc",
+            "balance_units": 12345,
+            "version": 7,
+            "created_at": 1,
+            "updated_at": 2
+          },
+          {
+            "owner_type": "user",
+            "owner_id": "aaaaaaaa-aaaa-4aaa-8aaa-000000000003",
+            "balance_units": 0,
+            "version": 0,
+            "created_at": 2000000000123,
+            "updated_at": 2000000000123
+          }
+        ],
+        "outbox_events": [
+          {
+            "id": "aaaaaaaa-aaaa-4aaa-8aaa-000000000004",
+            "event_type": "user.welcome",
+            "aggregate_type": "user",
+            "aggregate_id": "aaaaaaaa-aaaa-4aaa-8aaa-000000000003",
+            "payload_json": "{\"userId\":\"aaaaaaaa-aaaa-4aaa-8aaa-000000000003\",\"orgId\":\"4ce65010-7331-415a-abaa-4d47387d845e\"}",
+            "status": "pending",
+            "context_source": "online",
+            "idempotency_key": "welcome:account-membership:aaaaaaaa-aaaa-4aaa-8aaa-000000000002",
+            "suppress_reason": null,
+            "attempts": 0,
+            "created_at": 2000000000123,
+            "completed_at": null
+          }
+        ],
+        "command_executions": [
+          {
+            "command_type": "identity.create_user",
+            "idempotency_key": "account-membership:aaaaaaaa-aaaa-4aaa-8aaa-000000000002",
+            "context_source": "online",
+            "request_fingerprint": null,
+            "result_json": "{\"userId\":\"aaaaaaaa-aaaa-4aaa-8aaa-000000000003\",\"legacyUserId\":2000000000}",
+            "created_at": 2000000000123
+          }
+        ],
+        "user_auth_identities": [
+          {
+            "id": "old-phone",
+            "org_id": "d3f29104-c19b-4594-859c-a92734c82dbb",
+            "user_id": "cccccccc-cccc-4ccc-8ccc-cccccccccccc",
+            "provider": "phone",
+            "issuer": "sudowork",
+            "normalized_subject": "13900000002",
+            "metadata_json": "{}",
+            "created_at": 1,
+            "updated_at": 1
+          }
+        ]
+      }
+    },
+    {
+      "name": "new_whitespace_profile",
+      "before": {
+        "users": [
+          {
+            "id": "c2cc8374-8cdf-4936-8967-d891fb500634",
+            "org_id": "4ce65010-7331-415a-abaa-4d47387d845e",
+            "email": "home@example.test",
+            "name": "home",
+            "department_id": null,
+            "role": "admin",
+            "status": "active",
+            "membership_revision": 0,
+            "password_hash": "original-hash",
+            "password_updated_at": null,
+            "last_login_at": null,
+            "created_at": 1,
+            "phone": null,
+            "display_name": null,
+            "local_auth": 1,
+            "token_limit": null,
+            "ext_user_id": null,
+            "local_execution_allowed": 1
+          },
+          {
+            "id": "cccccccc-cccc-4ccc-8ccc-cccccccccccc",
+            "org_id": "d3f29104-c19b-4594-859c-a92734c82dbb",
+            "email": "existing@example.test",
+            "name": "original-opc",
+            "department_id": null,
+            "role": "admin",
+            "status": "active",
+            "membership_revision": 0,
+            "password_hash": "private-original-hash",
+            "password_updated_at": null,
+            "last_login_at": null,
+            "created_at": 1,
+            "phone": "13900000002",
+            "display_name": "   ",
+            "local_auth": 1,
+            "token_limit": null,
+            "ext_user_id": null,
+            "local_execution_allowed": 1
+          }
+        ],
+        "human_accounts": [
+          {
+            "id": "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb",
+            "phone": "13900000002",
+            "status": "active",
+            "created_at": 1
+          }
+        ],
+        "human_account_memberships": [
+          {
+            "account_id": "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb",
+            "org_id": "d3f29104-c19b-4594-859c-a92734c82dbb",
+            "user_id": "cccccccc-cccc-4ccc-8ccc-cccccccccccc",
+            "created_at": 1
+          }
+        ],
+        "resource_numeric_aliases": [
+          {
+            "namespace": "user",
+            "legacy_id": 17,
+            "resource_id": "cccccccc-cccc-4ccc-8ccc-cccccccccccc",
+            "org_id": "d3f29104-c19b-4594-859c-a92734c82dbb",
+            "migration_run_id": null,
+            "created_at": 1
+          }
+        ],
+        "compatibility_id_counters": [],
+        "wallets": [
+          {
+            "owner_type": "user",
+            "owner_id": "cccccccc-cccc-4ccc-8ccc-cccccccccccc",
+            "balance_units": 12345,
+            "version": 7,
+            "created_at": 1,
+            "updated_at": 2
+          }
+        ],
+        "outbox_events": [],
+        "command_executions": [],
+        "user_auth_identities": [
+          {
+            "id": "old-phone",
+            "org_id": "d3f29104-c19b-4594-859c-a92734c82dbb",
+            "user_id": "cccccccc-cccc-4ccc-8ccc-cccccccccccc",
+            "provider": "phone",
+            "issuer": "sudowork",
+            "normalized_subject": "13900000002",
+            "metadata_json": "{}",
+            "created_at": 1,
+            "updated_at": 1
+          }
+        ]
+      },
+      "result": {
+        "id": "aaaaaaaa-aaaa-4aaa-8aaa-000000000003",
+        "created": true
+      },
+      "error": null,
+      "after": {
+        "users": [
+          {
+            "id": "c2cc8374-8cdf-4936-8967-d891fb500634",
+            "org_id": "4ce65010-7331-415a-abaa-4d47387d845e",
+            "email": "home@example.test",
+            "name": "home",
+            "department_id": null,
+            "role": "admin",
+            "status": "active",
+            "membership_revision": 0,
+            "password_hash": "original-hash",
+            "password_updated_at": null,
+            "last_login_at": null,
+            "created_at": 1,
+            "phone": null,
+            "display_name": null,
+            "local_auth": 1,
+            "token_limit": null,
+            "ext_user_id": null,
+            "local_execution_allowed": 1
+          },
+          {
+            "id": "cccccccc-cccc-4ccc-8ccc-cccccccccccc",
+            "org_id": "d3f29104-c19b-4594-859c-a92734c82dbb",
+            "email": "existing@example.test",
+            "name": "original-opc",
+            "department_id": null,
+            "role": "admin",
+            "status": "active",
+            "membership_revision": 0,
+            "password_hash": "private-original-hash",
+            "password_updated_at": null,
+            "last_login_at": null,
+            "created_at": 1,
+            "phone": "13900000002",
+            "display_name": "   ",
+            "local_auth": 1,
+            "token_limit": null,
+            "ext_user_id": null,
+            "local_execution_allowed": 1
+          },
+          {
+            "id": "aaaaaaaa-aaaa-4aaa-8aaa-000000000003",
+            "org_id": "4ce65010-7331-415a-abaa-4d47387d845e",
+            "email": "aaaaaaaa-aaaa-4aaa-8aaa-000000000003@users.internal.moss",
+            "name": "member-aaaaaaaa-aaaa-4aaa-8aaa-000000000001",
+            "department_id": null,
+            "role": "user",
+            "status": "active",
+            "membership_revision": 0,
+            "password_hash": null,
+            "password_updated_at": null,
+            "last_login_at": null,
+            "created_at": 2000000000123,
+            "phone": null,
+            "display_name": null,
+            "local_auth": 0,
+            "token_limit": null,
+            "ext_user_id": null,
+            "local_execution_allowed": 1
+          }
+        ],
+        "human_accounts": [
+          {
+            "id": "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb",
+            "phone": "13900000002",
+            "status": "active",
+            "created_at": 1
+          }
+        ],
+        "human_account_memberships": [
+          {
+            "account_id": "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb",
+            "org_id": "d3f29104-c19b-4594-859c-a92734c82dbb",
+            "user_id": "cccccccc-cccc-4ccc-8ccc-cccccccccccc",
+            "created_at": 1
+          },
+          {
+            "account_id": "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb",
+            "org_id": "4ce65010-7331-415a-abaa-4d47387d845e",
+            "user_id": "aaaaaaaa-aaaa-4aaa-8aaa-000000000003",
+            "created_at": 2000000000123
+          }
+        ],
+        "resource_numeric_aliases": [
+          {
+            "namespace": "user",
+            "legacy_id": 17,
+            "resource_id": "cccccccc-cccc-4ccc-8ccc-cccccccccccc",
+            "org_id": "d3f29104-c19b-4594-859c-a92734c82dbb",
+            "migration_run_id": null,
+            "created_at": 1
+          },
+          {
+            "namespace": "user",
+            "legacy_id": 2000000000,
+            "resource_id": "aaaaaaaa-aaaa-4aaa-8aaa-000000000003",
+            "org_id": "4ce65010-7331-415a-abaa-4d47387d845e",
+            "migration_run_id": null,
+            "created_at": 2000000000123
+          }
+        ],
+        "compatibility_id_counters": [
+          {
+            "counter_key": "resource_numeric_aliases:user",
+            "last_value": 2000000000
+          }
+        ],
+        "wallets": [
+          {
+            "owner_type": "user",
+            "owner_id": "cccccccc-cccc-4ccc-8ccc-cccccccccccc",
+            "balance_units": 12345,
+            "version": 7,
+            "created_at": 1,
+            "updated_at": 2
+          },
+          {
+            "owner_type": "user",
+            "owner_id": "aaaaaaaa-aaaa-4aaa-8aaa-000000000003",
+            "balance_units": 0,
+            "version": 0,
+            "created_at": 2000000000123,
+            "updated_at": 2000000000123
+          }
+        ],
+        "outbox_events": [
+          {
+            "id": "aaaaaaaa-aaaa-4aaa-8aaa-000000000004",
+            "event_type": "user.welcome",
+            "aggregate_type": "user",
+            "aggregate_id": "aaaaaaaa-aaaa-4aaa-8aaa-000000000003",
+            "payload_json": "{\"userId\":\"aaaaaaaa-aaaa-4aaa-8aaa-000000000003\",\"orgId\":\"4ce65010-7331-415a-abaa-4d47387d845e\"}",
+            "status": "pending",
+            "context_source": "online",
+            "idempotency_key": "welcome:account-membership:aaaaaaaa-aaaa-4aaa-8aaa-000000000002",
+            "suppress_reason": null,
+            "attempts": 0,
+            "created_at": 2000000000123,
+            "completed_at": null
+          }
+        ],
+        "command_executions": [
+          {
+            "command_type": "identity.create_user",
+            "idempotency_key": "account-membership:aaaaaaaa-aaaa-4aaa-8aaa-000000000002",
+            "context_source": "online",
+            "request_fingerprint": null,
+            "result_json": "{\"userId\":\"aaaaaaaa-aaaa-4aaa-8aaa-000000000003\",\"legacyUserId\":2000000000}",
+            "created_at": 2000000000123
+          }
+        ],
+        "user_auth_identities": [
+          {
+            "id": "old-phone",
+            "org_id": "d3f29104-c19b-4594-859c-a92734c82dbb",
+            "user_id": "cccccccc-cccc-4ccc-8ccc-cccccccccccc",
+            "provider": "phone",
+            "issuer": "sudowork",
+            "normalized_subject": "13900000002",
+            "metadata_json": "{}",
+            "created_at": 1,
+            "updated_at": 1
+          }
+        ]
+      }
+    },
+    {
+      "name": "new_js_trim_profile",
+      "before": {
+        "users": [
+          {
+            "id": "c2cc8374-8cdf-4936-8967-d891fb500634",
+            "org_id": "4ce65010-7331-415a-abaa-4d47387d845e",
+            "email": "home@example.test",
+            "name": "home",
+            "department_id": null,
+            "role": "admin",
+            "status": "active",
+            "membership_revision": 0,
+            "password_hash": "original-hash",
+            "password_updated_at": null,
+            "last_login_at": null,
+            "created_at": 1,
+            "phone": null,
+            "display_name": null,
+            "local_auth": 1,
+            "token_limit": null,
+            "ext_user_id": null,
+            "local_execution_allowed": 1
+          },
+          {
+            "id": "cccccccc-cccc-4ccc-8ccc-cccccccccccc",
+            "org_id": "d3f29104-c19b-4594-859c-a92734c82dbb",
+            "email": "existing@example.test",
+            "name": "original-opc",
+            "department_id": null,
+            "role": "admin",
+            "status": "active",
+            "membership_revision": 0,
+            "password_hash": "private-original-hash",
+            "password_updated_at": null,
+            "last_login_at": null,
+            "created_at": 1,
+            "phone": "13900000002",
+            "display_name": "Name",
+            "local_auth": 1,
+            "token_limit": null,
+            "ext_user_id": null,
+            "local_execution_allowed": 1
+          }
+        ],
+        "human_accounts": [
+          {
+            "id": "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb",
+            "phone": "13900000002",
+            "status": "active",
+            "created_at": 1
+          }
+        ],
+        "human_account_memberships": [
+          {
+            "account_id": "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb",
+            "org_id": "d3f29104-c19b-4594-859c-a92734c82dbb",
+            "user_id": "cccccccc-cccc-4ccc-8ccc-cccccccccccc",
+            "created_at": 1
+          }
+        ],
+        "resource_numeric_aliases": [
+          {
+            "namespace": "user",
+            "legacy_id": 17,
+            "resource_id": "cccccccc-cccc-4ccc-8ccc-cccccccccccc",
+            "org_id": "d3f29104-c19b-4594-859c-a92734c82dbb",
+            "migration_run_id": null,
+            "created_at": 1
+          }
+        ],
+        "compatibility_id_counters": [],
+        "wallets": [
+          {
+            "owner_type": "user",
+            "owner_id": "cccccccc-cccc-4ccc-8ccc-cccccccccccc",
+            "balance_units": 12345,
+            "version": 7,
+            "created_at": 1,
+            "updated_at": 2
+          }
+        ],
+        "outbox_events": [],
+        "command_executions": [],
+        "user_auth_identities": [
+          {
+            "id": "old-phone",
+            "org_id": "d3f29104-c19b-4594-859c-a92734c82dbb",
+            "user_id": "cccccccc-cccc-4ccc-8ccc-cccccccccccc",
+            "provider": "phone",
+            "issuer": "sudowork",
+            "normalized_subject": "13900000002",
+            "metadata_json": "{}",
+            "created_at": 1,
+            "updated_at": 1
+          }
+        ]
+      },
+      "result": {
+        "id": "aaaaaaaa-aaaa-4aaa-8aaa-000000000003",
+        "created": true
+      },
+      "error": null,
+      "after": {
+        "users": [
+          {
+            "id": "c2cc8374-8cdf-4936-8967-d891fb500634",
+            "org_id": "4ce65010-7331-415a-abaa-4d47387d845e",
+            "email": "home@example.test",
+            "name": "home",
+            "department_id": null,
+            "role": "admin",
+            "status": "active",
+            "membership_revision": 0,
+            "password_hash": "original-hash",
+            "password_updated_at": null,
+            "last_login_at": null,
+            "created_at": 1,
+            "phone": null,
+            "display_name": null,
+            "local_auth": 1,
+            "token_limit": null,
+            "ext_user_id": null,
+            "local_execution_allowed": 1
+          },
+          {
+            "id": "cccccccc-cccc-4ccc-8ccc-cccccccccccc",
+            "org_id": "d3f29104-c19b-4594-859c-a92734c82dbb",
+            "email": "existing@example.test",
+            "name": "original-opc",
+            "department_id": null,
+            "role": "admin",
+            "status": "active",
+            "membership_revision": 0,
+            "password_hash": "private-original-hash",
+            "password_updated_at": null,
+            "last_login_at": null,
+            "created_at": 1,
+            "phone": "13900000002",
+            "display_name": "Name",
+            "local_auth": 1,
+            "token_limit": null,
+            "ext_user_id": null,
+            "local_execution_allowed": 1
+          },
+          {
+            "id": "aaaaaaaa-aaaa-4aaa-8aaa-000000000003",
+            "org_id": "4ce65010-7331-415a-abaa-4d47387d845e",
+            "email": "aaaaaaaa-aaaa-4aaa-8aaa-000000000003@users.internal.moss",
+            "name": "member-aaaaaaaa-aaaa-4aaa-8aaa-000000000001",
+            "department_id": null,
+            "role": "user",
+            "status": "active",
+            "membership_revision": 0,
+            "password_hash": null,
+            "password_updated_at": null,
+            "last_login_at": null,
+            "created_at": 2000000000123,
+            "phone": null,
+            "display_name": "Name",
+            "local_auth": 0,
+            "token_limit": null,
+            "ext_user_id": null,
+            "local_execution_allowed": 1
+          }
+        ],
+        "human_accounts": [
+          {
+            "id": "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb",
+            "phone": "13900000002",
+            "status": "active",
+            "created_at": 1
+          }
+        ],
+        "human_account_memberships": [
+          {
+            "account_id": "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb",
+            "org_id": "d3f29104-c19b-4594-859c-a92734c82dbb",
+            "user_id": "cccccccc-cccc-4ccc-8ccc-cccccccccccc",
+            "created_at": 1
+          },
+          {
+            "account_id": "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb",
+            "org_id": "4ce65010-7331-415a-abaa-4d47387d845e",
+            "user_id": "aaaaaaaa-aaaa-4aaa-8aaa-000000000003",
+            "created_at": 2000000000123
+          }
+        ],
+        "resource_numeric_aliases": [
+          {
+            "namespace": "user",
+            "legacy_id": 17,
+            "resource_id": "cccccccc-cccc-4ccc-8ccc-cccccccccccc",
+            "org_id": "d3f29104-c19b-4594-859c-a92734c82dbb",
+            "migration_run_id": null,
+            "created_at": 1
+          },
+          {
+            "namespace": "user",
+            "legacy_id": 2000000000,
+            "resource_id": "aaaaaaaa-aaaa-4aaa-8aaa-000000000003",
+            "org_id": "4ce65010-7331-415a-abaa-4d47387d845e",
+            "migration_run_id": null,
+            "created_at": 2000000000123
+          }
+        ],
+        "compatibility_id_counters": [
+          {
+            "counter_key": "resource_numeric_aliases:user",
+            "last_value": 2000000000
+          }
+        ],
+        "wallets": [
+          {
+            "owner_type": "user",
+            "owner_id": "cccccccc-cccc-4ccc-8ccc-cccccccccccc",
+            "balance_units": 12345,
+            "version": 7,
+            "created_at": 1,
+            "updated_at": 2
+          },
+          {
+            "owner_type": "user",
+            "owner_id": "aaaaaaaa-aaaa-4aaa-8aaa-000000000003",
+            "balance_units": 0,
+            "version": 0,
+            "created_at": 2000000000123,
+            "updated_at": 2000000000123
+          }
+        ],
+        "outbox_events": [
+          {
+            "id": "aaaaaaaa-aaaa-4aaa-8aaa-000000000004",
+            "event_type": "user.welcome",
+            "aggregate_type": "user",
+            "aggregate_id": "aaaaaaaa-aaaa-4aaa-8aaa-000000000003",
+            "payload_json": "{\"userId\":\"aaaaaaaa-aaaa-4aaa-8aaa-000000000003\",\"orgId\":\"4ce65010-7331-415a-abaa-4d47387d845e\"}",
+            "status": "pending",
+            "context_source": "online",
+            "idempotency_key": "welcome:account-membership:aaaaaaaa-aaaa-4aaa-8aaa-000000000002",
+            "suppress_reason": null,
+            "attempts": 0,
+            "created_at": 2000000000123,
+            "completed_at": null
+          }
+        ],
+        "command_executions": [
+          {
+            "command_type": "identity.create_user",
+            "idempotency_key": "account-membership:aaaaaaaa-aaaa-4aaa-8aaa-000000000002",
+            "context_source": "online",
+            "request_fingerprint": null,
+            "result_json": "{\"userId\":\"aaaaaaaa-aaaa-4aaa-8aaa-000000000003\",\"legacyUserId\":2000000000}",
+            "created_at": 2000000000123
+          }
+        ],
+        "user_auth_identities": [
+          {
+            "id": "old-phone",
+            "org_id": "d3f29104-c19b-4594-859c-a92734c82dbb",
+            "user_id": "cccccccc-cccc-4ccc-8ccc-cccccccccccc",
+            "provider": "phone",
+            "issuer": "sudowork",
+            "normalized_subject": "13900000002",
+            "metadata_json": "{}",
+            "created_at": 1,
+            "updated_at": 1
+          }
+        ]
+      }
+    },
+    {
+      "name": "existing_active",
+      "before": {
+        "users": [
+          {
+            "id": "c2cc8374-8cdf-4936-8967-d891fb500634",
+            "org_id": "4ce65010-7331-415a-abaa-4d47387d845e",
+            "email": "home@example.test",
+            "name": "home",
+            "department_id": null,
+            "role": "admin",
+            "status": "active",
+            "membership_revision": 0,
+            "password_hash": "original-hash",
+            "password_updated_at": null,
+            "last_login_at": null,
+            "created_at": 1,
+            "phone": null,
+            "display_name": null,
+            "local_auth": 1,
+            "token_limit": null,
+            "ext_user_id": null,
+            "local_execution_allowed": 1
+          },
+          {
+            "id": "cccccccc-cccc-4ccc-8ccc-cccccccccccc",
+            "org_id": "4ce65010-7331-415a-abaa-4d47387d845e",
+            "email": "existing@example.test",
+            "name": "original-opc",
+            "department_id": null,
+            "role": "user",
+            "status": "active",
+            "membership_revision": 9,
+            "password_hash": "private-original-hash",
+            "password_updated_at": null,
+            "last_login_at": null,
+            "created_at": 1,
+            "phone": "13900000002",
+            "display_name": "  Original Name  ",
+            "local_auth": 1,
+            "token_limit": null,
+            "ext_user_id": null,
+            "local_execution_allowed": 1
+          }
+        ],
+        "human_accounts": [
+          {
+            "id": "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb",
+            "phone": "13900000002",
+            "status": "active",
+            "created_at": 1
+          }
+        ],
+        "human_account_memberships": [
+          {
+            "account_id": "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb",
+            "org_id": "4ce65010-7331-415a-abaa-4d47387d845e",
+            "user_id": "cccccccc-cccc-4ccc-8ccc-cccccccccccc",
+            "created_at": 1
+          }
+        ],
+        "resource_numeric_aliases": [
+          {
+            "namespace": "user",
+            "legacy_id": 17,
+            "resource_id": "cccccccc-cccc-4ccc-8ccc-cccccccccccc",
+            "org_id": "4ce65010-7331-415a-abaa-4d47387d845e",
+            "migration_run_id": null,
+            "created_at": 1
+          }
+        ],
+        "compatibility_id_counters": [],
+        "wallets": [
+          {
+            "owner_type": "user",
+            "owner_id": "cccccccc-cccc-4ccc-8ccc-cccccccccccc",
+            "balance_units": 12345,
+            "version": 7,
+            "created_at": 1,
+            "updated_at": 2
+          }
+        ],
+        "outbox_events": [],
+        "command_executions": [],
+        "user_auth_identities": [
+          {
+            "id": "old-phone",
+            "org_id": "d3f29104-c19b-4594-859c-a92734c82dbb",
+            "user_id": "cccccccc-cccc-4ccc-8ccc-cccccccccccc",
+            "provider": "phone",
+            "issuer": "sudowork",
+            "normalized_subject": "13900000002",
+            "metadata_json": "{}",
+            "created_at": 1,
+            "updated_at": 1
+          }
+        ]
+      },
+      "result": {
+        "id": "cccccccc-cccc-4ccc-8ccc-cccccccccccc",
+        "created": false
+      },
+      "error": null,
+      "after": {
+        "users": [
+          {
+            "id": "c2cc8374-8cdf-4936-8967-d891fb500634",
+            "org_id": "4ce65010-7331-415a-abaa-4d47387d845e",
+            "email": "home@example.test",
+            "name": "home",
+            "department_id": null,
+            "role": "admin",
+            "status": "active",
+            "membership_revision": 0,
+            "password_hash": "original-hash",
+            "password_updated_at": null,
+            "last_login_at": null,
+            "created_at": 1,
+            "phone": null,
+            "display_name": null,
+            "local_auth": 1,
+            "token_limit": null,
+            "ext_user_id": null,
+            "local_execution_allowed": 1
+          },
+          {
+            "id": "cccccccc-cccc-4ccc-8ccc-cccccccccccc",
+            "org_id": "4ce65010-7331-415a-abaa-4d47387d845e",
+            "email": "existing@example.test",
+            "name": "original-opc",
+            "department_id": null,
+            "role": "user",
+            "status": "active",
+            "membership_revision": 9,
+            "password_hash": "private-original-hash",
+            "password_updated_at": null,
+            "last_login_at": null,
+            "created_at": 1,
+            "phone": "13900000002",
+            "display_name": "  Original Name  ",
+            "local_auth": 1,
+            "token_limit": null,
+            "ext_user_id": null,
+            "local_execution_allowed": 1
+          }
+        ],
+        "human_accounts": [
+          {
+            "id": "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb",
+            "phone": "13900000002",
+            "status": "active",
+            "created_at": 1
+          }
+        ],
+        "human_account_memberships": [
+          {
+            "account_id": "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb",
+            "org_id": "4ce65010-7331-415a-abaa-4d47387d845e",
+            "user_id": "cccccccc-cccc-4ccc-8ccc-cccccccccccc",
+            "created_at": 1
+          }
+        ],
+        "resource_numeric_aliases": [
+          {
+            "namespace": "user",
+            "legacy_id": 17,
+            "resource_id": "cccccccc-cccc-4ccc-8ccc-cccccccccccc",
+            "org_id": "4ce65010-7331-415a-abaa-4d47387d845e",
+            "migration_run_id": null,
+            "created_at": 1
+          }
+        ],
+        "compatibility_id_counters": [],
+        "wallets": [
+          {
+            "owner_type": "user",
+            "owner_id": "cccccccc-cccc-4ccc-8ccc-cccccccccccc",
+            "balance_units": 12345,
+            "version": 7,
+            "created_at": 1,
+            "updated_at": 2
+          }
+        ],
+        "outbox_events": [],
+        "command_executions": [],
+        "user_auth_identities": [
+          {
+            "id": "old-phone",
+            "org_id": "d3f29104-c19b-4594-859c-a92734c82dbb",
+            "user_id": "cccccccc-cccc-4ccc-8ccc-cccccccccccc",
+            "provider": "phone",
+            "issuer": "sudowork",
+            "normalized_subject": "13900000002",
+            "metadata_json": "{}",
+            "created_at": 1,
+            "updated_at": 1
+          }
+        ]
+      }
+    },
+    {
+      "name": "existing_disabled",
+      "before": {
+        "users": [
+          {
+            "id": "c2cc8374-8cdf-4936-8967-d891fb500634",
+            "org_id": "4ce65010-7331-415a-abaa-4d47387d845e",
+            "email": "home@example.test",
+            "name": "home",
+            "department_id": null,
+            "role": "admin",
+            "status": "active",
+            "membership_revision": 0,
+            "password_hash": "original-hash",
+            "password_updated_at": null,
+            "last_login_at": null,
+            "created_at": 1,
+            "phone": null,
+            "display_name": null,
+            "local_auth": 1,
+            "token_limit": null,
+            "ext_user_id": null,
+            "local_execution_allowed": 1
+          },
+          {
+            "id": "cccccccc-cccc-4ccc-8ccc-cccccccccccc",
+            "org_id": "4ce65010-7331-415a-abaa-4d47387d845e",
+            "email": "existing@example.test",
+            "name": "original-opc",
+            "department_id": null,
+            "role": "user",
+            "status": "disabled",
+            "membership_revision": 9,
+            "password_hash": "private-original-hash",
+            "password_updated_at": null,
+            "last_login_at": null,
+            "created_at": 1,
+            "phone": "13900000002",
+            "display_name": "  Original Name  ",
+            "local_auth": 1,
+            "token_limit": null,
+            "ext_user_id": null,
+            "local_execution_allowed": 1
+          }
+        ],
+        "human_accounts": [
+          {
+            "id": "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb",
+            "phone": "13900000002",
+            "status": "active",
+            "created_at": 1
+          }
+        ],
+        "human_account_memberships": [
+          {
+            "account_id": "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb",
+            "org_id": "4ce65010-7331-415a-abaa-4d47387d845e",
+            "user_id": "cccccccc-cccc-4ccc-8ccc-cccccccccccc",
+            "created_at": 1
+          }
+        ],
+        "resource_numeric_aliases": [
+          {
+            "namespace": "user",
+            "legacy_id": 17,
+            "resource_id": "cccccccc-cccc-4ccc-8ccc-cccccccccccc",
+            "org_id": "4ce65010-7331-415a-abaa-4d47387d845e",
+            "migration_run_id": null,
+            "created_at": 1
+          }
+        ],
+        "compatibility_id_counters": [],
+        "wallets": [
+          {
+            "owner_type": "user",
+            "owner_id": "cccccccc-cccc-4ccc-8ccc-cccccccccccc",
+            "balance_units": 12345,
+            "version": 7,
+            "created_at": 1,
+            "updated_at": 2
+          }
+        ],
+        "outbox_events": [],
+        "command_executions": [],
+        "user_auth_identities": [
+          {
+            "id": "old-phone",
+            "org_id": "d3f29104-c19b-4594-859c-a92734c82dbb",
+            "user_id": "cccccccc-cccc-4ccc-8ccc-cccccccccccc",
+            "provider": "phone",
+            "issuer": "sudowork",
+            "normalized_subject": "13900000002",
+            "metadata_json": "{}",
+            "created_at": 1,
+            "updated_at": 1
+          }
+        ]
+      },
+      "result": {
+        "id": "cccccccc-cccc-4ccc-8ccc-cccccccccccc",
+        "created": false
+      },
+      "error": null,
+      "after": {
+        "users": [
+          {
+            "id": "c2cc8374-8cdf-4936-8967-d891fb500634",
+            "org_id": "4ce65010-7331-415a-abaa-4d47387d845e",
+            "email": "home@example.test",
+            "name": "home",
+            "department_id": null,
+            "role": "admin",
+            "status": "active",
+            "membership_revision": 0,
+            "password_hash": "original-hash",
+            "password_updated_at": null,
+            "last_login_at": null,
+            "created_at": 1,
+            "phone": null,
+            "display_name": null,
+            "local_auth": 1,
+            "token_limit": null,
+            "ext_user_id": null,
+            "local_execution_allowed": 1
+          },
+          {
+            "id": "cccccccc-cccc-4ccc-8ccc-cccccccccccc",
+            "org_id": "4ce65010-7331-415a-abaa-4d47387d845e",
+            "email": "existing@example.test",
+            "name": "original-opc",
+            "department_id": null,
+            "role": "user",
+            "status": "disabled",
+            "membership_revision": 9,
+            "password_hash": "private-original-hash",
+            "password_updated_at": null,
+            "last_login_at": null,
+            "created_at": 1,
+            "phone": "13900000002",
+            "display_name": "  Original Name  ",
+            "local_auth": 1,
+            "token_limit": null,
+            "ext_user_id": null,
+            "local_execution_allowed": 1
+          }
+        ],
+        "human_accounts": [
+          {
+            "id": "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb",
+            "phone": "13900000002",
+            "status": "active",
+            "created_at": 1
+          }
+        ],
+        "human_account_memberships": [
+          {
+            "account_id": "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb",
+            "org_id": "4ce65010-7331-415a-abaa-4d47387d845e",
+            "user_id": "cccccccc-cccc-4ccc-8ccc-cccccccccccc",
+            "created_at": 1
+          }
+        ],
+        "resource_numeric_aliases": [
+          {
+            "namespace": "user",
+            "legacy_id": 17,
+            "resource_id": "cccccccc-cccc-4ccc-8ccc-cccccccccccc",
+            "org_id": "4ce65010-7331-415a-abaa-4d47387d845e",
+            "migration_run_id": null,
+            "created_at": 1
+          }
+        ],
+        "compatibility_id_counters": [],
+        "wallets": [
+          {
+            "owner_type": "user",
+            "owner_id": "cccccccc-cccc-4ccc-8ccc-cccccccccccc",
+            "balance_units": 12345,
+            "version": 7,
+            "created_at": 1,
+            "updated_at": 2
+          }
+        ],
+        "outbox_events": [],
+        "command_executions": [],
+        "user_auth_identities": [
+          {
+            "id": "old-phone",
+            "org_id": "d3f29104-c19b-4594-859c-a92734c82dbb",
+            "user_id": "cccccccc-cccc-4ccc-8ccc-cccccccccccc",
+            "provider": "phone",
+            "issuer": "sudowork",
+            "normalized_subject": "13900000002",
+            "metadata_json": "{}",
+            "created_at": 1,
+            "updated_at": 1
+          }
+        ]
+      }
+    },
+    {
+      "name": "existing_admin",
+      "before": {
+        "users": [
+          {
+            "id": "c2cc8374-8cdf-4936-8967-d891fb500634",
+            "org_id": "4ce65010-7331-415a-abaa-4d47387d845e",
+            "email": "home@example.test",
+            "name": "home",
+            "department_id": null,
+            "role": "admin",
+            "status": "active",
+            "membership_revision": 0,
+            "password_hash": "original-hash",
+            "password_updated_at": null,
+            "last_login_at": null,
+            "created_at": 1,
+            "phone": null,
+            "display_name": null,
+            "local_auth": 1,
+            "token_limit": null,
+            "ext_user_id": null,
+            "local_execution_allowed": 1
+          },
+          {
+            "id": "cccccccc-cccc-4ccc-8ccc-cccccccccccc",
+            "org_id": "4ce65010-7331-415a-abaa-4d47387d845e",
+            "email": "existing@example.test",
+            "name": "original-opc",
+            "department_id": null,
+            "role": "admin",
+            "status": "active",
+            "membership_revision": 9,
+            "password_hash": "private-original-hash",
+            "password_updated_at": null,
+            "last_login_at": null,
+            "created_at": 1,
+            "phone": "13900000002",
+            "display_name": "  Original Name  ",
+            "local_auth": 1,
+            "token_limit": null,
+            "ext_user_id": null,
+            "local_execution_allowed": 1
+          }
+        ],
+        "human_accounts": [
+          {
+            "id": "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb",
+            "phone": "13900000002",
+            "status": "active",
+            "created_at": 1
+          }
+        ],
+        "human_account_memberships": [
+          {
+            "account_id": "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb",
+            "org_id": "4ce65010-7331-415a-abaa-4d47387d845e",
+            "user_id": "cccccccc-cccc-4ccc-8ccc-cccccccccccc",
+            "created_at": 1
+          }
+        ],
+        "resource_numeric_aliases": [
+          {
+            "namespace": "user",
+            "legacy_id": 17,
+            "resource_id": "cccccccc-cccc-4ccc-8ccc-cccccccccccc",
+            "org_id": "4ce65010-7331-415a-abaa-4d47387d845e",
+            "migration_run_id": null,
+            "created_at": 1
+          }
+        ],
+        "compatibility_id_counters": [],
+        "wallets": [
+          {
+            "owner_type": "user",
+            "owner_id": "cccccccc-cccc-4ccc-8ccc-cccccccccccc",
+            "balance_units": 12345,
+            "version": 7,
+            "created_at": 1,
+            "updated_at": 2
+          }
+        ],
+        "outbox_events": [],
+        "command_executions": [],
+        "user_auth_identities": [
+          {
+            "id": "old-phone",
+            "org_id": "d3f29104-c19b-4594-859c-a92734c82dbb",
+            "user_id": "cccccccc-cccc-4ccc-8ccc-cccccccccccc",
+            "provider": "phone",
+            "issuer": "sudowork",
+            "normalized_subject": "13900000002",
+            "metadata_json": "{}",
+            "created_at": 1,
+            "updated_at": 1
+          }
+        ]
+      },
+      "result": {
+        "id": "cccccccc-cccc-4ccc-8ccc-cccccccccccc",
+        "created": false
+      },
+      "error": null,
+      "after": {
+        "users": [
+          {
+            "id": "c2cc8374-8cdf-4936-8967-d891fb500634",
+            "org_id": "4ce65010-7331-415a-abaa-4d47387d845e",
+            "email": "home@example.test",
+            "name": "home",
+            "department_id": null,
+            "role": "admin",
+            "status": "active",
+            "membership_revision": 0,
+            "password_hash": "original-hash",
+            "password_updated_at": null,
+            "last_login_at": null,
+            "created_at": 1,
+            "phone": null,
+            "display_name": null,
+            "local_auth": 1,
+            "token_limit": null,
+            "ext_user_id": null,
+            "local_execution_allowed": 1
+          },
+          {
+            "id": "cccccccc-cccc-4ccc-8ccc-cccccccccccc",
+            "org_id": "4ce65010-7331-415a-abaa-4d47387d845e",
+            "email": "existing@example.test",
+            "name": "original-opc",
+            "department_id": null,
+            "role": "admin",
+            "status": "active",
+            "membership_revision": 9,
+            "password_hash": "private-original-hash",
+            "password_updated_at": null,
+            "last_login_at": null,
+            "created_at": 1,
+            "phone": "13900000002",
+            "display_name": "  Original Name  ",
+            "local_auth": 1,
+            "token_limit": null,
+            "ext_user_id": null,
+            "local_execution_allowed": 1
+          }
+        ],
+        "human_accounts": [
+          {
+            "id": "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb",
+            "phone": "13900000002",
+            "status": "active",
+            "created_at": 1
+          }
+        ],
+        "human_account_memberships": [
+          {
+            "account_id": "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb",
+            "org_id": "4ce65010-7331-415a-abaa-4d47387d845e",
+            "user_id": "cccccccc-cccc-4ccc-8ccc-cccccccccccc",
+            "created_at": 1
+          }
+        ],
+        "resource_numeric_aliases": [
+          {
+            "namespace": "user",
+            "legacy_id": 17,
+            "resource_id": "cccccccc-cccc-4ccc-8ccc-cccccccccccc",
+            "org_id": "4ce65010-7331-415a-abaa-4d47387d845e",
+            "migration_run_id": null,
+            "created_at": 1
+          }
+        ],
+        "compatibility_id_counters": [],
+        "wallets": [
+          {
+            "owner_type": "user",
+            "owner_id": "cccccccc-cccc-4ccc-8ccc-cccccccccccc",
+            "balance_units": 12345,
+            "version": 7,
+            "created_at": 1,
+            "updated_at": 2
+          }
+        ],
+        "outbox_events": [],
+        "command_executions": [],
+        "user_auth_identities": [
+          {
+            "id": "old-phone",
+            "org_id": "d3f29104-c19b-4594-859c-a92734c82dbb",
+            "user_id": "cccccccc-cccc-4ccc-8ccc-cccccccccccc",
+            "provider": "phone",
+            "issuer": "sudowork",
+            "normalized_subject": "13900000002",
+            "metadata_json": "{}",
+            "created_at": 1,
+            "updated_at": 1
+          }
+        ]
+      }
+    },
+    {
+      "name": "counter_advanced",
+      "before": {
+        "users": [
+          {
+            "id": "c2cc8374-8cdf-4936-8967-d891fb500634",
+            "org_id": "4ce65010-7331-415a-abaa-4d47387d845e",
+            "email": "home@example.test",
+            "name": "home",
+            "department_id": null,
+            "role": "admin",
+            "status": "active",
+            "membership_revision": 0,
+            "password_hash": "original-hash",
+            "password_updated_at": null,
+            "last_login_at": null,
+            "created_at": 1,
+            "phone": null,
+            "display_name": null,
+            "local_auth": 1,
+            "token_limit": null,
+            "ext_user_id": null,
+            "local_execution_allowed": 1
+          },
+          {
+            "id": "cccccccc-cccc-4ccc-8ccc-cccccccccccc",
+            "org_id": "d3f29104-c19b-4594-859c-a92734c82dbb",
+            "email": "existing@example.test",
+            "name": "original-opc",
+            "department_id": null,
+            "role": "admin",
+            "status": "active",
+            "membership_revision": 0,
+            "password_hash": "private-original-hash",
+            "password_updated_at": null,
+            "last_login_at": null,
+            "created_at": 1,
+            "phone": "13900000002",
+            "display_name": "  Original Name  ",
+            "local_auth": 1,
+            "token_limit": null,
+            "ext_user_id": null,
+            "local_execution_allowed": 1
+          }
+        ],
+        "human_accounts": [
+          {
+            "id": "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb",
+            "phone": "13900000002",
+            "status": "active",
+            "created_at": 1
+          }
+        ],
+        "human_account_memberships": [
+          {
+            "account_id": "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb",
+            "org_id": "d3f29104-c19b-4594-859c-a92734c82dbb",
+            "user_id": "cccccccc-cccc-4ccc-8ccc-cccccccccccc",
+            "created_at": 1
+          }
+        ],
+        "resource_numeric_aliases": [
+          {
+            "namespace": "user",
+            "legacy_id": 17,
+            "resource_id": "cccccccc-cccc-4ccc-8ccc-cccccccccccc",
+            "org_id": "d3f29104-c19b-4594-859c-a92734c82dbb",
+            "migration_run_id": null,
+            "created_at": 1
+          }
+        ],
+        "compatibility_id_counters": [
+          {
+            "counter_key": "resource_numeric_aliases:user",
+            "last_value": 2000000017
+          }
+        ],
+        "wallets": [
+          {
+            "owner_type": "user",
+            "owner_id": "cccccccc-cccc-4ccc-8ccc-cccccccccccc",
+            "balance_units": 12345,
+            "version": 7,
+            "created_at": 1,
+            "updated_at": 2
+          }
+        ],
+        "outbox_events": [],
+        "command_executions": [],
+        "user_auth_identities": [
+          {
+            "id": "old-phone",
+            "org_id": "d3f29104-c19b-4594-859c-a92734c82dbb",
+            "user_id": "cccccccc-cccc-4ccc-8ccc-cccccccccccc",
+            "provider": "phone",
+            "issuer": "sudowork",
+            "normalized_subject": "13900000002",
+            "metadata_json": "{}",
+            "created_at": 1,
+            "updated_at": 1
+          }
+        ]
+      },
+      "result": {
+        "id": "aaaaaaaa-aaaa-4aaa-8aaa-000000000003",
+        "created": true
+      },
+      "error": null,
+      "after": {
+        "users": [
+          {
+            "id": "c2cc8374-8cdf-4936-8967-d891fb500634",
+            "org_id": "4ce65010-7331-415a-abaa-4d47387d845e",
+            "email": "home@example.test",
+            "name": "home",
+            "department_id": null,
+            "role": "admin",
+            "status": "active",
+            "membership_revision": 0,
+            "password_hash": "original-hash",
+            "password_updated_at": null,
+            "last_login_at": null,
+            "created_at": 1,
+            "phone": null,
+            "display_name": null,
+            "local_auth": 1,
+            "token_limit": null,
+            "ext_user_id": null,
+            "local_execution_allowed": 1
+          },
+          {
+            "id": "cccccccc-cccc-4ccc-8ccc-cccccccccccc",
+            "org_id": "d3f29104-c19b-4594-859c-a92734c82dbb",
+            "email": "existing@example.test",
+            "name": "original-opc",
+            "department_id": null,
+            "role": "admin",
+            "status": "active",
+            "membership_revision": 0,
+            "password_hash": "private-original-hash",
+            "password_updated_at": null,
+            "last_login_at": null,
+            "created_at": 1,
+            "phone": "13900000002",
+            "display_name": "  Original Name  ",
+            "local_auth": 1,
+            "token_limit": null,
+            "ext_user_id": null,
+            "local_execution_allowed": 1
+          },
+          {
+            "id": "aaaaaaaa-aaaa-4aaa-8aaa-000000000003",
+            "org_id": "4ce65010-7331-415a-abaa-4d47387d845e",
+            "email": "aaaaaaaa-aaaa-4aaa-8aaa-000000000003@users.internal.moss",
+            "name": "member-aaaaaaaa-aaaa-4aaa-8aaa-000000000001",
+            "department_id": null,
+            "role": "user",
+            "status": "active",
+            "membership_revision": 0,
+            "password_hash": null,
+            "password_updated_at": null,
+            "last_login_at": null,
+            "created_at": 2000000000123,
+            "phone": null,
+            "display_name": "Original Name",
+            "local_auth": 0,
+            "token_limit": null,
+            "ext_user_id": null,
+            "local_execution_allowed": 1
+          }
+        ],
+        "human_accounts": [
+          {
+            "id": "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb",
+            "phone": "13900000002",
+            "status": "active",
+            "created_at": 1
+          }
+        ],
+        "human_account_memberships": [
+          {
+            "account_id": "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb",
+            "org_id": "d3f29104-c19b-4594-859c-a92734c82dbb",
+            "user_id": "cccccccc-cccc-4ccc-8ccc-cccccccccccc",
+            "created_at": 1
+          },
+          {
+            "account_id": "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb",
+            "org_id": "4ce65010-7331-415a-abaa-4d47387d845e",
+            "user_id": "aaaaaaaa-aaaa-4aaa-8aaa-000000000003",
+            "created_at": 2000000000123
+          }
+        ],
+        "resource_numeric_aliases": [
+          {
+            "namespace": "user",
+            "legacy_id": 17,
+            "resource_id": "cccccccc-cccc-4ccc-8ccc-cccccccccccc",
+            "org_id": "d3f29104-c19b-4594-859c-a92734c82dbb",
+            "migration_run_id": null,
+            "created_at": 1
+          },
+          {
+            "namespace": "user",
+            "legacy_id": 2000000018,
+            "resource_id": "aaaaaaaa-aaaa-4aaa-8aaa-000000000003",
+            "org_id": "4ce65010-7331-415a-abaa-4d47387d845e",
+            "migration_run_id": null,
+            "created_at": 2000000000123
+          }
+        ],
+        "compatibility_id_counters": [
+          {
+            "counter_key": "resource_numeric_aliases:user",
+            "last_value": 2000000018
+          }
+        ],
+        "wallets": [
+          {
+            "owner_type": "user",
+            "owner_id": "cccccccc-cccc-4ccc-8ccc-cccccccccccc",
+            "balance_units": 12345,
+            "version": 7,
+            "created_at": 1,
+            "updated_at": 2
+          },
+          {
+            "owner_type": "user",
+            "owner_id": "aaaaaaaa-aaaa-4aaa-8aaa-000000000003",
+            "balance_units": 0,
+            "version": 0,
+            "created_at": 2000000000123,
+            "updated_at": 2000000000123
+          }
+        ],
+        "outbox_events": [
+          {
+            "id": "aaaaaaaa-aaaa-4aaa-8aaa-000000000004",
+            "event_type": "user.welcome",
+            "aggregate_type": "user",
+            "aggregate_id": "aaaaaaaa-aaaa-4aaa-8aaa-000000000003",
+            "payload_json": "{\"userId\":\"aaaaaaaa-aaaa-4aaa-8aaa-000000000003\",\"orgId\":\"4ce65010-7331-415a-abaa-4d47387d845e\"}",
+            "status": "pending",
+            "context_source": "online",
+            "idempotency_key": "welcome:account-membership:aaaaaaaa-aaaa-4aaa-8aaa-000000000002",
+            "suppress_reason": null,
+            "attempts": 0,
+            "created_at": 2000000000123,
+            "completed_at": null
+          }
+        ],
+        "command_executions": [
+          {
+            "command_type": "identity.create_user",
+            "idempotency_key": "account-membership:aaaaaaaa-aaaa-4aaa-8aaa-000000000002",
+            "context_source": "online",
+            "request_fingerprint": null,
+            "result_json": "{\"userId\":\"aaaaaaaa-aaaa-4aaa-8aaa-000000000003\",\"legacyUserId\":2000000018}",
+            "created_at": 2000000000123
+          }
+        ],
+        "user_auth_identities": [
+          {
+            "id": "old-phone",
+            "org_id": "d3f29104-c19b-4594-859c-a92734c82dbb",
+            "user_id": "cccccccc-cccc-4ccc-8ccc-cccccccccccc",
+            "provider": "phone",
+            "issuer": "sudowork",
+            "normalized_subject": "13900000002",
+            "metadata_json": "{}",
+            "created_at": 1,
+            "updated_at": 1
+          }
+        ]
+      }
+    },
+    {
+      "name": "counter_collision",
+      "before": {
+        "users": [
+          {
+            "id": "c2cc8374-8cdf-4936-8967-d891fb500634",
+            "org_id": "4ce65010-7331-415a-abaa-4d47387d845e",
+            "email": "home@example.test",
+            "name": "home",
+            "department_id": null,
+            "role": "admin",
+            "status": "active",
+            "membership_revision": 0,
+            "password_hash": "original-hash",
+            "password_updated_at": null,
+            "last_login_at": null,
+            "created_at": 1,
+            "phone": null,
+            "display_name": null,
+            "local_auth": 1,
+            "token_limit": null,
+            "ext_user_id": null,
+            "local_execution_allowed": 1
+          },
+          {
+            "id": "cccccccc-cccc-4ccc-8ccc-cccccccccccc",
+            "org_id": "d3f29104-c19b-4594-859c-a92734c82dbb",
+            "email": "existing@example.test",
+            "name": "original-opc",
+            "department_id": null,
+            "role": "admin",
+            "status": "active",
+            "membership_revision": 0,
+            "password_hash": "private-original-hash",
+            "password_updated_at": null,
+            "last_login_at": null,
+            "created_at": 1,
+            "phone": "13900000002",
+            "display_name": "  Original Name  ",
+            "local_auth": 1,
+            "token_limit": null,
+            "ext_user_id": null,
+            "local_execution_allowed": 1
+          }
+        ],
+        "human_accounts": [
+          {
+            "id": "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb",
+            "phone": "13900000002",
+            "status": "active",
+            "created_at": 1
+          }
+        ],
+        "human_account_memberships": [
+          {
+            "account_id": "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb",
+            "org_id": "d3f29104-c19b-4594-859c-a92734c82dbb",
+            "user_id": "cccccccc-cccc-4ccc-8ccc-cccccccccccc",
+            "created_at": 1
+          }
+        ],
+        "resource_numeric_aliases": [
+          {
+            "namespace": "user",
+            "legacy_id": 17,
+            "resource_id": "cccccccc-cccc-4ccc-8ccc-cccccccccccc",
+            "org_id": "d3f29104-c19b-4594-859c-a92734c82dbb",
+            "migration_run_id": null,
+            "created_at": 1
+          },
+          {
+            "namespace": "user",
+            "legacy_id": 2000000000,
+            "resource_id": "c2cc8374-8cdf-4936-8967-d891fb500634",
+            "org_id": "4ce65010-7331-415a-abaa-4d47387d845e",
+            "migration_run_id": null,
+            "created_at": 1
+          }
+        ],
+        "compatibility_id_counters": [],
+        "wallets": [
+          {
+            "owner_type": "user",
+            "owner_id": "cccccccc-cccc-4ccc-8ccc-cccccccccccc",
+            "balance_units": 12345,
+            "version": 7,
+            "created_at": 1,
+            "updated_at": 2
+          }
+        ],
+        "outbox_events": [],
+        "command_executions": [],
+        "user_auth_identities": [
+          {
+            "id": "old-phone",
+            "org_id": "d3f29104-c19b-4594-859c-a92734c82dbb",
+            "user_id": "cccccccc-cccc-4ccc-8ccc-cccccccccccc",
+            "provider": "phone",
+            "issuer": "sudowork",
+            "normalized_subject": "13900000002",
+            "metadata_json": "{}",
+            "created_at": 1,
+            "updated_at": 1
+          }
+        ]
+      },
+      "result": null,
+      "error": {
+        "status": null,
+        "message": "Failed to persist numeric alias for namespace user"
+      },
+      "after": {
+        "users": [
+          {
+            "id": "c2cc8374-8cdf-4936-8967-d891fb500634",
+            "org_id": "4ce65010-7331-415a-abaa-4d47387d845e",
+            "email": "home@example.test",
+            "name": "home",
+            "department_id": null,
+            "role": "admin",
+            "status": "active",
+            "membership_revision": 0,
+            "password_hash": "original-hash",
+            "password_updated_at": null,
+            "last_login_at": null,
+            "created_at": 1,
+            "phone": null,
+            "display_name": null,
+            "local_auth": 1,
+            "token_limit": null,
+            "ext_user_id": null,
+            "local_execution_allowed": 1
+          },
+          {
+            "id": "cccccccc-cccc-4ccc-8ccc-cccccccccccc",
+            "org_id": "d3f29104-c19b-4594-859c-a92734c82dbb",
+            "email": "existing@example.test",
+            "name": "original-opc",
+            "department_id": null,
+            "role": "admin",
+            "status": "active",
+            "membership_revision": 0,
+            "password_hash": "private-original-hash",
+            "password_updated_at": null,
+            "last_login_at": null,
+            "created_at": 1,
+            "phone": "13900000002",
+            "display_name": "  Original Name  ",
+            "local_auth": 1,
+            "token_limit": null,
+            "ext_user_id": null,
+            "local_execution_allowed": 1
+          }
+        ],
+        "human_accounts": [
+          {
+            "id": "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb",
+            "phone": "13900000002",
+            "status": "active",
+            "created_at": 1
+          }
+        ],
+        "human_account_memberships": [
+          {
+            "account_id": "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb",
+            "org_id": "d3f29104-c19b-4594-859c-a92734c82dbb",
+            "user_id": "cccccccc-cccc-4ccc-8ccc-cccccccccccc",
+            "created_at": 1
+          }
+        ],
+        "resource_numeric_aliases": [
+          {
+            "namespace": "user",
+            "legacy_id": 17,
+            "resource_id": "cccccccc-cccc-4ccc-8ccc-cccccccccccc",
+            "org_id": "d3f29104-c19b-4594-859c-a92734c82dbb",
+            "migration_run_id": null,
+            "created_at": 1
+          },
+          {
+            "namespace": "user",
+            "legacy_id": 2000000000,
+            "resource_id": "c2cc8374-8cdf-4936-8967-d891fb500634",
+            "org_id": "4ce65010-7331-415a-abaa-4d47387d845e",
+            "migration_run_id": null,
+            "created_at": 1
+          }
+        ],
+        "compatibility_id_counters": [],
+        "wallets": [
+          {
+            "owner_type": "user",
+            "owner_id": "cccccccc-cccc-4ccc-8ccc-cccccccccccc",
+            "balance_units": 12345,
+            "version": 7,
+            "created_at": 1,
+            "updated_at": 2
+          }
+        ],
+        "outbox_events": [],
+        "command_executions": [],
+        "user_auth_identities": [
+          {
+            "id": "old-phone",
+            "org_id": "d3f29104-c19b-4594-859c-a92734c82dbb",
+            "user_id": "cccccccc-cccc-4ccc-8ccc-cccccccccccc",
+            "provider": "phone",
+            "issuer": "sudowork",
+            "normalized_subject": "13900000002",
+            "metadata_json": "{}",
+            "created_at": 1,
+            "updated_at": 1
+          }
+        ]
+      }
+    },
+    {
+      "name": "username_collision",
+      "before": {
+        "users": [
+          {
+            "id": "c2cc8374-8cdf-4936-8967-d891fb500634",
+            "org_id": "4ce65010-7331-415a-abaa-4d47387d845e",
+            "email": "home@example.test",
+            "name": "home",
+            "department_id": null,
+            "role": "admin",
+            "status": "active",
+            "membership_revision": 0,
+            "password_hash": "original-hash",
+            "password_updated_at": null,
+            "last_login_at": null,
+            "created_at": 1,
+            "phone": null,
+            "display_name": null,
+            "local_auth": 1,
+            "token_limit": null,
+            "ext_user_id": null,
+            "local_execution_allowed": 1
+          },
+          {
+            "id": "cccccccc-cccc-4ccc-8ccc-cccccccccccc",
+            "org_id": "d3f29104-c19b-4594-859c-a92734c82dbb",
+            "email": "existing@example.test",
+            "name": "member-aaaaaaaa-aaaa-4aaa-8aaa-000000000001",
+            "department_id": null,
+            "role": "admin",
+            "status": "active",
+            "membership_revision": 0,
+            "password_hash": "private-original-hash",
+            "password_updated_at": null,
+            "last_login_at": null,
+            "created_at": 1,
+            "phone": "13900000002",
+            "display_name": "  Original Name  ",
+            "local_auth": 1,
+            "token_limit": null,
+            "ext_user_id": null,
+            "local_execution_allowed": 1
+          }
+        ],
+        "human_accounts": [
+          {
+            "id": "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb",
+            "phone": "13900000002",
+            "status": "active",
+            "created_at": 1
+          }
+        ],
+        "human_account_memberships": [
+          {
+            "account_id": "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb",
+            "org_id": "d3f29104-c19b-4594-859c-a92734c82dbb",
+            "user_id": "cccccccc-cccc-4ccc-8ccc-cccccccccccc",
+            "created_at": 1
+          }
+        ],
+        "resource_numeric_aliases": [
+          {
+            "namespace": "user",
+            "legacy_id": 17,
+            "resource_id": "cccccccc-cccc-4ccc-8ccc-cccccccccccc",
+            "org_id": "d3f29104-c19b-4594-859c-a92734c82dbb",
+            "migration_run_id": null,
+            "created_at": 1
+          }
+        ],
+        "compatibility_id_counters": [],
+        "wallets": [
+          {
+            "owner_type": "user",
+            "owner_id": "cccccccc-cccc-4ccc-8ccc-cccccccccccc",
+            "balance_units": 12345,
+            "version": 7,
+            "created_at": 1,
+            "updated_at": 2
+          }
+        ],
+        "outbox_events": [],
+        "command_executions": [],
+        "user_auth_identities": [
+          {
+            "id": "old-phone",
+            "org_id": "d3f29104-c19b-4594-859c-a92734c82dbb",
+            "user_id": "cccccccc-cccc-4ccc-8ccc-cccccccccccc",
+            "provider": "phone",
+            "issuer": "sudowork",
+            "normalized_subject": "13900000002",
+            "metadata_json": "{}",
+            "created_at": 1,
+            "updated_at": 1
+          }
+        ]
+      },
+      "result": null,
+      "error": {
+        "status": null,
+        "message": "Username already exists"
+      },
+      "after": {
+        "users": [
+          {
+            "id": "c2cc8374-8cdf-4936-8967-d891fb500634",
+            "org_id": "4ce65010-7331-415a-abaa-4d47387d845e",
+            "email": "home@example.test",
+            "name": "home",
+            "department_id": null,
+            "role": "admin",
+            "status": "active",
+            "membership_revision": 0,
+            "password_hash": "original-hash",
+            "password_updated_at": null,
+            "last_login_at": null,
+            "created_at": 1,
+            "phone": null,
+            "display_name": null,
+            "local_auth": 1,
+            "token_limit": null,
+            "ext_user_id": null,
+            "local_execution_allowed": 1
+          },
+          {
+            "id": "cccccccc-cccc-4ccc-8ccc-cccccccccccc",
+            "org_id": "d3f29104-c19b-4594-859c-a92734c82dbb",
+            "email": "existing@example.test",
+            "name": "member-aaaaaaaa-aaaa-4aaa-8aaa-000000000001",
+            "department_id": null,
+            "role": "admin",
+            "status": "active",
+            "membership_revision": 0,
+            "password_hash": "private-original-hash",
+            "password_updated_at": null,
+            "last_login_at": null,
+            "created_at": 1,
+            "phone": "13900000002",
+            "display_name": "  Original Name  ",
+            "local_auth": 1,
+            "token_limit": null,
+            "ext_user_id": null,
+            "local_execution_allowed": 1
+          }
+        ],
+        "human_accounts": [
+          {
+            "id": "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb",
+            "phone": "13900000002",
+            "status": "active",
+            "created_at": 1
+          }
+        ],
+        "human_account_memberships": [
+          {
+            "account_id": "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb",
+            "org_id": "d3f29104-c19b-4594-859c-a92734c82dbb",
+            "user_id": "cccccccc-cccc-4ccc-8ccc-cccccccccccc",
+            "created_at": 1
+          }
+        ],
+        "resource_numeric_aliases": [
+          {
+            "namespace": "user",
+            "legacy_id": 17,
+            "resource_id": "cccccccc-cccc-4ccc-8ccc-cccccccccccc",
+            "org_id": "d3f29104-c19b-4594-859c-a92734c82dbb",
+            "migration_run_id": null,
+            "created_at": 1
+          }
+        ],
+        "compatibility_id_counters": [],
+        "wallets": [
+          {
+            "owner_type": "user",
+            "owner_id": "cccccccc-cccc-4ccc-8ccc-cccccccccccc",
+            "balance_units": 12345,
+            "version": 7,
+            "created_at": 1,
+            "updated_at": 2
+          }
+        ],
+        "outbox_events": [],
+        "command_executions": [],
+        "user_auth_identities": [
+          {
+            "id": "old-phone",
+            "org_id": "d3f29104-c19b-4594-859c-a92734c82dbb",
+            "user_id": "cccccccc-cccc-4ccc-8ccc-cccccccccccc",
+            "provider": "phone",
+            "issuer": "sudowork",
+            "normalized_subject": "13900000002",
+            "metadata_json": "{}",
+            "created_at": 1,
+            "updated_at": 1
+          }
+        ]
+      }
+    },
+    {
+      "name": "outbox_abort",
+      "before": {
+        "users": [
+          {
+            "id": "c2cc8374-8cdf-4936-8967-d891fb500634",
+            "org_id": "4ce65010-7331-415a-abaa-4d47387d845e",
+            "email": "home@example.test",
+            "name": "home",
+            "department_id": null,
+            "role": "admin",
+            "status": "active",
+            "membership_revision": 0,
+            "password_hash": "original-hash",
+            "password_updated_at": null,
+            "last_login_at": null,
+            "created_at": 1,
+            "phone": null,
+            "display_name": null,
+            "local_auth": 1,
+            "token_limit": null,
+            "ext_user_id": null,
+            "local_execution_allowed": 1
+          },
+          {
+            "id": "cccccccc-cccc-4ccc-8ccc-cccccccccccc",
+            "org_id": "d3f29104-c19b-4594-859c-a92734c82dbb",
+            "email": "existing@example.test",
+            "name": "original-opc",
+            "department_id": null,
+            "role": "admin",
+            "status": "active",
+            "membership_revision": 0,
+            "password_hash": "private-original-hash",
+            "password_updated_at": null,
+            "last_login_at": null,
+            "created_at": 1,
+            "phone": "13900000002",
+            "display_name": "  Original Name  ",
+            "local_auth": 1,
+            "token_limit": null,
+            "ext_user_id": null,
+            "local_execution_allowed": 1
+          }
+        ],
+        "human_accounts": [
+          {
+            "id": "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb",
+            "phone": "13900000002",
+            "status": "active",
+            "created_at": 1
+          }
+        ],
+        "human_account_memberships": [
+          {
+            "account_id": "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb",
+            "org_id": "d3f29104-c19b-4594-859c-a92734c82dbb",
+            "user_id": "cccccccc-cccc-4ccc-8ccc-cccccccccccc",
+            "created_at": 1
+          }
+        ],
+        "resource_numeric_aliases": [
+          {
+            "namespace": "user",
+            "legacy_id": 17,
+            "resource_id": "cccccccc-cccc-4ccc-8ccc-cccccccccccc",
+            "org_id": "d3f29104-c19b-4594-859c-a92734c82dbb",
+            "migration_run_id": null,
+            "created_at": 1
+          }
+        ],
+        "compatibility_id_counters": [],
+        "wallets": [
+          {
+            "owner_type": "user",
+            "owner_id": "cccccccc-cccc-4ccc-8ccc-cccccccccccc",
+            "balance_units": 12345,
+            "version": 7,
+            "created_at": 1,
+            "updated_at": 2
+          }
+        ],
+        "outbox_events": [],
+        "command_executions": [],
+        "user_auth_identities": [
+          {
+            "id": "old-phone",
+            "org_id": "d3f29104-c19b-4594-859c-a92734c82dbb",
+            "user_id": "cccccccc-cccc-4ccc-8ccc-cccccccccccc",
+            "provider": "phone",
+            "issuer": "sudowork",
+            "normalized_subject": "13900000002",
+            "metadata_json": "{}",
+            "created_at": 1,
+            "updated_at": 1
+          }
+        ]
+      },
+      "result": null,
+      "error": {
+        "status": null,
+        "message": "fixture fail outbox"
+      },
+      "after": {
+        "users": [
+          {
+            "id": "c2cc8374-8cdf-4936-8967-d891fb500634",
+            "org_id": "4ce65010-7331-415a-abaa-4d47387d845e",
+            "email": "home@example.test",
+            "name": "home",
+            "department_id": null,
+            "role": "admin",
+            "status": "active",
+            "membership_revision": 0,
+            "password_hash": "original-hash",
+            "password_updated_at": null,
+            "last_login_at": null,
+            "created_at": 1,
+            "phone": null,
+            "display_name": null,
+            "local_auth": 1,
+            "token_limit": null,
+            "ext_user_id": null,
+            "local_execution_allowed": 1
+          },
+          {
+            "id": "cccccccc-cccc-4ccc-8ccc-cccccccccccc",
+            "org_id": "d3f29104-c19b-4594-859c-a92734c82dbb",
+            "email": "existing@example.test",
+            "name": "original-opc",
+            "department_id": null,
+            "role": "admin",
+            "status": "active",
+            "membership_revision": 0,
+            "password_hash": "private-original-hash",
+            "password_updated_at": null,
+            "last_login_at": null,
+            "created_at": 1,
+            "phone": "13900000002",
+            "display_name": "  Original Name  ",
+            "local_auth": 1,
+            "token_limit": null,
+            "ext_user_id": null,
+            "local_execution_allowed": 1
+          }
+        ],
+        "human_accounts": [
+          {
+            "id": "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb",
+            "phone": "13900000002",
+            "status": "active",
+            "created_at": 1
+          }
+        ],
+        "human_account_memberships": [
+          {
+            "account_id": "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb",
+            "org_id": "d3f29104-c19b-4594-859c-a92734c82dbb",
+            "user_id": "cccccccc-cccc-4ccc-8ccc-cccccccccccc",
+            "created_at": 1
+          }
+        ],
+        "resource_numeric_aliases": [
+          {
+            "namespace": "user",
+            "legacy_id": 17,
+            "resource_id": "cccccccc-cccc-4ccc-8ccc-cccccccccccc",
+            "org_id": "d3f29104-c19b-4594-859c-a92734c82dbb",
+            "migration_run_id": null,
+            "created_at": 1
+          }
+        ],
+        "compatibility_id_counters": [],
+        "wallets": [
+          {
+            "owner_type": "user",
+            "owner_id": "cccccccc-cccc-4ccc-8ccc-cccccccccccc",
+            "balance_units": 12345,
+            "version": 7,
+            "created_at": 1,
+            "updated_at": 2
+          }
+        ],
+        "outbox_events": [],
+        "command_executions": [],
+        "user_auth_identities": [
+          {
+            "id": "old-phone",
+            "org_id": "d3f29104-c19b-4594-859c-a92734c82dbb",
+            "user_id": "cccccccc-cccc-4ccc-8ccc-cccccccccccc",
+            "provider": "phone",
+            "issuer": "sudowork",
+            "normalized_subject": "13900000002",
+            "metadata_json": "{}",
+            "created_at": 1,
+            "updated_at": 1
+          }
+        ]
+      }
+    },
+    {
+      "name": "command_abort",
+      "before": {
+        "users": [
+          {
+            "id": "c2cc8374-8cdf-4936-8967-d891fb500634",
+            "org_id": "4ce65010-7331-415a-abaa-4d47387d845e",
+            "email": "home@example.test",
+            "name": "home",
+            "department_id": null,
+            "role": "admin",
+            "status": "active",
+            "membership_revision": 0,
+            "password_hash": "original-hash",
+            "password_updated_at": null,
+            "last_login_at": null,
+            "created_at": 1,
+            "phone": null,
+            "display_name": null,
+            "local_auth": 1,
+            "token_limit": null,
+            "ext_user_id": null,
+            "local_execution_allowed": 1
+          },
+          {
+            "id": "cccccccc-cccc-4ccc-8ccc-cccccccccccc",
+            "org_id": "d3f29104-c19b-4594-859c-a92734c82dbb",
+            "email": "existing@example.test",
+            "name": "original-opc",
+            "department_id": null,
+            "role": "admin",
+            "status": "active",
+            "membership_revision": 0,
+            "password_hash": "private-original-hash",
+            "password_updated_at": null,
+            "last_login_at": null,
+            "created_at": 1,
+            "phone": "13900000002",
+            "display_name": "  Original Name  ",
+            "local_auth": 1,
+            "token_limit": null,
+            "ext_user_id": null,
+            "local_execution_allowed": 1
+          }
+        ],
+        "human_accounts": [
+          {
+            "id": "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb",
+            "phone": "13900000002",
+            "status": "active",
+            "created_at": 1
+          }
+        ],
+        "human_account_memberships": [
+          {
+            "account_id": "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb",
+            "org_id": "d3f29104-c19b-4594-859c-a92734c82dbb",
+            "user_id": "cccccccc-cccc-4ccc-8ccc-cccccccccccc",
+            "created_at": 1
+          }
+        ],
+        "resource_numeric_aliases": [
+          {
+            "namespace": "user",
+            "legacy_id": 17,
+            "resource_id": "cccccccc-cccc-4ccc-8ccc-cccccccccccc",
+            "org_id": "d3f29104-c19b-4594-859c-a92734c82dbb",
+            "migration_run_id": null,
+            "created_at": 1
+          }
+        ],
+        "compatibility_id_counters": [],
+        "wallets": [
+          {
+            "owner_type": "user",
+            "owner_id": "cccccccc-cccc-4ccc-8ccc-cccccccccccc",
+            "balance_units": 12345,
+            "version": 7,
+            "created_at": 1,
+            "updated_at": 2
+          }
+        ],
+        "outbox_events": [],
+        "command_executions": [],
+        "user_auth_identities": [
+          {
+            "id": "old-phone",
+            "org_id": "d3f29104-c19b-4594-859c-a92734c82dbb",
+            "user_id": "cccccccc-cccc-4ccc-8ccc-cccccccccccc",
+            "provider": "phone",
+            "issuer": "sudowork",
+            "normalized_subject": "13900000002",
+            "metadata_json": "{}",
+            "created_at": 1,
+            "updated_at": 1
+          }
+        ]
+      },
+      "result": null,
+      "error": {
+        "status": null,
+        "message": "fixture fail command"
+      },
+      "after": {
+        "users": [
+          {
+            "id": "c2cc8374-8cdf-4936-8967-d891fb500634",
+            "org_id": "4ce65010-7331-415a-abaa-4d47387d845e",
+            "email": "home@example.test",
+            "name": "home",
+            "department_id": null,
+            "role": "admin",
+            "status": "active",
+            "membership_revision": 0,
+            "password_hash": "original-hash",
+            "password_updated_at": null,
+            "last_login_at": null,
+            "created_at": 1,
+            "phone": null,
+            "display_name": null,
+            "local_auth": 1,
+            "token_limit": null,
+            "ext_user_id": null,
+            "local_execution_allowed": 1
+          },
+          {
+            "id": "cccccccc-cccc-4ccc-8ccc-cccccccccccc",
+            "org_id": "d3f29104-c19b-4594-859c-a92734c82dbb",
+            "email": "existing@example.test",
+            "name": "original-opc",
+            "department_id": null,
+            "role": "admin",
+            "status": "active",
+            "membership_revision": 0,
+            "password_hash": "private-original-hash",
+            "password_updated_at": null,
+            "last_login_at": null,
+            "created_at": 1,
+            "phone": "13900000002",
+            "display_name": "  Original Name  ",
+            "local_auth": 1,
+            "token_limit": null,
+            "ext_user_id": null,
+            "local_execution_allowed": 1
+          }
+        ],
+        "human_accounts": [
+          {
+            "id": "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb",
+            "phone": "13900000002",
+            "status": "active",
+            "created_at": 1
+          }
+        ],
+        "human_account_memberships": [
+          {
+            "account_id": "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb",
+            "org_id": "d3f29104-c19b-4594-859c-a92734c82dbb",
+            "user_id": "cccccccc-cccc-4ccc-8ccc-cccccccccccc",
+            "created_at": 1
+          }
+        ],
+        "resource_numeric_aliases": [
+          {
+            "namespace": "user",
+            "legacy_id": 17,
+            "resource_id": "cccccccc-cccc-4ccc-8ccc-cccccccccccc",
+            "org_id": "d3f29104-c19b-4594-859c-a92734c82dbb",
+            "migration_run_id": null,
+            "created_at": 1
+          }
+        ],
+        "compatibility_id_counters": [],
+        "wallets": [
+          {
+            "owner_type": "user",
+            "owner_id": "cccccccc-cccc-4ccc-8ccc-cccccccccccc",
+            "balance_units": 12345,
+            "version": 7,
+            "created_at": 1,
+            "updated_at": 2
+          }
+        ],
+        "outbox_events": [],
+        "command_executions": [],
+        "user_auth_identities": [
+          {
+            "id": "old-phone",
+            "org_id": "d3f29104-c19b-4594-859c-a92734c82dbb",
+            "user_id": "cccccccc-cccc-4ccc-8ccc-cccccccccccc",
+            "provider": "phone",
+            "issuer": "sudowork",
+            "normalized_subject": "13900000002",
+            "metadata_json": "{}",
+            "created_at": 1,
+            "updated_at": 1
+          }
+        ]
+      }
+    },
+    {
+      "name": "account_locked",
+      "before": {
+        "users": [
+          {
+            "id": "c2cc8374-8cdf-4936-8967-d891fb500634",
+            "org_id": "4ce65010-7331-415a-abaa-4d47387d845e",
+            "email": "home@example.test",
+            "name": "home",
+            "department_id": null,
+            "role": "admin",
+            "status": "active",
+            "membership_revision": 0,
+            "password_hash": "original-hash",
+            "password_updated_at": null,
+            "last_login_at": null,
+            "created_at": 1,
+            "phone": null,
+            "display_name": null,
+            "local_auth": 1,
+            "token_limit": null,
+            "ext_user_id": null,
+            "local_execution_allowed": 1
+          },
+          {
+            "id": "cccccccc-cccc-4ccc-8ccc-cccccccccccc",
+            "org_id": "d3f29104-c19b-4594-859c-a92734c82dbb",
+            "email": "existing@example.test",
+            "name": "original-opc",
+            "department_id": null,
+            "role": "admin",
+            "status": "active",
+            "membership_revision": 0,
+            "password_hash": "private-original-hash",
+            "password_updated_at": null,
+            "last_login_at": null,
+            "created_at": 1,
+            "phone": "13900000002",
+            "display_name": "  Original Name  ",
+            "local_auth": 1,
+            "token_limit": null,
+            "ext_user_id": null,
+            "local_execution_allowed": 1
+          }
+        ],
+        "human_accounts": [
+          {
+            "id": "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb",
+            "phone": "13900000002",
+            "status": "locked",
+            "created_at": 1
+          }
+        ],
+        "human_account_memberships": [
+          {
+            "account_id": "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb",
+            "org_id": "d3f29104-c19b-4594-859c-a92734c82dbb",
+            "user_id": "cccccccc-cccc-4ccc-8ccc-cccccccccccc",
+            "created_at": 1
+          }
+        ],
+        "resource_numeric_aliases": [
+          {
+            "namespace": "user",
+            "legacy_id": 17,
+            "resource_id": "cccccccc-cccc-4ccc-8ccc-cccccccccccc",
+            "org_id": "d3f29104-c19b-4594-859c-a92734c82dbb",
+            "migration_run_id": null,
+            "created_at": 1
+          }
+        ],
+        "compatibility_id_counters": [],
+        "wallets": [
+          {
+            "owner_type": "user",
+            "owner_id": "cccccccc-cccc-4ccc-8ccc-cccccccccccc",
+            "balance_units": 12345,
+            "version": 7,
+            "created_at": 1,
+            "updated_at": 2
+          }
+        ],
+        "outbox_events": [],
+        "command_executions": [],
+        "user_auth_identities": [
+          {
+            "id": "old-phone",
+            "org_id": "d3f29104-c19b-4594-859c-a92734c82dbb",
+            "user_id": "cccccccc-cccc-4ccc-8ccc-cccccccccccc",
+            "provider": "phone",
+            "issuer": "sudowork",
+            "normalized_subject": "13900000002",
+            "metadata_json": "{}",
+            "created_at": 1,
+            "updated_at": 1
+          }
+        ]
+      },
+      "result": null,
+      "error": {
+        "status": 404,
+        "message": "Registered account is unavailable"
+      },
+      "after": {
+        "users": [
+          {
+            "id": "c2cc8374-8cdf-4936-8967-d891fb500634",
+            "org_id": "4ce65010-7331-415a-abaa-4d47387d845e",
+            "email": "home@example.test",
+            "name": "home",
+            "department_id": null,
+            "role": "admin",
+            "status": "active",
+            "membership_revision": 0,
+            "password_hash": "original-hash",
+            "password_updated_at": null,
+            "last_login_at": null,
+            "created_at": 1,
+            "phone": null,
+            "display_name": null,
+            "local_auth": 1,
+            "token_limit": null,
+            "ext_user_id": null,
+            "local_execution_allowed": 1
+          },
+          {
+            "id": "cccccccc-cccc-4ccc-8ccc-cccccccccccc",
+            "org_id": "d3f29104-c19b-4594-859c-a92734c82dbb",
+            "email": "existing@example.test",
+            "name": "original-opc",
+            "department_id": null,
+            "role": "admin",
+            "status": "active",
+            "membership_revision": 0,
+            "password_hash": "private-original-hash",
+            "password_updated_at": null,
+            "last_login_at": null,
+            "created_at": 1,
+            "phone": "13900000002",
+            "display_name": "  Original Name  ",
+            "local_auth": 1,
+            "token_limit": null,
+            "ext_user_id": null,
+            "local_execution_allowed": 1
+          }
+        ],
+        "human_accounts": [
+          {
+            "id": "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb",
+            "phone": "13900000002",
+            "status": "locked",
+            "created_at": 1
+          }
+        ],
+        "human_account_memberships": [
+          {
+            "account_id": "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb",
+            "org_id": "d3f29104-c19b-4594-859c-a92734c82dbb",
+            "user_id": "cccccccc-cccc-4ccc-8ccc-cccccccccccc",
+            "created_at": 1
+          }
+        ],
+        "resource_numeric_aliases": [
+          {
+            "namespace": "user",
+            "legacy_id": 17,
+            "resource_id": "cccccccc-cccc-4ccc-8ccc-cccccccccccc",
+            "org_id": "d3f29104-c19b-4594-859c-a92734c82dbb",
+            "migration_run_id": null,
+            "created_at": 1
+          }
+        ],
+        "compatibility_id_counters": [],
+        "wallets": [
+          {
+            "owner_type": "user",
+            "owner_id": "cccccccc-cccc-4ccc-8ccc-cccccccccccc",
+            "balance_units": 12345,
+            "version": 7,
+            "created_at": 1,
+            "updated_at": 2
+          }
+        ],
+        "outbox_events": [],
+        "command_executions": [],
+        "user_auth_identities": [
+          {
+            "id": "old-phone",
+            "org_id": "d3f29104-c19b-4594-859c-a92734c82dbb",
+            "user_id": "cccccccc-cccc-4ccc-8ccc-cccccccccccc",
+            "provider": "phone",
+            "issuer": "sudowork",
+            "normalized_subject": "13900000002",
+            "metadata_json": "{}",
+            "created_at": 1,
+            "updated_at": 1
+          }
+        ]
+      }
+    },
+    {
+      "name": "account_disabled",
+      "before": {
+        "users": [
+          {
+            "id": "c2cc8374-8cdf-4936-8967-d891fb500634",
+            "org_id": "4ce65010-7331-415a-abaa-4d47387d845e",
+            "email": "home@example.test",
+            "name": "home",
+            "department_id": null,
+            "role": "admin",
+            "status": "active",
+            "membership_revision": 0,
+            "password_hash": "original-hash",
+            "password_updated_at": null,
+            "last_login_at": null,
+            "created_at": 1,
+            "phone": null,
+            "display_name": null,
+            "local_auth": 1,
+            "token_limit": null,
+            "ext_user_id": null,
+            "local_execution_allowed": 1
+          },
+          {
+            "id": "cccccccc-cccc-4ccc-8ccc-cccccccccccc",
+            "org_id": "d3f29104-c19b-4594-859c-a92734c82dbb",
+            "email": "existing@example.test",
+            "name": "original-opc",
+            "department_id": null,
+            "role": "admin",
+            "status": "active",
+            "membership_revision": 0,
+            "password_hash": "private-original-hash",
+            "password_updated_at": null,
+            "last_login_at": null,
+            "created_at": 1,
+            "phone": "13900000002",
+            "display_name": "  Original Name  ",
+            "local_auth": 1,
+            "token_limit": null,
+            "ext_user_id": null,
+            "local_execution_allowed": 1
+          }
+        ],
+        "human_accounts": [
+          {
+            "id": "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb",
+            "phone": "13900000002",
+            "status": "disabled",
+            "created_at": 1
+          }
+        ],
+        "human_account_memberships": [
+          {
+            "account_id": "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb",
+            "org_id": "d3f29104-c19b-4594-859c-a92734c82dbb",
+            "user_id": "cccccccc-cccc-4ccc-8ccc-cccccccccccc",
+            "created_at": 1
+          }
+        ],
+        "resource_numeric_aliases": [
+          {
+            "namespace": "user",
+            "legacy_id": 17,
+            "resource_id": "cccccccc-cccc-4ccc-8ccc-cccccccccccc",
+            "org_id": "d3f29104-c19b-4594-859c-a92734c82dbb",
+            "migration_run_id": null,
+            "created_at": 1
+          }
+        ],
+        "compatibility_id_counters": [],
+        "wallets": [
+          {
+            "owner_type": "user",
+            "owner_id": "cccccccc-cccc-4ccc-8ccc-cccccccccccc",
+            "balance_units": 12345,
+            "version": 7,
+            "created_at": 1,
+            "updated_at": 2
+          }
+        ],
+        "outbox_events": [],
+        "command_executions": [],
+        "user_auth_identities": [
+          {
+            "id": "old-phone",
+            "org_id": "d3f29104-c19b-4594-859c-a92734c82dbb",
+            "user_id": "cccccccc-cccc-4ccc-8ccc-cccccccccccc",
+            "provider": "phone",
+            "issuer": "sudowork",
+            "normalized_subject": "13900000002",
+            "metadata_json": "{}",
+            "created_at": 1,
+            "updated_at": 1
+          }
+        ]
+      },
+      "result": null,
+      "error": {
+        "status": 404,
+        "message": "Registered account is unavailable"
+      },
+      "after": {
+        "users": [
+          {
+            "id": "c2cc8374-8cdf-4936-8967-d891fb500634",
+            "org_id": "4ce65010-7331-415a-abaa-4d47387d845e",
+            "email": "home@example.test",
+            "name": "home",
+            "department_id": null,
+            "role": "admin",
+            "status": "active",
+            "membership_revision": 0,
+            "password_hash": "original-hash",
+            "password_updated_at": null,
+            "last_login_at": null,
+            "created_at": 1,
+            "phone": null,
+            "display_name": null,
+            "local_auth": 1,
+            "token_limit": null,
+            "ext_user_id": null,
+            "local_execution_allowed": 1
+          },
+          {
+            "id": "cccccccc-cccc-4ccc-8ccc-cccccccccccc",
+            "org_id": "d3f29104-c19b-4594-859c-a92734c82dbb",
+            "email": "existing@example.test",
+            "name": "original-opc",
+            "department_id": null,
+            "role": "admin",
+            "status": "active",
+            "membership_revision": 0,
+            "password_hash": "private-original-hash",
+            "password_updated_at": null,
+            "last_login_at": null,
+            "created_at": 1,
+            "phone": "13900000002",
+            "display_name": "  Original Name  ",
+            "local_auth": 1,
+            "token_limit": null,
+            "ext_user_id": null,
+            "local_execution_allowed": 1
+          }
+        ],
+        "human_accounts": [
+          {
+            "id": "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb",
+            "phone": "13900000002",
+            "status": "disabled",
+            "created_at": 1
+          }
+        ],
+        "human_account_memberships": [
+          {
+            "account_id": "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb",
+            "org_id": "d3f29104-c19b-4594-859c-a92734c82dbb",
+            "user_id": "cccccccc-cccc-4ccc-8ccc-cccccccccccc",
+            "created_at": 1
+          }
+        ],
+        "resource_numeric_aliases": [
+          {
+            "namespace": "user",
+            "legacy_id": 17,
+            "resource_id": "cccccccc-cccc-4ccc-8ccc-cccccccccccc",
+            "org_id": "d3f29104-c19b-4594-859c-a92734c82dbb",
+            "migration_run_id": null,
+            "created_at": 1
+          }
+        ],
+        "compatibility_id_counters": [],
+        "wallets": [
+          {
+            "owner_type": "user",
+            "owner_id": "cccccccc-cccc-4ccc-8ccc-cccccccccccc",
+            "balance_units": 12345,
+            "version": 7,
+            "created_at": 1,
+            "updated_at": 2
+          }
+        ],
+        "outbox_events": [],
+        "command_executions": [],
+        "user_auth_identities": [
+          {
+            "id": "old-phone",
+            "org_id": "d3f29104-c19b-4594-859c-a92734c82dbb",
+            "user_id": "cccccccc-cccc-4ccc-8ccc-cccccccccccc",
+            "provider": "phone",
+            "issuer": "sudowork",
+            "normalized_subject": "13900000002",
+            "metadata_json": "{}",
+            "created_at": 1,
+            "updated_at": 1
+          }
+        ]
+      }
+    },
+    {
+      "name": "account_absent",
+      "before": {
+        "users": [
+          {
+            "id": "c2cc8374-8cdf-4936-8967-d891fb500634",
+            "org_id": "4ce65010-7331-415a-abaa-4d47387d845e",
+            "email": "home@example.test",
+            "name": "home",
+            "department_id": null,
+            "role": "admin",
+            "status": "active",
+            "membership_revision": 0,
+            "password_hash": "original-hash",
+            "password_updated_at": null,
+            "last_login_at": null,
+            "created_at": 1,
+            "phone": null,
+            "display_name": null,
+            "local_auth": 1,
+            "token_limit": null,
+            "ext_user_id": null,
+            "local_execution_allowed": 1
+          }
+        ],
+        "human_accounts": [],
+        "human_account_memberships": [],
+        "resource_numeric_aliases": [],
+        "compatibility_id_counters": [],
+        "wallets": [],
+        "outbox_events": [],
+        "command_executions": [],
+        "user_auth_identities": []
+      },
+      "result": null,
+      "error": {
+        "status": 404,
+        "message": "Registered account is unavailable"
+      },
+      "after": {
+        "users": [
+          {
+            "id": "c2cc8374-8cdf-4936-8967-d891fb500634",
+            "org_id": "4ce65010-7331-415a-abaa-4d47387d845e",
+            "email": "home@example.test",
+            "name": "home",
+            "department_id": null,
+            "role": "admin",
+            "status": "active",
+            "membership_revision": 0,
+            "password_hash": "original-hash",
+            "password_updated_at": null,
+            "last_login_at": null,
+            "created_at": 1,
+            "phone": null,
+            "display_name": null,
+            "local_auth": 1,
+            "token_limit": null,
+            "ext_user_id": null,
+            "local_execution_allowed": 1
+          }
+        ],
+        "human_accounts": [],
+        "human_account_memberships": [],
+        "resource_numeric_aliases": [],
+        "compatibility_id_counters": [],
+        "wallets": [],
+        "outbox_events": [],
+        "command_executions": [],
+        "user_auth_identities": []
+      }
+    },
+    {
+      "name": "phone_invalid",
+      "before": {
+        "users": [
+          {
+            "id": "c2cc8374-8cdf-4936-8967-d891fb500634",
+            "org_id": "4ce65010-7331-415a-abaa-4d47387d845e",
+            "email": "home@example.test",
+            "name": "home",
+            "department_id": null,
+            "role": "admin",
+            "status": "active",
+            "membership_revision": 0,
+            "password_hash": "original-hash",
+            "password_updated_at": null,
+            "last_login_at": null,
+            "created_at": 1,
+            "phone": null,
+            "display_name": null,
+            "local_auth": 1,
+            "token_limit": null,
+            "ext_user_id": null,
+            "local_execution_allowed": 1
+          },
+          {
+            "id": "cccccccc-cccc-4ccc-8ccc-cccccccccccc",
+            "org_id": "d3f29104-c19b-4594-859c-a92734c82dbb",
+            "email": "existing@example.test",
+            "name": "original-opc",
+            "department_id": null,
+            "role": "admin",
+            "status": "active",
+            "membership_revision": 0,
+            "password_hash": "private-original-hash",
+            "password_updated_at": null,
+            "last_login_at": null,
+            "created_at": 1,
+            "phone": "13900000002",
+            "display_name": "  Original Name  ",
+            "local_auth": 1,
+            "token_limit": null,
+            "ext_user_id": null,
+            "local_execution_allowed": 1
+          }
+        ],
+        "human_accounts": [
+          {
+            "id": "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb",
+            "phone": "13900000002",
+            "status": "active",
+            "created_at": 1
+          }
+        ],
+        "human_account_memberships": [
+          {
+            "account_id": "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb",
+            "org_id": "d3f29104-c19b-4594-859c-a92734c82dbb",
+            "user_id": "cccccccc-cccc-4ccc-8ccc-cccccccccccc",
+            "created_at": 1
+          }
+        ],
+        "resource_numeric_aliases": [
+          {
+            "namespace": "user",
+            "legacy_id": 17,
+            "resource_id": "cccccccc-cccc-4ccc-8ccc-cccccccccccc",
+            "org_id": "d3f29104-c19b-4594-859c-a92734c82dbb",
+            "migration_run_id": null,
+            "created_at": 1
+          }
+        ],
+        "compatibility_id_counters": [],
+        "wallets": [
+          {
+            "owner_type": "user",
+            "owner_id": "cccccccc-cccc-4ccc-8ccc-cccccccccccc",
+            "balance_units": 12345,
+            "version": 7,
+            "created_at": 1,
+            "updated_at": 2
+          }
+        ],
+        "outbox_events": [],
+        "command_executions": [],
+        "user_auth_identities": [
+          {
+            "id": "old-phone",
+            "org_id": "d3f29104-c19b-4594-859c-a92734c82dbb",
+            "user_id": "cccccccc-cccc-4ccc-8ccc-cccccccccccc",
+            "provider": "phone",
+            "issuer": "sudowork",
+            "normalized_subject": "13900000002",
+            "metadata_json": "{}",
+            "created_at": 1,
+            "updated_at": 1
+          }
+        ]
+      },
+      "result": null,
+      "error": {
+        "status": 400,
+        "message": "A valid registered phone number is required"
+      },
+      "after": {
+        "users": [
+          {
+            "id": "c2cc8374-8cdf-4936-8967-d891fb500634",
+            "org_id": "4ce65010-7331-415a-abaa-4d47387d845e",
+            "email": "home@example.test",
+            "name": "home",
+            "department_id": null,
+            "role": "admin",
+            "status": "active",
+            "membership_revision": 0,
+            "password_hash": "original-hash",
+            "password_updated_at": null,
+            "last_login_at": null,
+            "created_at": 1,
+            "phone": null,
+            "display_name": null,
+            "local_auth": 1,
+            "token_limit": null,
+            "ext_user_id": null,
+            "local_execution_allowed": 1
+          },
+          {
+            "id": "cccccccc-cccc-4ccc-8ccc-cccccccccccc",
+            "org_id": "d3f29104-c19b-4594-859c-a92734c82dbb",
+            "email": "existing@example.test",
+            "name": "original-opc",
+            "department_id": null,
+            "role": "admin",
+            "status": "active",
+            "membership_revision": 0,
+            "password_hash": "private-original-hash",
+            "password_updated_at": null,
+            "last_login_at": null,
+            "created_at": 1,
+            "phone": "13900000002",
+            "display_name": "  Original Name  ",
+            "local_auth": 1,
+            "token_limit": null,
+            "ext_user_id": null,
+            "local_execution_allowed": 1
+          }
+        ],
+        "human_accounts": [
+          {
+            "id": "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb",
+            "phone": "13900000002",
+            "status": "active",
+            "created_at": 1
+          }
+        ],
+        "human_account_memberships": [
+          {
+            "account_id": "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb",
+            "org_id": "d3f29104-c19b-4594-859c-a92734c82dbb",
+            "user_id": "cccccccc-cccc-4ccc-8ccc-cccccccccccc",
+            "created_at": 1
+          }
+        ],
+        "resource_numeric_aliases": [
+          {
+            "namespace": "user",
+            "legacy_id": 17,
+            "resource_id": "cccccccc-cccc-4ccc-8ccc-cccccccccccc",
+            "org_id": "d3f29104-c19b-4594-859c-a92734c82dbb",
+            "migration_run_id": null,
+            "created_at": 1
+          }
+        ],
+        "compatibility_id_counters": [],
+        "wallets": [
+          {
+            "owner_type": "user",
+            "owner_id": "cccccccc-cccc-4ccc-8ccc-cccccccccccc",
+            "balance_units": 12345,
+            "version": 7,
+            "created_at": 1,
+            "updated_at": 2
+          }
+        ],
+        "outbox_events": [],
+        "command_executions": [],
+        "user_auth_identities": [
+          {
+            "id": "old-phone",
+            "org_id": "d3f29104-c19b-4594-859c-a92734c82dbb",
+            "user_id": "cccccccc-cccc-4ccc-8ccc-cccccccccccc",
+            "provider": "phone",
+            "issuer": "sudowork",
+            "normalized_subject": "13900000002",
+            "metadata_json": "{}",
+            "created_at": 1,
+            "updated_at": 1
+          }
+        ]
+      }
+    },
+    {
+      "name": "narrow_scope",
+      "before": {
+        "users": [
+          {
+            "id": "c2cc8374-8cdf-4936-8967-d891fb500634",
+            "org_id": "4ce65010-7331-415a-abaa-4d47387d845e",
+            "email": "home@example.test",
+            "name": "home",
+            "department_id": null,
+            "role": "admin",
+            "status": "active",
+            "membership_revision": 0,
+            "password_hash": "original-hash",
+            "password_updated_at": null,
+            "last_login_at": null,
+            "created_at": 1,
+            "phone": null,
+            "display_name": null,
+            "local_auth": 1,
+            "token_limit": null,
+            "ext_user_id": null,
+            "local_execution_allowed": 1
+          },
+          {
+            "id": "cccccccc-cccc-4ccc-8ccc-cccccccccccc",
+            "org_id": "d3f29104-c19b-4594-859c-a92734c82dbb",
+            "email": "existing@example.test",
+            "name": "original-opc",
+            "department_id": null,
+            "role": "admin",
+            "status": "active",
+            "membership_revision": 0,
+            "password_hash": "private-original-hash",
+            "password_updated_at": null,
+            "last_login_at": null,
+            "created_at": 1,
+            "phone": "13900000002",
+            "display_name": "  Original Name  ",
+            "local_auth": 1,
+            "token_limit": null,
+            "ext_user_id": null,
+            "local_execution_allowed": 1
+          }
+        ],
+        "human_accounts": [
+          {
+            "id": "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb",
+            "phone": "13900000002",
+            "status": "active",
+            "created_at": 1
+          }
+        ],
+        "human_account_memberships": [
+          {
+            "account_id": "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb",
+            "org_id": "d3f29104-c19b-4594-859c-a92734c82dbb",
+            "user_id": "cccccccc-cccc-4ccc-8ccc-cccccccccccc",
+            "created_at": 1
+          }
+        ],
+        "resource_numeric_aliases": [
+          {
+            "namespace": "user",
+            "legacy_id": 17,
+            "resource_id": "cccccccc-cccc-4ccc-8ccc-cccccccccccc",
+            "org_id": "d3f29104-c19b-4594-859c-a92734c82dbb",
+            "migration_run_id": null,
+            "created_at": 1
+          }
+        ],
+        "compatibility_id_counters": [],
+        "wallets": [
+          {
+            "owner_type": "user",
+            "owner_id": "cccccccc-cccc-4ccc-8ccc-cccccccccccc",
+            "balance_units": 12345,
+            "version": 7,
+            "created_at": 1,
+            "updated_at": 2
+          }
+        ],
+        "outbox_events": [],
+        "command_executions": [],
+        "user_auth_identities": [
+          {
+            "id": "old-phone",
+            "org_id": "d3f29104-c19b-4594-859c-a92734c82dbb",
+            "user_id": "cccccccc-cccc-4ccc-8ccc-cccccccccccc",
+            "provider": "phone",
+            "issuer": "sudowork",
+            "normalized_subject": "13900000002",
+            "metadata_json": "{}",
+            "created_at": 1,
+            "updated_at": 1
+          }
+        ]
+      },
+      "result": null,
+      "error": {
+        "status": 403,
+        "message": "Organization administrator required"
+      },
+      "after": {
+        "users": [
+          {
+            "id": "c2cc8374-8cdf-4936-8967-d891fb500634",
+            "org_id": "4ce65010-7331-415a-abaa-4d47387d845e",
+            "email": "home@example.test",
+            "name": "home",
+            "department_id": null,
+            "role": "admin",
+            "status": "active",
+            "membership_revision": 0,
+            "password_hash": "original-hash",
+            "password_updated_at": null,
+            "last_login_at": null,
+            "created_at": 1,
+            "phone": null,
+            "display_name": null,
+            "local_auth": 1,
+            "token_limit": null,
+            "ext_user_id": null,
+            "local_execution_allowed": 1
+          },
+          {
+            "id": "cccccccc-cccc-4ccc-8ccc-cccccccccccc",
+            "org_id": "d3f29104-c19b-4594-859c-a92734c82dbb",
+            "email": "existing@example.test",
+            "name": "original-opc",
+            "department_id": null,
+            "role": "admin",
+            "status": "active",
+            "membership_revision": 0,
+            "password_hash": "private-original-hash",
+            "password_updated_at": null,
+            "last_login_at": null,
+            "created_at": 1,
+            "phone": "13900000002",
+            "display_name": "  Original Name  ",
+            "local_auth": 1,
+            "token_limit": null,
+            "ext_user_id": null,
+            "local_execution_allowed": 1
+          }
+        ],
+        "human_accounts": [
+          {
+            "id": "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb",
+            "phone": "13900000002",
+            "status": "active",
+            "created_at": 1
+          }
+        ],
+        "human_account_memberships": [
+          {
+            "account_id": "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb",
+            "org_id": "d3f29104-c19b-4594-859c-a92734c82dbb",
+            "user_id": "cccccccc-cccc-4ccc-8ccc-cccccccccccc",
+            "created_at": 1
+          }
+        ],
+        "resource_numeric_aliases": [
+          {
+            "namespace": "user",
+            "legacy_id": 17,
+            "resource_id": "cccccccc-cccc-4ccc-8ccc-cccccccccccc",
+            "org_id": "d3f29104-c19b-4594-859c-a92734c82dbb",
+            "migration_run_id": null,
+            "created_at": 1
+          }
+        ],
+        "compatibility_id_counters": [],
+        "wallets": [
+          {
+            "owner_type": "user",
+            "owner_id": "cccccccc-cccc-4ccc-8ccc-cccccccccccc",
+            "balance_units": 12345,
+            "version": 7,
+            "created_at": 1,
+            "updated_at": 2
+          }
+        ],
+        "outbox_events": [],
+        "command_executions": [],
+        "user_auth_identities": [
+          {
+            "id": "old-phone",
+            "org_id": "d3f29104-c19b-4594-859c-a92734c82dbb",
+            "user_id": "cccccccc-cccc-4ccc-8ccc-cccccccccccc",
+            "provider": "phone",
+            "issuer": "sudowork",
+            "normalized_subject": "13900000002",
+            "metadata_json": "{}",
+            "created_at": 1,
+            "updated_at": 1
+          }
+        ]
+      }
+    },
+    {
+      "name": "non_admin",
+      "before": {
+        "users": [
+          {
+            "id": "c2cc8374-8cdf-4936-8967-d891fb500634",
+            "org_id": "4ce65010-7331-415a-abaa-4d47387d845e",
+            "email": "home@example.test",
+            "name": "home",
+            "department_id": null,
+            "role": "user",
+            "status": "active",
+            "membership_revision": 0,
+            "password_hash": "original-hash",
+            "password_updated_at": null,
+            "last_login_at": null,
+            "created_at": 1,
+            "phone": null,
+            "display_name": null,
+            "local_auth": 1,
+            "token_limit": null,
+            "ext_user_id": null,
+            "local_execution_allowed": 1
+          },
+          {
+            "id": "cccccccc-cccc-4ccc-8ccc-cccccccccccc",
+            "org_id": "d3f29104-c19b-4594-859c-a92734c82dbb",
+            "email": "existing@example.test",
+            "name": "original-opc",
+            "department_id": null,
+            "role": "admin",
+            "status": "active",
+            "membership_revision": 0,
+            "password_hash": "private-original-hash",
+            "password_updated_at": null,
+            "last_login_at": null,
+            "created_at": 1,
+            "phone": "13900000002",
+            "display_name": "  Original Name  ",
+            "local_auth": 1,
+            "token_limit": null,
+            "ext_user_id": null,
+            "local_execution_allowed": 1
+          }
+        ],
+        "human_accounts": [
+          {
+            "id": "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb",
+            "phone": "13900000002",
+            "status": "active",
+            "created_at": 1
+          }
+        ],
+        "human_account_memberships": [
+          {
+            "account_id": "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb",
+            "org_id": "d3f29104-c19b-4594-859c-a92734c82dbb",
+            "user_id": "cccccccc-cccc-4ccc-8ccc-cccccccccccc",
+            "created_at": 1
+          }
+        ],
+        "resource_numeric_aliases": [
+          {
+            "namespace": "user",
+            "legacy_id": 17,
+            "resource_id": "cccccccc-cccc-4ccc-8ccc-cccccccccccc",
+            "org_id": "d3f29104-c19b-4594-859c-a92734c82dbb",
+            "migration_run_id": null,
+            "created_at": 1
+          }
+        ],
+        "compatibility_id_counters": [],
+        "wallets": [
+          {
+            "owner_type": "user",
+            "owner_id": "cccccccc-cccc-4ccc-8ccc-cccccccccccc",
+            "balance_units": 12345,
+            "version": 7,
+            "created_at": 1,
+            "updated_at": 2
+          }
+        ],
+        "outbox_events": [],
+        "command_executions": [],
+        "user_auth_identities": [
+          {
+            "id": "old-phone",
+            "org_id": "d3f29104-c19b-4594-859c-a92734c82dbb",
+            "user_id": "cccccccc-cccc-4ccc-8ccc-cccccccccccc",
+            "provider": "phone",
+            "issuer": "sudowork",
+            "normalized_subject": "13900000002",
+            "metadata_json": "{}",
+            "created_at": 1,
+            "updated_at": 1
+          }
+        ]
+      },
+      "result": null,
+      "error": {
+        "status": 403,
+        "message": "Organization administrator required"
+      },
+      "after": {
+        "users": [
+          {
+            "id": "c2cc8374-8cdf-4936-8967-d891fb500634",
+            "org_id": "4ce65010-7331-415a-abaa-4d47387d845e",
+            "email": "home@example.test",
+            "name": "home",
+            "department_id": null,
+            "role": "user",
+            "status": "active",
+            "membership_revision": 0,
+            "password_hash": "original-hash",
+            "password_updated_at": null,
+            "last_login_at": null,
+            "created_at": 1,
+            "phone": null,
+            "display_name": null,
+            "local_auth": 1,
+            "token_limit": null,
+            "ext_user_id": null,
+            "local_execution_allowed": 1
+          },
+          {
+            "id": "cccccccc-cccc-4ccc-8ccc-cccccccccccc",
+            "org_id": "d3f29104-c19b-4594-859c-a92734c82dbb",
+            "email": "existing@example.test",
+            "name": "original-opc",
+            "department_id": null,
+            "role": "admin",
+            "status": "active",
+            "membership_revision": 0,
+            "password_hash": "private-original-hash",
+            "password_updated_at": null,
+            "last_login_at": null,
+            "created_at": 1,
+            "phone": "13900000002",
+            "display_name": "  Original Name  ",
+            "local_auth": 1,
+            "token_limit": null,
+            "ext_user_id": null,
+            "local_execution_allowed": 1
+          }
+        ],
+        "human_accounts": [
+          {
+            "id": "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb",
+            "phone": "13900000002",
+            "status": "active",
+            "created_at": 1
+          }
+        ],
+        "human_account_memberships": [
+          {
+            "account_id": "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb",
+            "org_id": "d3f29104-c19b-4594-859c-a92734c82dbb",
+            "user_id": "cccccccc-cccc-4ccc-8ccc-cccccccccccc",
+            "created_at": 1
+          }
+        ],
+        "resource_numeric_aliases": [
+          {
+            "namespace": "user",
+            "legacy_id": 17,
+            "resource_id": "cccccccc-cccc-4ccc-8ccc-cccccccccccc",
+            "org_id": "d3f29104-c19b-4594-859c-a92734c82dbb",
+            "migration_run_id": null,
+            "created_at": 1
+          }
+        ],
+        "compatibility_id_counters": [],
+        "wallets": [
+          {
+            "owner_type": "user",
+            "owner_id": "cccccccc-cccc-4ccc-8ccc-cccccccccccc",
+            "balance_units": 12345,
+            "version": 7,
+            "created_at": 1,
+            "updated_at": 2
+          }
+        ],
+        "outbox_events": [],
+        "command_executions": [],
+        "user_auth_identities": [
+          {
+            "id": "old-phone",
+            "org_id": "d3f29104-c19b-4594-859c-a92734c82dbb",
+            "user_id": "cccccccc-cccc-4ccc-8ccc-cccccccccccc",
+            "provider": "phone",
+            "issuer": "sudowork",
+            "normalized_subject": "13900000002",
+            "metadata_json": "{}",
+            "created_at": 1,
+            "updated_at": 1
+          }
+        ]
+      }
+    }
+  ]
+}

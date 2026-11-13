@@ -32,7 +32,10 @@ import styles from "./index.module.less";
 
 /** Imperative handle so the parent can paint incoming frames onto the canvas. */
 export interface BrowserViewerHandle {
-  paintFrame: (base64Data: string) => void;
+  paintFrame: (
+    base64Data: string,
+    isCurrent: () => boolean,
+  ) => Promise<boolean>;
 }
 
 interface BrowserViewerProps {
@@ -51,6 +54,10 @@ interface BrowserViewerProps {
 
   /** Whether the viewport forwards pointer and keyboard input. */
   interactive: boolean;
+  /** Native conversation Stop/resume guidance while the view is read-only. */
+  controlHint?: ReactNode;
+  /** A target change is waiting for its actual pixels to arrive. */
+  waitingForFrame?: boolean;
 
   /** Bookmark toggle for the current URL (address-bar star button). */
   bookmarked?: boolean;
@@ -100,6 +107,8 @@ export const BrowserViewer = forwardRef<
     onNavUrlChange,
     onNavigate,
     interactive,
+    controlHint,
+    waitingForFrame = false,
     bookmarked = false,
     onToggleBookmark,
     addressBarExtra,
@@ -118,10 +127,18 @@ export const BrowserViewer = forwardRef<
     onEvent: sendEvent,
   });
 
-  const paintFrame = useCallback((base64Data: string) => {
-    paintBase64JpegToCanvas(canvasRef.current, base64Data);
-    setFrameReady(true);
-  }, []);
+  const paintFrame = useCallback(
+    async (base64Data: string, isCurrent: () => boolean) => {
+      const painted = await paintBase64JpegToCanvas(
+        canvasRef.current,
+        base64Data,
+        isCurrent,
+      );
+      if (painted) setFrameReady(true);
+      return painted;
+    },
+    [],
+  );
 
   useImperativeHandle(ref, () => ({ paintFrame }), [paintFrame]);
 
@@ -166,10 +183,11 @@ export const BrowserViewer = forwardRef<
   const navUrlNormalized = normalizeUrl(navUrl);
 
   const handleGo = useCallback(() => {
+    if (!interactive) return;
     const target = normalizeUrl(navUrl);
     if (!target) return;
     onNavigate(target);
-  }, [navUrl, onNavigate]);
+  }, [interactive, navUrl, onNavigate]);
 
   const handleNavInputKeyDown = useCallback(
     (e: React.KeyboardEvent<HTMLInputElement>) => {
@@ -209,6 +227,7 @@ export const BrowserViewer = forwardRef<
         }}
         onNewTab={() => newTab()}
         newTabTitle={t("browserViewer.newTab")}
+        disabled={!interactive}
       />
 
       {/* Address bar */}
@@ -217,6 +236,7 @@ export const BrowserViewer = forwardRef<
           <Button
             size="small"
             icon={<ArrowLeft size={14} />}
+            disabled={!interactive}
             onClick={() => sendEvent({ type: "goback" })}
           />
         </Tooltip>
@@ -224,6 +244,7 @@ export const BrowserViewer = forwardRef<
           <Button
             size="small"
             icon={<ArrowRight size={14} />}
+            disabled={!interactive}
             onClick={() => sendEvent({ type: "goforward" })}
           />
         </Tooltip>
@@ -231,6 +252,7 @@ export const BrowserViewer = forwardRef<
           <Button
             size="small"
             icon={<RotateCcw size={14} />}
+            disabled={!interactive}
             onClick={() => sendEvent({ type: "reload" })}
           />
         </Tooltip>
@@ -274,12 +296,16 @@ export const BrowserViewer = forwardRef<
           size="small"
           type="primary"
           onClick={handleGo}
-          disabled={!navUrlNormalized}
+          disabled={!interactive || !navUrlNormalized}
         >
           {t("browserViewer.go")}
         </Button>
         {addressBarExtra}
       </div>
+
+      {!interactive && !waitingForFrame && isStreaming && controlHint && (
+        <div role="status">{controlHint}</div>
+      )}
 
       {/* Viewport (canvas screencast) */}
       <div
@@ -346,6 +372,11 @@ export const BrowserViewer = forwardRef<
           {...inputProps}
         />
         {overlay}
+        {waitingForFrame && isStreaming && (
+          <div role="status" className={styles.inputFence}>
+            <span>{t("browserViewer.updatingView")}</span>
+          </div>
+        )}
         {interactive && isStreaming && (
           <div className={styles.interactiveHint}>
             {t("browserViewer.interactiveHint")}

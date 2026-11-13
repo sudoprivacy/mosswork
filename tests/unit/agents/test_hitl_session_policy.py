@@ -162,6 +162,7 @@ async def test_resume_hitl_binds_thread_scope() -> None:
     )
     manager.runtime_last_used = {}
     manager._harness_manager = SimpleNamespace(resume_hitl=fake_resume)
+    manager._managed_backend = None
     manager._history_backfills = {}
     manager._invocation_waiters = {}
     manager._active_invocations = {}

@@ -7,7 +7,10 @@ import logging
 import os
 import sys
 from contextlib import suppress
-from typing import Any
+from typing import TYPE_CHECKING, Any
+
+if TYPE_CHECKING:
+    from octop.infra.execution.composition import CanonicalProductConfiguration
 
 logger = logging.getLogger(__name__)
 
@@ -65,12 +68,15 @@ async def run_foreground(
     ssl_certfile: str | None,
     ssl_keyfile: str | None,
     role: str = "monolith",
+    canonical_configuration: CanonicalProductConfiguration | None = None,
 ) -> None:
     """Boot the domain server, serve the HTTP API, then shut down cleanly."""
     import uvicorn
 
     if role not in {"monolith", "init", "web", "worker"}:
         raise ValueError("unsupported process role")
+    if canonical_configuration is not None and (role != "monolith" or workers != 1 or reload):
+        raise ValueError("Canonical Product startup requires one monolith without reload")
     if role != "monolith" and (workers != 1 or reload):
         raise ValueError("distributed roles run one process per container")
     if role in {"web", "worker"}:
@@ -133,7 +139,10 @@ async def run_foreground(
     from octop.infra.setup.tls.listeners import build_listen_plan
     from octop.infra.setup.tls.store import resolve_tls_paths
 
-    srv = MossworkServer() if role == "monolith" else MossworkServer(role=role)
+    if canonical_configuration is not None:
+        srv = MossworkServer(canonical_configuration=canonical_configuration)
+    else:
+        srv = MossworkServer() if role == "monolith" else MossworkServer(role=role)
     await srv.start()
     if role == "worker":
         from octop.infra.agents.memory.slim_control import MemorySlimControl
@@ -185,7 +194,72 @@ async def run_foreground(
         )
         reload = False
 
-    app = build_app(srv)
+    canonical = getattr(srv, "canonical", None)
+    if canonical is not None:
+        app = build_app(
+            srv,
+            **canonical.business.app_kwargs(),
+            canonical_admissions=canonical.admissions,
+        )
+        policy = canonical.business.organization_login_policy
+        if policy is not None:
+            from octop.api.routers.canonical_login_policy import (
+                build_canonical_organization_login_policy_router,
+            )
+
+            app.state.canonical_organization_login_policy = policy
+            app.include_router(
+                build_canonical_organization_login_policy_router(policy),
+                prefix="/api/identity",
+                tags=["auth"],
+            )
+        platform_policy = canonical.business.platform_login_policy
+        if platform_policy is not None:
+            from octop.api.routers.canonical_platform_policy import (
+                build_canonical_platform_login_policy_router,
+            )
+
+            app.state.canonical_platform_login_policy = platform_policy
+            app.include_router(
+                build_canonical_platform_login_policy_router(platform_policy),
+                prefix="/api/identity",
+                tags=["auth"],
+            )
+        sms_configuration = canonical.business.managed_sms_configuration
+        if sms_configuration is not None:
+            from octop.api.routers.canonical_sms_configuration import (
+                build_canonical_sms_configuration_router,
+            )
+
+            app.state.canonical_sms_configuration = sms_configuration
+            app.include_router(
+                build_canonical_sms_configuration_router(sms_configuration),
+                prefix="/api/identity",
+                tags=["auth"],
+            )
+        review_ports = canonical.human_review_ports
+        if review_ports is not None:
+            from octop.api.routers.canonical_human_review import build_canonical_human_review_router
+
+            resolve_reader, requests, documents, writer = review_ports
+            app.state.canonical_human_review_ports = review_ports
+            app.include_router(
+                build_canonical_human_review_router(
+                    resolve_reader, requests=requests, documents=documents, writer=writer
+                ),
+                prefix="/api/identity",
+                tags=["auth"],
+            )
+        # Keep the dashboard catch-all behind API routes added by this launch.
+        for route in app.router.routes[:]:
+            if (
+                getattr(route, "name", None) == "spa_fallback"
+                and getattr(route, "path", None) == "/{full_path:path}"
+            ):
+                app.router.routes.remove(route)
+                app.router.routes.append(route)
+    else:
+        app = build_app(srv)
     servers: list[uvicorn.Server] = []
 
     if plan.dual_listeners:

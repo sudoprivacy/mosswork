@@ -1,0 +1,149 @@
+{
+  "sourceCommit": "d0b84d4c8fd5905d9ec3f7c160f2ce633f535d0d",
+  "sourcePath": "src/server/mossImIdentity.ts",
+  "sourceSha256": "11580c5e309a241f1611fac56bffa7069f3172759abf0c7f015b403aeff13423",
+  "producer": "Exact original issueChallenge/bind/current connection against real Bun SQLite; SQL-only persistence ports and separately verified human/entitlement supplied",
+  "now": 2000000000000,
+  "cases": [
+    {
+      "scenario": "pending",
+      "code": "0R5mxejtILW4oAsPjfqcoCZwmf4USdoh",
+      "pending": {
+        "digest": "d2b03d5fa39cdd7bdb4b65ac017a6c8159e21bd854616ad04eb54b3924e305ab",
+        "org_id": "4ce65010-7331-415a-abaa-4d47387d845e",
+        "connection_scope": "[\"4ce65010-7331-415a-abaa-4d47387d845e\",\"c2cc8374-8cdf-4936-8967-d891fb500634\",\"plugin-a\",\"tenant-a\",\"cli_app_a\",\"r1\"]",
+        "plugin_id": "plugin-a",
+        "connection_owner_id": "c2cc8374-8cdf-4936-8967-d891fb500634",
+        "platform_user_id": "ou_member_a",
+        "expires_at": 2000000600000,
+        "claimed_by": null,
+        "created_at": 2000000000000
+      },
+      "cooldown": null,
+      "status": 204,
+      "claimedBy": "c2cc8374-8cdf-4936-8967-d891fb500634",
+      "linked": {
+        "org_id": "4ce65010-7331-415a-abaa-4d47387d845e",
+        "user_id": "c2cc8374-8cdf-4936-8967-d891fb500634",
+        "provider": "feishu-moss",
+        "issuer": "[\"4ce65010-7331-415a-abaa-4d47387d845e\",\"c2cc8374-8cdf-4936-8967-d891fb500634\",\"plugin-a\",\"tenant-a\",\"cli_app_a\",\"r1\"]",
+        "normalized_subject": "ou_member_a",
+        "metadata_json": "{\"pluginId\":\"plugin-a\",\"connectionOwnerId\":\"c2cc8374-8cdf-4936-8967-d891fb500634\",\"appId\":\"cli_app_a\"}"
+      }
+    },
+    {
+      "scenario": "expired",
+      "code": "8NVof7wRqbWci03CUl8ZeH0DCuS54D6Q",
+      "pending": {
+        "digest": "91d962b917e15683141873b3d912f8050625f55328dda44d2243ac69f03e832e",
+        "org_id": "4ce65010-7331-415a-abaa-4d47387d845e",
+        "connection_scope": "[\"4ce65010-7331-415a-abaa-4d47387d845e\",\"c2cc8374-8cdf-4936-8967-d891fb500634\",\"plugin-a\",\"tenant-a\",\"cli_app_a\",\"r1\"]",
+        "plugin_id": "plugin-a",
+        "connection_owner_id": "c2cc8374-8cdf-4936-8967-d891fb500634",
+        "platform_user_id": "ou_member_a",
+        "expires_at": 2000000600000,
+        "claimed_by": null,
+        "created_at": 2000000000000
+      },
+      "cooldown": null,
+      "status": 403,
+      "claimedBy": null,
+      "linked": null
+    },
+    {
+      "scenario": "claimed",
+      "code": "mYc0zkeBMBr2KE2xqtM_PLyixulq3l1U",
+      "pending": {
+        "digest": "43d49a8a45a80bd479726e06111aebd2073031d8e0a074a53e1c03e8b3776be7",
+        "org_id": "4ce65010-7331-415a-abaa-4d47387d845e",
+        "connection_scope": "[\"4ce65010-7331-415a-abaa-4d47387d845e\",\"c2cc8374-8cdf-4936-8967-d891fb500634\",\"plugin-a\",\"tenant-a\",\"cli_app_a\",\"r1\"]",
+        "plugin_id": "plugin-a",
+        "connection_owner_id": "c2cc8374-8cdf-4936-8967-d891fb500634",
+        "platform_user_id": "ou_member_a",
+        "expires_at": 2000000600000,
+        "claimed_by": null,
+        "created_at": 2000000000000
+      },
+      "cooldown": null,
+      "status": 403,
+      "claimedBy": "prior-member",
+      "linked": null
+    },
+    {
+      "scenario": "changed_connection",
+      "code": "alWrjYEdE-SGCHAPpTjfLFyYnNXKA5sb",
+      "pending": {
+        "digest": "c2aba13bee5b442c8314d32c995fb97e5d4c6d58e51eeda076eff4f1dfe48d36",
+        "org_id": "4ce65010-7331-415a-abaa-4d47387d845e",
+        "connection_scope": "[\"4ce65010-7331-415a-abaa-4d47387d845e\",\"c2cc8374-8cdf-4936-8967-d891fb500634\",\"plugin-a\",\"tenant-a\",\"cli_app_a\",\"r1\"]",
+        "plugin_id": "plugin-a",
+        "connection_owner_id": "c2cc8374-8cdf-4936-8967-d891fb500634",
+        "platform_user_id": "ou_member_a",
+        "expires_at": 2000000600000,
+        "claimed_by": null,
+        "created_at": 2000000000000
+      },
+      "cooldown": null,
+      "status": 403,
+      "claimedBy": null,
+      "linked": null
+    },
+    {
+      "scenario": "foreign_org",
+      "code": "XCmQb5uEiCP9X54oGUqy8VHCwDpTc0wI",
+      "pending": {
+        "digest": "6bd1867a095a69ce83c87c1e4e2411453f5181211b724b3180bd3c35908c29a4",
+        "org_id": "4ce65010-7331-415a-abaa-4d47387d845e",
+        "connection_scope": "[\"4ce65010-7331-415a-abaa-4d47387d845e\",\"c2cc8374-8cdf-4936-8967-d891fb500634\",\"plugin-a\",\"tenant-a\",\"cli_app_a\",\"r1\"]",
+        "plugin_id": "plugin-a",
+        "connection_owner_id": "c2cc8374-8cdf-4936-8967-d891fb500634",
+        "platform_user_id": "ou_member_a",
+        "expires_at": 2000000600000,
+        "claimed_by": null,
+        "created_at": 2000000000000
+      },
+      "cooldown": null,
+      "status": 403,
+      "claimedBy": null,
+      "linked": null
+    },
+    {
+      "scenario": "sender_conflict",
+      "code": "Zz9eTbVnUXaNPg8H9Wfo2IQdGAfRZVNe",
+      "pending": {
+        "digest": "0962dfe917218ded55ddfcef7502a8a29ca8119a76f87386af3e8fe7e08a8ec2",
+        "org_id": "4ce65010-7331-415a-abaa-4d47387d845e",
+        "connection_scope": "[\"4ce65010-7331-415a-abaa-4d47387d845e\",\"c2cc8374-8cdf-4936-8967-d891fb500634\",\"plugin-a\",\"tenant-a\",\"cli_app_a\",\"r1\"]",
+        "plugin_id": "plugin-a",
+        "connection_owner_id": "c2cc8374-8cdf-4936-8967-d891fb500634",
+        "platform_user_id": "ou_member_a",
+        "expires_at": 2000000600000,
+        "claimed_by": null,
+        "created_at": 2000000000000
+      },
+      "cooldown": null,
+      "status": 409,
+      "claimedBy": null,
+      "linked": null
+    },
+    {
+      "scenario": "member_conflict",
+      "code": "k9UZectYYZhOFwMnXDB6NIqm_bKcWLkO",
+      "pending": {
+        "digest": "129703db606912e9bde37753a2f8249475021b378edba94eff9e6ca7ed4e5e93",
+        "org_id": "4ce65010-7331-415a-abaa-4d47387d845e",
+        "connection_scope": "[\"4ce65010-7331-415a-abaa-4d47387d845e\",\"c2cc8374-8cdf-4936-8967-d891fb500634\",\"plugin-a\",\"tenant-a\",\"cli_app_a\",\"r1\"]",
+        "plugin_id": "plugin-a",
+        "connection_owner_id": "c2cc8374-8cdf-4936-8967-d891fb500634",
+        "platform_user_id": "ou_member_a",
+        "expires_at": 2000000600000,
+        "claimed_by": null,
+        "created_at": 2000000000000
+      },
+      "cooldown": null,
+      "status": 409,
+      "claimedBy": null,
+      "linked": null
+    }
+  ]
+}

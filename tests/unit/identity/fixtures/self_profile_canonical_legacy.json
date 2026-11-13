@@ -1,0 +1,489 @@
+{
+  "sourceCommit": "d0b84d4c8fd5905d9ec3f7c160f2ce633f535d0d",
+  "sourceHashes": {
+    "src/server/auth/service.ts": "4670964f241ed457d3104c6b2b92abe020dea37b6cff393e9aab797309be71fa",
+    "src/server/authCenter/db.ts": "f83b7ad772d28b54160315f96a7e3cd20648006cef4da5afd6082241c5571b0d",
+    "src/server/identity/identityRepository.ts": "ff4b194eb4860812079ef847d76486bb99a4441943a4d5e6c6d7014153d672ea"
+  },
+  "ids": {
+    "account": "9cdd9b27-a3f0-40a6-9015-8b170c237c67",
+    "homeOrg": "4ce65010-7331-415a-abaa-4d47387d845e",
+    "companyOrg": "d3f29104-c19b-4594-859c-a92734c82dbb",
+    "homeMember": "c2cc8374-8cdf-4936-8967-d891fb500634",
+    "companyMember": "23483f4d-daa0-44a5-8d60-09b19be380d7"
+  },
+  "now": 2000000000,
+  "extension": "ALTER TABLE users ADD COLUMN display_name TEXT;\r\nALTER TABLE users ADD COLUMN local_auth INTEGER NOT NULL DEFAULT 1;\r\nALTER TABLE users ADD COLUMN local_execution_allowed INTEGER NOT NULL DEFAULT 1;\r\n      CREATE TABLE IF NOT EXISTS user_auth_identities (\r\n        id TEXT PRIMARY KEY,\r\n        org_id TEXT NOT NULL REFERENCES organizations(id),\r\n        user_id TEXT NOT NULL REFERENCES users(id),\r\n        provider TEXT NOT NULL,\r\n        issuer TEXT NOT NULL,\r\n        normalized_subject TEXT NOT NULL,\r\n        metadata_json TEXT NOT NULL DEFAULT '{}',\r\n        created_at INTEGER NOT NULL,\r\n        updated_at INTEGER NOT NULL,\r\n        UNIQUE (provider, issuer, normalized_subject),\r\n        UNIQUE (user_id, provider, issuer)\r\n      );\r\n\r\nCREATE TABLE user_profile_avatars (user_id TEXT PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE,data_url TEXT NOT NULL);\r\n",
+  "oldPassword": "PublicOld123",
+  "passwordHash": "scrypt$public-profile-fixture-salt$001060eed134e04ee61075d54d92b3a99b78cc268e445d8a5768dd010d9457051dfd868f4a8c0ad21f12bf7a06f2fb2d2cb4aa0cdbde06f202bf208330b19d82",
+  "bcryptHash": "$2b$04$abcdefghijklmnopqrstuuVG6FSex5Srh1QIwYfAY72Xl3e6ud7Ka",
+  "avatar": "data:image/webp;base64,UklGRiIAAABXRUJQVlA4IBYAAAAwAQCdASoBAAEADsD+JaQAA3AAAAAA",
+  "profile": {
+    "user_id": "c2cc8374-8cdf-4936-8967-d891fb500634",
+    "login_name": "home",
+    "nickname": "Original",
+    "avatar": "data:image/webp;base64,UklGRiIAAABXRUJQVlA4IBYAAAAwAQCdASoBAAEADsD+JaQAA3AAAAAA",
+    "can_change_password": true
+  },
+  "nicknameCases": [
+    {
+      "name": "trim",
+      "nickname": "﻿ \tNickname ",
+      "status": 200,
+      "profile": {
+        "user_id": "c2cc8374-8cdf-4936-8967-d891fb500634",
+        "login_name": "home",
+        "nickname": "Nickname",
+        "avatar": null,
+        "can_change_password": true
+      }
+    },
+    {
+      "name": "empty",
+      "nickname": "",
+      "status": 400,
+      "profile": {
+        "user_id": "c2cc8374-8cdf-4936-8967-d891fb500634",
+        "login_name": "home",
+        "nickname": "Original",
+        "avatar": null,
+        "can_change_password": true
+      }
+    },
+    {
+      "name": "whitespace",
+      "nickname": "　﻿",
+      "status": 400,
+      "profile": {
+        "user_id": "c2cc8374-8cdf-4936-8967-d891fb500634",
+        "login_name": "home",
+        "nickname": "Original",
+        "avatar": null,
+        "can_change_password": true
+      }
+    },
+    {
+      "name": "sixty_utf16",
+      "nickname": "😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀",
+      "status": 200,
+      "profile": {
+        "user_id": "c2cc8374-8cdf-4936-8967-d891fb500634",
+        "login_name": "home",
+        "nickname": "😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀",
+        "avatar": null,
+        "can_change_password": true
+      }
+    },
+    {
+      "name": "over_sixty_utf16",
+      "nickname": "😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀",
+      "status": 400,
+      "profile": {
+        "user_id": "c2cc8374-8cdf-4936-8967-d891fb500634",
+        "login_name": "home",
+        "nickname": "Original",
+        "avatar": null,
+        "can_change_password": true
+      }
+    },
+    {
+      "name": "unicode",
+      "nickname": "用户α🙂",
+      "status": 200,
+      "profile": {
+        "user_id": "c2cc8374-8cdf-4936-8967-d891fb500634",
+        "login_name": "home",
+        "nickname": "用户α🙂",
+        "avatar": null,
+        "can_change_password": true
+      }
+    },
+    {
+      "name": "not_js_whitespace",
+      "nickname": "Name",
+      "status": 200,
+      "profile": {
+        "user_id": "c2cc8374-8cdf-4936-8967-d891fb500634",
+        "login_name": "home",
+        "nickname": "Name",
+        "avatar": null,
+        "can_change_password": true
+      }
+    },
+    {
+      "name": "lone_surrogate",
+      "nickname": "Name\ud800",
+      "status": 200,
+      "profile": {
+        "user_id": "c2cc8374-8cdf-4936-8967-d891fb500634",
+        "login_name": "home",
+        "nickname": "Name�",
+        "avatar": null,
+        "can_change_password": true
+      }
+    }
+  ],
+  "passwordCases": [
+    {
+      "name": "minimum",
+      "oldPassword": "PublicOld123",
+      "newPassword": "Abcdefg1",
+      "oldHash": "scrypt$public-profile-fixture-salt$001060eed134e04ee61075d54d92b3a99b78cc268e445d8a5768dd010d9457051dfd868f4a8c0ad21f12bf7a06f2fb2d2cb4aa0cdbde06f202bf208330b19d82",
+      "status": 200,
+      "row": {
+        "password_hash": "scrypt$f91681ce165a7749b9c85214a8f4e201$1926d89b48c8f2033b01a403b4ca07ff83eaf3b67a5c50308afb971db810caccdc5995b5b10f3a72c84c428ce174fd8ba2eddbf8f8a1ec538ba1736aa7b96e98",
+        "password_updated_at": 2000000000000,
+        "local_auth": 1,
+        "local_execution_allowed": 0,
+        "name": "home",
+        "display_name": "Original"
+      },
+      "newVerified": true,
+      "identities": [
+        {
+          "org_id": "4ce65010-7331-415a-abaa-4d47387d845e",
+          "user_id": "c2cc8374-8cdf-4936-8967-d891fb500634",
+          "provider": "password",
+          "issuer": "moss",
+          "normalized_subject": "home",
+          "metadata_json": "{}"
+        }
+      ]
+    },
+    {
+      "name": "too_short",
+      "oldPassword": "PublicOld123",
+      "newPassword": "Abcdef1",
+      "oldHash": "scrypt$public-profile-fixture-salt$001060eed134e04ee61075d54d92b3a99b78cc268e445d8a5768dd010d9457051dfd868f4a8c0ad21f12bf7a06f2fb2d2cb4aa0cdbde06f202bf208330b19d82",
+      "status": 400,
+      "row": {
+        "password_hash": "scrypt$public-profile-fixture-salt$001060eed134e04ee61075d54d92b3a99b78cc268e445d8a5768dd010d9457051dfd868f4a8c0ad21f12bf7a06f2fb2d2cb4aa0cdbde06f202bf208330b19d82",
+        "password_updated_at": null,
+        "local_auth": 0,
+        "local_execution_allowed": 0,
+        "name": "home",
+        "display_name": "Original"
+      },
+      "newVerified": false,
+      "identities": []
+    },
+    {
+      "name": "maximum",
+      "oldPassword": "PublicOld123",
+      "newPassword": "Aaaaaaaaaaaaaaaaaaa1",
+      "oldHash": "scrypt$public-profile-fixture-salt$001060eed134e04ee61075d54d92b3a99b78cc268e445d8a5768dd010d9457051dfd868f4a8c0ad21f12bf7a06f2fb2d2cb4aa0cdbde06f202bf208330b19d82",
+      "status": 200,
+      "row": {
+        "password_hash": "scrypt$aa0b76d76d58f4010df20d5c3d6ae4c1$5eb8056b3d4a1e2bb4899d4472173c14e023f616e59101556839f50dffef3b9eee6b71b3bb402882d7bfcb81fd9076bf8ac71257857affb866185faa3d9b8187",
+        "password_updated_at": 2000000000000,
+        "local_auth": 1,
+        "local_execution_allowed": 0,
+        "name": "home",
+        "display_name": "Original"
+      },
+      "newVerified": true,
+      "identities": [
+        {
+          "org_id": "4ce65010-7331-415a-abaa-4d47387d845e",
+          "user_id": "c2cc8374-8cdf-4936-8967-d891fb500634",
+          "provider": "password",
+          "issuer": "moss",
+          "normalized_subject": "home",
+          "metadata_json": "{}"
+        }
+      ]
+    },
+    {
+      "name": "too_long",
+      "oldPassword": "PublicOld123",
+      "newPassword": "Aaaaaaaaaaaaaaaaaaaa1",
+      "oldHash": "scrypt$public-profile-fixture-salt$001060eed134e04ee61075d54d92b3a99b78cc268e445d8a5768dd010d9457051dfd868f4a8c0ad21f12bf7a06f2fb2d2cb4aa0cdbde06f202bf208330b19d82",
+      "status": 400,
+      "row": {
+        "password_hash": "scrypt$public-profile-fixture-salt$001060eed134e04ee61075d54d92b3a99b78cc268e445d8a5768dd010d9457051dfd868f4a8c0ad21f12bf7a06f2fb2d2cb4aa0cdbde06f202bf208330b19d82",
+        "password_updated_at": null,
+        "local_auth": 0,
+        "local_execution_allowed": 0,
+        "name": "home",
+        "display_name": "Original"
+      },
+      "newVerified": false,
+      "identities": []
+    },
+    {
+      "name": "astral_twenty",
+      "oldPassword": "PublicOld123",
+      "newPassword": "Aa1😀😀😀😀😀😀😀😀x",
+      "oldHash": "scrypt$public-profile-fixture-salt$001060eed134e04ee61075d54d92b3a99b78cc268e445d8a5768dd010d9457051dfd868f4a8c0ad21f12bf7a06f2fb2d2cb4aa0cdbde06f202bf208330b19d82",
+      "status": 200,
+      "row": {
+        "password_hash": "scrypt$ff24f7c3aec59505d05c7ce456dc09b8$9ec1cdf53a1c67faf564c365ee42482136d67356dfbf5f0817e880b42be476163f4806f38d364876ee38dc0a03a8cb7435f61613069271c93dee428db9585feb",
+        "password_updated_at": 2000000000000,
+        "local_auth": 1,
+        "local_execution_allowed": 0,
+        "name": "home",
+        "display_name": "Original"
+      },
+      "newVerified": true,
+      "identities": [
+        {
+          "org_id": "4ce65010-7331-415a-abaa-4d47387d845e",
+          "user_id": "c2cc8374-8cdf-4936-8967-d891fb500634",
+          "provider": "password",
+          "issuer": "moss",
+          "normalized_subject": "home",
+          "metadata_json": "{}"
+        }
+      ]
+    },
+    {
+      "name": "astral_twenty_one",
+      "oldPassword": "PublicOld123",
+      "newPassword": "Aa1😀😀😀😀😀😀😀😀😀",
+      "oldHash": "scrypt$public-profile-fixture-salt$001060eed134e04ee61075d54d92b3a99b78cc268e445d8a5768dd010d9457051dfd868f4a8c0ad21f12bf7a06f2fb2d2cb4aa0cdbde06f202bf208330b19d82",
+      "status": 400,
+      "row": {
+        "password_hash": "scrypt$public-profile-fixture-salt$001060eed134e04ee61075d54d92b3a99b78cc268e445d8a5768dd010d9457051dfd868f4a8c0ad21f12bf7a06f2fb2d2cb4aa0cdbde06f202bf208330b19d82",
+        "password_updated_at": null,
+        "local_auth": 0,
+        "local_execution_allowed": 0,
+        "name": "home",
+        "display_name": "Original"
+      },
+      "newVerified": false,
+      "identities": []
+    },
+    {
+      "name": "unicode_digit",
+      "oldPassword": "PublicOld123",
+      "newPassword": "Abcdefg１",
+      "oldHash": "scrypt$public-profile-fixture-salt$001060eed134e04ee61075d54d92b3a99b78cc268e445d8a5768dd010d9457051dfd868f4a8c0ad21f12bf7a06f2fb2d2cb4aa0cdbde06f202bf208330b19d82",
+      "status": 400,
+      "row": {
+        "password_hash": "scrypt$public-profile-fixture-salt$001060eed134e04ee61075d54d92b3a99b78cc268e445d8a5768dd010d9457051dfd868f4a8c0ad21f12bf7a06f2fb2d2cb4aa0cdbde06f202bf208330b19d82",
+        "password_updated_at": null,
+        "local_auth": 0,
+        "local_execution_allowed": 0,
+        "name": "home",
+        "display_name": "Original"
+      },
+      "newVerified": false,
+      "identities": []
+    },
+    {
+      "name": "no_upper",
+      "oldPassword": "PublicOld123",
+      "newPassword": "abcdefg1",
+      "oldHash": "scrypt$public-profile-fixture-salt$001060eed134e04ee61075d54d92b3a99b78cc268e445d8a5768dd010d9457051dfd868f4a8c0ad21f12bf7a06f2fb2d2cb4aa0cdbde06f202bf208330b19d82",
+      "status": 400,
+      "row": {
+        "password_hash": "scrypt$public-profile-fixture-salt$001060eed134e04ee61075d54d92b3a99b78cc268e445d8a5768dd010d9457051dfd868f4a8c0ad21f12bf7a06f2fb2d2cb4aa0cdbde06f202bf208330b19d82",
+        "password_updated_at": null,
+        "local_auth": 0,
+        "local_execution_allowed": 0,
+        "name": "home",
+        "display_name": "Original"
+      },
+      "newVerified": false,
+      "identities": []
+    },
+    {
+      "name": "no_lower",
+      "oldPassword": "PublicOld123",
+      "newPassword": "ABCDEFG1",
+      "oldHash": "scrypt$public-profile-fixture-salt$001060eed134e04ee61075d54d92b3a99b78cc268e445d8a5768dd010d9457051dfd868f4a8c0ad21f12bf7a06f2fb2d2cb4aa0cdbde06f202bf208330b19d82",
+      "status": 400,
+      "row": {
+        "password_hash": "scrypt$public-profile-fixture-salt$001060eed134e04ee61075d54d92b3a99b78cc268e445d8a5768dd010d9457051dfd868f4a8c0ad21f12bf7a06f2fb2d2cb4aa0cdbde06f202bf208330b19d82",
+        "password_updated_at": null,
+        "local_auth": 0,
+        "local_execution_allowed": 0,
+        "name": "home",
+        "display_name": "Original"
+      },
+      "newVerified": false,
+      "identities": []
+    },
+    {
+      "name": "no_digit",
+      "oldPassword": "PublicOld123",
+      "newPassword": "Abcdefgh",
+      "oldHash": "scrypt$public-profile-fixture-salt$001060eed134e04ee61075d54d92b3a99b78cc268e445d8a5768dd010d9457051dfd868f4a8c0ad21f12bf7a06f2fb2d2cb4aa0cdbde06f202bf208330b19d82",
+      "status": 400,
+      "row": {
+        "password_hash": "scrypt$public-profile-fixture-salt$001060eed134e04ee61075d54d92b3a99b78cc268e445d8a5768dd010d9457051dfd868f4a8c0ad21f12bf7a06f2fb2d2cb4aa0cdbde06f202bf208330b19d82",
+        "password_updated_at": null,
+        "local_auth": 0,
+        "local_execution_allowed": 0,
+        "name": "home",
+        "display_name": "Original"
+      },
+      "newVerified": false,
+      "identities": []
+    },
+    {
+      "name": "lone_surrogate",
+      "oldPassword": "PublicOld123",
+      "newPassword": "Abcdef1\ud800",
+      "oldHash": "scrypt$public-profile-fixture-salt$001060eed134e04ee61075d54d92b3a99b78cc268e445d8a5768dd010d9457051dfd868f4a8c0ad21f12bf7a06f2fb2d2cb4aa0cdbde06f202bf208330b19d82",
+      "status": 200,
+      "row": {
+        "password_hash": "scrypt$346c91d8592d5267c6b98297e9550751$cee6dd4a0aac6bb84b1090239cbb708f8d2848534c32c7b8f35017f0d6dad39107f486792c0b0234f18685baf3f5bb90ab6faeabbe3306ce912de5ddddae7075",
+        "password_updated_at": 2000000000000,
+        "local_auth": 1,
+        "local_execution_allowed": 0,
+        "name": "home",
+        "display_name": "Original"
+      },
+      "newVerified": true,
+      "identities": [
+        {
+          "org_id": "4ce65010-7331-415a-abaa-4d47387d845e",
+          "user_id": "c2cc8374-8cdf-4936-8967-d891fb500634",
+          "provider": "password",
+          "issuer": "moss",
+          "normalized_subject": "home",
+          "metadata_json": "{}"
+        }
+      ]
+    },
+    {
+      "name": "nul",
+      "oldPassword": "PublicOld123",
+      "newPassword": "Abcdef1\u0000",
+      "oldHash": "scrypt$public-profile-fixture-salt$001060eed134e04ee61075d54d92b3a99b78cc268e445d8a5768dd010d9457051dfd868f4a8c0ad21f12bf7a06f2fb2d2cb4aa0cdbde06f202bf208330b19d82",
+      "status": 200,
+      "row": {
+        "password_hash": "scrypt$f5caea61998c2b7b891b4f77904e56ee$908896c3fc7f0466e09737f43cedfcacb1c594bfb264c39607be2ee1009fe53d291eafdecbf0c5e936ac4ee49f0d5a1506c3788c187c9e384006472d42279fee",
+        "password_updated_at": 2000000000000,
+        "local_auth": 1,
+        "local_execution_allowed": 0,
+        "name": "home",
+        "display_name": "Original"
+      },
+      "newVerified": true,
+      "identities": [
+        {
+          "org_id": "4ce65010-7331-415a-abaa-4d47387d845e",
+          "user_id": "c2cc8374-8cdf-4936-8967-d891fb500634",
+          "provider": "password",
+          "issuer": "moss",
+          "normalized_subject": "home",
+          "metadata_json": "{}"
+        }
+      ]
+    },
+    {
+      "name": "wrong_old",
+      "oldPassword": "incorrect",
+      "newPassword": "Abcdefg1",
+      "oldHash": "scrypt$public-profile-fixture-salt$001060eed134e04ee61075d54d92b3a99b78cc268e445d8a5768dd010d9457051dfd868f4a8c0ad21f12bf7a06f2fb2d2cb4aa0cdbde06f202bf208330b19d82",
+      "status": 403,
+      "row": {
+        "password_hash": "scrypt$public-profile-fixture-salt$001060eed134e04ee61075d54d92b3a99b78cc268e445d8a5768dd010d9457051dfd868f4a8c0ad21f12bf7a06f2fb2d2cb4aa0cdbde06f202bf208330b19d82",
+        "password_updated_at": null,
+        "local_auth": 0,
+        "local_execution_allowed": 0,
+        "name": "home",
+        "display_name": "Original"
+      },
+      "newVerified": false,
+      "identities": []
+    },
+    {
+      "name": "wrong_old_and_bad_new",
+      "oldPassword": "incorrect",
+      "newPassword": "bad",
+      "oldHash": "scrypt$public-profile-fixture-salt$001060eed134e04ee61075d54d92b3a99b78cc268e445d8a5768dd010d9457051dfd868f4a8c0ad21f12bf7a06f2fb2d2cb4aa0cdbde06f202bf208330b19d82",
+      "status": 403,
+      "row": {
+        "password_hash": "scrypt$public-profile-fixture-salt$001060eed134e04ee61075d54d92b3a99b78cc268e445d8a5768dd010d9457051dfd868f4a8c0ad21f12bf7a06f2fb2d2cb4aa0cdbde06f202bf208330b19d82",
+        "password_updated_at": null,
+        "local_auth": 0,
+        "local_execution_allowed": 0,
+        "name": "home",
+        "display_name": "Original"
+      },
+      "newVerified": false,
+      "identities": []
+    },
+    {
+      "name": "bcrypt_2a",
+      "oldPassword": "PublicOld123",
+      "newPassword": "Abcdefg1",
+      "oldHash": "$2a$04$abcdefghijklmnopqrstuuVG6FSex5Srh1QIwYfAY72Xl3e6ud7Ka",
+      "status": 200,
+      "row": {
+        "password_hash": "scrypt$b4e231a5d44eb25bab78aa97830afa02$5301ca60b25deaeb0f6d4f9bf229fcac91ad11ebefeeae97a2f579b59c40b96d32190b7a4f5a9773d0fc44b5a81aabee9669718a5a24f23a20a80972086976a8",
+        "password_updated_at": 2000000000000,
+        "local_auth": 1,
+        "local_execution_allowed": 0,
+        "name": "home",
+        "display_name": "Original"
+      },
+      "newVerified": true,
+      "identities": [
+        {
+          "org_id": "4ce65010-7331-415a-abaa-4d47387d845e",
+          "user_id": "c2cc8374-8cdf-4936-8967-d891fb500634",
+          "provider": "password",
+          "issuer": "moss",
+          "normalized_subject": "home",
+          "metadata_json": "{}"
+        }
+      ]
+    },
+    {
+      "name": "bcrypt_2b",
+      "oldPassword": "PublicOld123",
+      "newPassword": "Abcdefg1",
+      "oldHash": "$2b$04$abcdefghijklmnopqrstuuVG6FSex5Srh1QIwYfAY72Xl3e6ud7Ka",
+      "status": 200,
+      "row": {
+        "password_hash": "scrypt$a19ed3c65558215a95f58da3bfeb477b$d3773150a3066787f80c67208cc350d0616e12e1cd7f8eecd6ff315a780e1b04faf078a8d024ddb9505eef572c0e0bc249d609913fd81c156c59a9e5be0fe664",
+        "password_updated_at": 2000000000000,
+        "local_auth": 1,
+        "local_execution_allowed": 0,
+        "name": "home",
+        "display_name": "Original"
+      },
+      "newVerified": true,
+      "identities": [
+        {
+          "org_id": "4ce65010-7331-415a-abaa-4d47387d845e",
+          "user_id": "c2cc8374-8cdf-4936-8967-d891fb500634",
+          "provider": "password",
+          "issuer": "moss",
+          "normalized_subject": "home",
+          "metadata_json": "{}"
+        }
+      ]
+    },
+    {
+      "name": "bcrypt_2y",
+      "oldPassword": "PublicOld123",
+      "newPassword": "Abcdefg1",
+      "oldHash": "$2y$04$abcdefghijklmnopqrstuuVG6FSex5Srh1QIwYfAY72Xl3e6ud7Ka",
+      "status": 200,
+      "row": {
+        "password_hash": "scrypt$1bc7bec824e387906aeade47115e5e03$6f1d939ff65ec5dc70a136311cb68a6fb2dc0e19d22ab9a61e12c28e9932bd8f22a2a5a7ae0b035d30cf4e7041071ff8f95a3755525a3677d146ff4ba170737d",
+        "password_updated_at": 2000000000000,
+        "local_auth": 1,
+        "local_execution_allowed": 0,
+        "name": "home",
+        "display_name": "Original"
+      },
+      "newVerified": true,
+      "identities": [
+        {
+          "org_id": "4ce65010-7331-415a-abaa-4d47387d845e",
+          "user_id": "c2cc8374-8cdf-4936-8967-d891fb500634",
+          "provider": "password",
+          "issuer": "moss",
+          "normalized_subject": "home",
+          "metadata_json": "{}"
+        }
+      ]
+    }
+  ]
+}

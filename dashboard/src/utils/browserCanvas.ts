@@ -46,23 +46,29 @@ export function getCanvasCoords(
 export function paintBase64JpegToCanvas(
   canvas: HTMLCanvasElement | null,
   base64Data: string,
-): void {
-  if (!canvas) return;
-  const img = new Image();
-  img.onload = () => {
-    const ctx = canvas.getContext("2d");
-    if (!ctx) return;
-    if (canvas.width !== img.width || canvas.height !== img.height) {
-      canvas.width = img.width;
-      canvas.height = img.height;
-    }
-    ctx.imageSmoothingEnabled = true;
-    if ("imageSmoothingQuality" in ctx) {
-      ctx.imageSmoothingQuality = "high";
-    }
-    ctx.drawImage(img, 0, 0);
-  };
-  img.src = `data:image/jpeg;base64,${base64Data}`;
+  isCurrent: () => boolean = () => true,
+): Promise<boolean> {
+  if (!canvas) return Promise.resolve(false);
+  return new Promise((resolve) => {
+    const img = new Image();
+    img.onload = () => {
+      if (!isCurrent()) return resolve(false);
+      const ctx = canvas.getContext("2d");
+      if (!ctx) return resolve(false);
+      if (canvas.width !== img.width || canvas.height !== img.height) {
+        canvas.width = img.width;
+        canvas.height = img.height;
+      }
+      ctx.imageSmoothingEnabled = true;
+      if ("imageSmoothingQuality" in ctx) {
+        ctx.imageSmoothingQuality = "high";
+      }
+      ctx.drawImage(img, 0, 0);
+      resolve(true);
+    };
+    img.onerror = () => resolve(false);
+    img.src = `data:image/jpeg;base64,${base64Data}`;
+  });
 }
 
 /** Paint a screenshot blob onto a canvas (HTTP polling). */

@@ -24,7 +24,7 @@ vi.mock("./CaptchaField", () => ({
   default: () => null,
 }));
 
-import LoginPage from "./index";
+import { StandaloneLoginPage as LoginPage } from "./index";
 
 describe("Login forgot-password hint", () => {
   it("opens a dialog with the CLI reset tip when asked", async () => {

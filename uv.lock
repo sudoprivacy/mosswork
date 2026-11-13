@@ -46,6 +46,27 @@ wheels = [
 ]
 
 [[package]]
+name = "ai-dev-browser"
+version = "0.58.22"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "deprecated" },
+    { name = "pillow" },
+    { name = "psutil" },
+    { name = "websocket-client" },
+    { name = "websockets" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/df/b9/adf5f30d9d2ea8b51a4a5bf9382c18123727652415bb65274ed388db7362/ai_dev_browser-0.58.22.tar.gz", hash = "sha256:a8f97540102f718aaeec2f171b03fd10b218f9288002a74605a954fd9a99cd51", size = 1108672, upload-time = "2026-11-09T22:22:50.294Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/26/dd/b085a2332ebc392dc4b182d54011621bada798111befd0336a02c70b6d51/ai_dev_browser-0.58.22-py3-none-any.whl", hash = "sha256:981a3739b927718267e9f0faeddb16f82627a49c2ddcedf2bccccbc4a7860db3", size = 670513, upload-time = "2026-11-09T22:22:48.501Z" },
+]
+
+[package.optional-dependencies]
+remote = [
+    { name = "aiohttp" },
+]
+
+[[package]]
 name = "aioboto3"
 version = "15.5.0"
 source = { registry = "https://pypi.org/simple" }
@@ -1111,6 +1132,18 @@ dependencies = [
 sdist = { url = "https://files.pythonhosted.org/packages/1a/07/f999afc8d259384a942592661510a8fca9dc522d2711b7779596306cd516/deepagents_backends-0.2.0.tar.gz", hash = "sha256:b1522f0da651822c319304f30980f04ca885f79ace85aaeb9df84f723da5a821", size = 15497, upload-time = "2026-04-17T05:48:57.784Z" }
 wheels = [
     { url = "https://files.pythonhosted.org/packages/69/cb/bdf7adb4534ed3dad932a81825ef2b9e090fb96e1d5f18b3548131c918d9/deepagents_backends-0.2.0-py3-none-any.whl", hash = "sha256:0aff9b6971e38c887201095b408cdc7b5e223a4ed64d755c4108109c96938d3e", size = 13023, upload-time = "2026-04-17T05:48:56.415Z" },
+]
+
+[[package]]
+name = "deprecated"
+version = "3.0.1"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "wrapt" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/61/46/f6958cdfa8a801fc845e981a8a958dba2e74a386b026a8fd5cae58423f1f/deprecated-3.0.1.tar.gz", hash = "sha256:2f5a9fecc9961e26462846cf1e57f73a612b1d0b79c27dceeed8de647beadcee", size = 1074378, upload-time = "2026-10-30T11:15:39.954Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/82/f0/07de837adfa09d592747b82fd74316e88285d2d7057551f30e4b5ef81bd8/deprecated-3.0.1-py3-none-any.whl", hash = "sha256:eda314c115e8bc0fe52b90a6869e19240ac3cedb7449adfdba5981cf9ef693e1", size = 22191, upload-time = "2026-10-30T11:15:38.08Z" },
 ]
 
 [[package]]
@@ -3182,8 +3215,11 @@ version = "0.0.7"
 source = { editable = "." }
 dependencies = [
     { name = "acme" },
+    { name = "agent-client-protocol" },
+    { name = "ai-dev-browser", extra = ["remote"] },
     { name = "apscheduler" },
     { name = "argon2-cffi" },
+    { name = "bcrypt" },
     { name = "boto3" },
     { name = "click" },
     { name = "cryptography" },
@@ -3268,8 +3304,11 @@ dev = [
 [package.metadata]
 requires-dist = [
     { name = "acme", specifier = ">=5.6.0" },
+    { name = "agent-client-protocol", specifier = ">=0.11,<0.12" },
+    { name = "ai-dev-browser", extras = ["remote"], specifier = "==0.58.22" },
     { name = "apscheduler", specifier = ">=3.10,<4" },
     { name = "argon2-cffi", specifier = ">=23.1" },
+    { name = "bcrypt", specifier = ">=5,<6" },
     { name = "boto3", specifier = ">=1.40.61" },
     { name = "build", marker = "extra == 'dev'", specifier = ">=1.0" },
     { name = "click", specifier = ">=8.1" },

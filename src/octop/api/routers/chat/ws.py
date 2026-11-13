@@ -16,6 +16,7 @@ from starlette.websockets import WebSocketState
 from octop.api.common.agent import assert_agent_access
 from octop.api.common.reads import management_read
 from octop.api.deps import resolve_user_from_token
+from octop.api.routers.chat.canonical_ws import canonical_chat_ws
 from octop.api.routers.chat.models import UserTurnWsFrame
 from octop.api.routers.chat.sse import json_chunk_default
 from octop.api.routers.chat.turn import (
@@ -43,6 +44,9 @@ async def dashboard_chat_ws(
 ) -> None:
     """Bidirectional Dashboard chat. Wire protocol mirrors harness stream chunks."""
     server = websocket.app.state.mosswork_server
+    if getattr(server, "canonical_configuration", None) is not None:
+        await canonical_chat_ws(websocket, agent_id)
+        return
     if not token:
         await websocket.close(code=4001, reason="missing token")
         return

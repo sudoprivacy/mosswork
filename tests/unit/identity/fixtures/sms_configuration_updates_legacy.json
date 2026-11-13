@@ -1,0 +1,1515 @@
+{
+  "commit": "d0b84d4c8fd5905d9ec3f7c160f2ce633f535d0d",
+  "sourceHashes": {
+    "src/server/configuration/platformIntegrationSettingsRepository.ts": "43849a96e9562ea880baaf449bd53bc8b772cb4f9f188b789e25be150e94f5a2",
+    "src/server/configuration/platformConfigDefinition.ts": "91848cfc027c8b4c1a1090ab84c43360299484f6ce20025377de13d837836885",
+    "src/server/configuration/platformConfigService.ts": "b38ea92bbd7d37cb073b0ea62c5ae386e238055968d8ea3a10f1b8aba3502368"
+  },
+  "scope": "Original managed SMS save/prepare/readSnapshot/validation/repository, actual isolated SQLite and fixture vault. No real secrets, provider, activation, financial operation or production.",
+  "nowMs": 1800000000123,
+  "original": {
+    "version": "original-version",
+    "config": {
+      "enabled": true,
+      "mockDelivery": false,
+      "sdkAppId": "fixture-app",
+      "signName": "fixture-sign",
+      "templateId": "fixture-template",
+      "region": "ap-beijing",
+      "templateParams": [
+        "{code}",
+        "{ttlMinutes}"
+      ],
+      "codeTtlSec": 300,
+      "resendCooldownSec": 60,
+      "maxSendsPerHour": 5,
+      "maxVerifyAttempts": 3
+    },
+    "secretRefs": {
+      "secretId": "sms.original-version.secretId",
+      "secretKey": "sms.original-version.secretKey"
+    },
+    "updatedBy": "original-writer",
+    "updatedAt": 17
+  },
+  "cases": [
+    {
+      "name": "preserve_omitted",
+      "config": {},
+      "actualStatus": 200,
+      "result": {
+        "version": "frozen-next-version",
+        "restartRequired": true
+      },
+      "stagedReferences": [
+        "sms.frozen-next-version.secretId",
+        "sms.frozen-next-version.secretKey"
+      ],
+      "stagedFixtureValues": {
+        "sms.frozen-next-version.secretId": "fixture-original-id",
+        "sms.frozen-next-version.secretKey": "fixture-original-key"
+      },
+      "rows": [
+        {
+          "setting_key": "platform.history.sms.original-version",
+          "value_json": {
+            "version": "original-version",
+            "config": {
+              "enabled": true,
+              "mockDelivery": false,
+              "sdkAppId": "fixture-app",
+              "signName": "fixture-sign",
+              "templateId": "fixture-template",
+              "region": "ap-beijing",
+              "templateParams": [
+                "{code}",
+                "{ttlMinutes}"
+              ],
+              "codeTtlSec": 300,
+              "resendCooldownSec": 60,
+              "maxSendsPerHour": 5,
+              "maxVerifyAttempts": 3
+            },
+            "secretRefs": {
+              "secretId": "sms.original-version.secretId",
+              "secretKey": "sms.original-version.secretKey"
+            },
+            "updatedBy": "original-writer",
+            "updatedAt": 17
+          },
+          "updated_by": "fixture-actor",
+          "created_at": 1800000000123,
+          "updated_at": 1800000000123
+        },
+        {
+          "setting_key": "platform.v1.sms",
+          "value_json": {
+            "version": "frozen-next-version",
+            "config": {
+              "enabled": true,
+              "mockDelivery": false,
+              "sdkAppId": "fixture-app",
+              "signName": "fixture-sign",
+              "templateId": "fixture-template",
+              "region": "ap-beijing",
+              "templateParams": [
+                "{code}",
+                "{ttlMinutes}"
+              ],
+              "codeTtlSec": 300,
+              "resendCooldownSec": 60,
+              "maxSendsPerHour": 5,
+              "maxVerifyAttempts": 3
+            },
+            "secretRefs": {
+              "secretId": "sms.frozen-next-version.secretId",
+              "secretKey": "sms.frozen-next-version.secretKey"
+            },
+            "updatedBy": "fixture-actor",
+            "updatedAt": 1800000000123
+          },
+          "updated_by": "fixture-actor",
+          "created_at": 7,
+          "updated_at": 1800000000123
+        },
+        {
+          "setting_key": "unrelated",
+          "value_json": {
+            "keep": true
+          },
+          "updated_by": "unrelated-writer",
+          "created_at": 9,
+          "updated_at": 10
+        }
+      ]
+    },
+    {
+      "name": "trim_text",
+      "config": {
+        "signName": "  new sign  ",
+        "templateParams": [
+          " code: {code} "
+        ]
+      },
+      "actualStatus": 200,
+      "result": {
+        "version": "frozen-next-version",
+        "restartRequired": true
+      },
+      "stagedReferences": [
+        "sms.frozen-next-version.secretId",
+        "sms.frozen-next-version.secretKey"
+      ],
+      "stagedFixtureValues": {
+        "sms.frozen-next-version.secretId": "fixture-original-id",
+        "sms.frozen-next-version.secretKey": "fixture-original-key"
+      },
+      "rows": [
+        {
+          "setting_key": "platform.history.sms.original-version",
+          "value_json": {
+            "version": "original-version",
+            "config": {
+              "enabled": true,
+              "mockDelivery": false,
+              "sdkAppId": "fixture-app",
+              "signName": "fixture-sign",
+              "templateId": "fixture-template",
+              "region": "ap-beijing",
+              "templateParams": [
+                "{code}",
+                "{ttlMinutes}"
+              ],
+              "codeTtlSec": 300,
+              "resendCooldownSec": 60,
+              "maxSendsPerHour": 5,
+              "maxVerifyAttempts": 3
+            },
+            "secretRefs": {
+              "secretId": "sms.original-version.secretId",
+              "secretKey": "sms.original-version.secretKey"
+            },
+            "updatedBy": "original-writer",
+            "updatedAt": 17
+          },
+          "updated_by": "fixture-actor",
+          "created_at": 1800000000123,
+          "updated_at": 1800000000123
+        },
+        {
+          "setting_key": "platform.v1.sms",
+          "value_json": {
+            "version": "frozen-next-version",
+            "config": {
+              "enabled": true,
+              "mockDelivery": false,
+              "sdkAppId": "fixture-app",
+              "signName": "new sign",
+              "templateId": "fixture-template",
+              "region": "ap-beijing",
+              "templateParams": [
+                " code: {code} "
+              ],
+              "codeTtlSec": 300,
+              "resendCooldownSec": 60,
+              "maxSendsPerHour": 5,
+              "maxVerifyAttempts": 3
+            },
+            "secretRefs": {
+              "secretId": "sms.frozen-next-version.secretId",
+              "secretKey": "sms.frozen-next-version.secretKey"
+            },
+            "updatedBy": "fixture-actor",
+            "updatedAt": 1800000000123
+          },
+          "updated_by": "fixture-actor",
+          "created_at": 7,
+          "updated_at": 1800000000123
+        },
+        {
+          "setting_key": "unrelated",
+          "value_json": {
+            "keep": true
+          },
+          "updated_by": "unrelated-writer",
+          "created_at": 9,
+          "updated_at": 10
+        }
+      ]
+    },
+    {
+      "name": "rotate_one_secret",
+      "config": {},
+      "secrets": {
+        "secretKey": " new-fixture-key "
+      },
+      "actualStatus": 200,
+      "result": {
+        "version": "frozen-next-version",
+        "restartRequired": true
+      },
+      "stagedReferences": [
+        "sms.frozen-next-version.secretId",
+        "sms.frozen-next-version.secretKey"
+      ],
+      "stagedFixtureValues": {
+        "sms.frozen-next-version.secretId": "fixture-original-id",
+        "sms.frozen-next-version.secretKey": "new-fixture-key"
+      },
+      "rows": [
+        {
+          "setting_key": "platform.history.sms.original-version",
+          "value_json": {
+            "version": "original-version",
+            "config": {
+              "enabled": true,
+              "mockDelivery": false,
+              "sdkAppId": "fixture-app",
+              "signName": "fixture-sign",
+              "templateId": "fixture-template",
+              "region": "ap-beijing",
+              "templateParams": [
+                "{code}",
+                "{ttlMinutes}"
+              ],
+              "codeTtlSec": 300,
+              "resendCooldownSec": 60,
+              "maxSendsPerHour": 5,
+              "maxVerifyAttempts": 3
+            },
+            "secretRefs": {
+              "secretId": "sms.original-version.secretId",
+              "secretKey": "sms.original-version.secretKey"
+            },
+            "updatedBy": "original-writer",
+            "updatedAt": 17
+          },
+          "updated_by": "fixture-actor",
+          "created_at": 1800000000123,
+          "updated_at": 1800000000123
+        },
+        {
+          "setting_key": "platform.v1.sms",
+          "value_json": {
+            "version": "frozen-next-version",
+            "config": {
+              "enabled": true,
+              "mockDelivery": false,
+              "sdkAppId": "fixture-app",
+              "signName": "fixture-sign",
+              "templateId": "fixture-template",
+              "region": "ap-beijing",
+              "templateParams": [
+                "{code}",
+                "{ttlMinutes}"
+              ],
+              "codeTtlSec": 300,
+              "resendCooldownSec": 60,
+              "maxSendsPerHour": 5,
+              "maxVerifyAttempts": 3
+            },
+            "secretRefs": {
+              "secretId": "sms.frozen-next-version.secretId",
+              "secretKey": "sms.frozen-next-version.secretKey"
+            },
+            "updatedBy": "fixture-actor",
+            "updatedAt": 1800000000123
+          },
+          "updated_by": "fixture-actor",
+          "created_at": 7,
+          "updated_at": 1800000000123
+        },
+        {
+          "setting_key": "unrelated",
+          "value_json": {
+            "keep": true
+          },
+          "updated_by": "unrelated-writer",
+          "created_at": 9,
+          "updated_at": 10
+        }
+      ]
+    },
+    {
+      "name": "disabled_clear_secrets",
+      "config": {
+        "enabled": false
+      },
+      "secrets": {
+        "secretId": null,
+        "secretKey": ""
+      },
+      "actualStatus": 200,
+      "result": {
+        "version": "frozen-next-version",
+        "restartRequired": true
+      },
+      "stagedReferences": [],
+      "stagedFixtureValues": {},
+      "rows": [
+        {
+          "setting_key": "platform.history.sms.original-version",
+          "value_json": {
+            "version": "original-version",
+            "config": {
+              "enabled": true,
+              "mockDelivery": false,
+              "sdkAppId": "fixture-app",
+              "signName": "fixture-sign",
+              "templateId": "fixture-template",
+              "region": "ap-beijing",
+              "templateParams": [
+                "{code}",
+                "{ttlMinutes}"
+              ],
+              "codeTtlSec": 300,
+              "resendCooldownSec": 60,
+              "maxSendsPerHour": 5,
+              "maxVerifyAttempts": 3
+            },
+            "secretRefs": {
+              "secretId": "sms.original-version.secretId",
+              "secretKey": "sms.original-version.secretKey"
+            },
+            "updatedBy": "original-writer",
+            "updatedAt": 17
+          },
+          "updated_by": "fixture-actor",
+          "created_at": 1800000000123,
+          "updated_at": 1800000000123
+        },
+        {
+          "setting_key": "platform.v1.sms",
+          "value_json": {
+            "version": "frozen-next-version",
+            "config": {
+              "enabled": false,
+              "mockDelivery": false,
+              "sdkAppId": "fixture-app",
+              "signName": "fixture-sign",
+              "templateId": "fixture-template",
+              "region": "ap-beijing",
+              "templateParams": [
+                "{code}",
+                "{ttlMinutes}"
+              ],
+              "codeTtlSec": 300,
+              "resendCooldownSec": 60,
+              "maxSendsPerHour": 5,
+              "maxVerifyAttempts": 3
+            },
+            "secretRefs": {},
+            "updatedBy": "fixture-actor",
+            "updatedAt": 1800000000123
+          },
+          "updated_by": "fixture-actor",
+          "created_at": 7,
+          "updated_at": 1800000000123
+        },
+        {
+          "setting_key": "unrelated",
+          "value_json": {
+            "keep": true
+          },
+          "updated_by": "unrelated-writer",
+          "created_at": 9,
+          "updated_at": 10
+        }
+      ]
+    },
+    {
+      "name": "mock_clear_secrets",
+      "config": {
+        "mockDelivery": true
+      },
+      "secrets": {
+        "secretId": null,
+        "secretKey": null
+      },
+      "actualStatus": 200,
+      "result": {
+        "version": "frozen-next-version",
+        "restartRequired": true
+      },
+      "stagedReferences": [],
+      "stagedFixtureValues": {},
+      "rows": [
+        {
+          "setting_key": "platform.history.sms.original-version",
+          "value_json": {
+            "version": "original-version",
+            "config": {
+              "enabled": true,
+              "mockDelivery": false,
+              "sdkAppId": "fixture-app",
+              "signName": "fixture-sign",
+              "templateId": "fixture-template",
+              "region": "ap-beijing",
+              "templateParams": [
+                "{code}",
+                "{ttlMinutes}"
+              ],
+              "codeTtlSec": 300,
+              "resendCooldownSec": 60,
+              "maxSendsPerHour": 5,
+              "maxVerifyAttempts": 3
+            },
+            "secretRefs": {
+              "secretId": "sms.original-version.secretId",
+              "secretKey": "sms.original-version.secretKey"
+            },
+            "updatedBy": "original-writer",
+            "updatedAt": 17
+          },
+          "updated_by": "fixture-actor",
+          "created_at": 1800000000123,
+          "updated_at": 1800000000123
+        },
+        {
+          "setting_key": "platform.v1.sms",
+          "value_json": {
+            "version": "frozen-next-version",
+            "config": {
+              "enabled": true,
+              "mockDelivery": true,
+              "sdkAppId": "fixture-app",
+              "signName": "fixture-sign",
+              "templateId": "fixture-template",
+              "region": "ap-beijing",
+              "templateParams": [
+                "{code}",
+                "{ttlMinutes}"
+              ],
+              "codeTtlSec": 300,
+              "resendCooldownSec": 60,
+              "maxSendsPerHour": 5,
+              "maxVerifyAttempts": 3
+            },
+            "secretRefs": {},
+            "updatedBy": "fixture-actor",
+            "updatedAt": 1800000000123
+          },
+          "updated_by": "fixture-actor",
+          "created_at": 7,
+          "updated_at": 1800000000123
+        },
+        {
+          "setting_key": "unrelated",
+          "value_json": {
+            "keep": true
+          },
+          "updated_by": "unrelated-writer",
+          "created_at": 9,
+          "updated_at": 10
+        }
+      ]
+    },
+    {
+      "name": "mock_bypasses_template_requirement",
+      "config": {
+        "mockDelivery": true,
+        "templateParams": []
+      },
+      "actualStatus": 200,
+      "result": {
+        "version": "frozen-next-version",
+        "restartRequired": true
+      },
+      "stagedReferences": [
+        "sms.frozen-next-version.secretId",
+        "sms.frozen-next-version.secretKey"
+      ],
+      "stagedFixtureValues": {
+        "sms.frozen-next-version.secretId": "fixture-original-id",
+        "sms.frozen-next-version.secretKey": "fixture-original-key"
+      },
+      "rows": [
+        {
+          "setting_key": "platform.history.sms.original-version",
+          "value_json": {
+            "version": "original-version",
+            "config": {
+              "enabled": true,
+              "mockDelivery": false,
+              "sdkAppId": "fixture-app",
+              "signName": "fixture-sign",
+              "templateId": "fixture-template",
+              "region": "ap-beijing",
+              "templateParams": [
+                "{code}",
+                "{ttlMinutes}"
+              ],
+              "codeTtlSec": 300,
+              "resendCooldownSec": 60,
+              "maxSendsPerHour": 5,
+              "maxVerifyAttempts": 3
+            },
+            "secretRefs": {
+              "secretId": "sms.original-version.secretId",
+              "secretKey": "sms.original-version.secretKey"
+            },
+            "updatedBy": "original-writer",
+            "updatedAt": 17
+          },
+          "updated_by": "fixture-actor",
+          "created_at": 1800000000123,
+          "updated_at": 1800000000123
+        },
+        {
+          "setting_key": "platform.v1.sms",
+          "value_json": {
+            "version": "frozen-next-version",
+            "config": {
+              "enabled": true,
+              "mockDelivery": true,
+              "sdkAppId": "fixture-app",
+              "signName": "fixture-sign",
+              "templateId": "fixture-template",
+              "region": "ap-beijing",
+              "templateParams": [],
+              "codeTtlSec": 300,
+              "resendCooldownSec": 60,
+              "maxSendsPerHour": 5,
+              "maxVerifyAttempts": 3
+            },
+            "secretRefs": {
+              "secretId": "sms.frozen-next-version.secretId",
+              "secretKey": "sms.frozen-next-version.secretKey"
+            },
+            "updatedBy": "fixture-actor",
+            "updatedAt": 1800000000123
+          },
+          "updated_by": "fixture-actor",
+          "created_at": 7,
+          "updated_at": 1800000000123
+        },
+        {
+          "setting_key": "unrelated",
+          "value_json": {
+            "keep": true
+          },
+          "updated_by": "unrelated-writer",
+          "created_at": 9,
+          "updated_at": 10
+        }
+      ]
+    },
+    {
+      "name": "missing_code",
+      "config": {
+        "templateParams": [
+          "{ttlMinutes}"
+        ]
+      },
+      "status": 400,
+      "actualStatus": 400,
+      "result": null,
+      "stagedReferences": [],
+      "stagedFixtureValues": {},
+      "rows": [
+        {
+          "setting_key": "platform.v1.sms",
+          "value_json": {
+            "version": "original-version",
+            "config": {
+              "enabled": true,
+              "mockDelivery": false,
+              "sdkAppId": "fixture-app",
+              "signName": "fixture-sign",
+              "templateId": "fixture-template",
+              "region": "ap-beijing",
+              "templateParams": [
+                "{code}",
+                "{ttlMinutes}"
+              ],
+              "codeTtlSec": 300,
+              "resendCooldownSec": 60,
+              "maxSendsPerHour": 5,
+              "maxVerifyAttempts": 3
+            },
+            "secretRefs": {
+              "secretId": "sms.original-version.secretId",
+              "secretKey": "sms.original-version.secretKey"
+            },
+            "updatedBy": "original-writer",
+            "updatedAt": 17
+          },
+          "updated_by": "original-writer",
+          "created_at": 7,
+          "updated_at": 8
+        },
+        {
+          "setting_key": "unrelated",
+          "value_json": {
+            "keep": true
+          },
+          "updated_by": "unrelated-writer",
+          "created_at": 9,
+          "updated_at": 10
+        }
+      ]
+    },
+    {
+      "name": "clear_required_text",
+      "config": {
+        "sdkAppId": "   "
+      },
+      "status": 400,
+      "actualStatus": 400,
+      "result": null,
+      "stagedReferences": [],
+      "stagedFixtureValues": {},
+      "rows": [
+        {
+          "setting_key": "platform.v1.sms",
+          "value_json": {
+            "version": "original-version",
+            "config": {
+              "enabled": true,
+              "mockDelivery": false,
+              "sdkAppId": "fixture-app",
+              "signName": "fixture-sign",
+              "templateId": "fixture-template",
+              "region": "ap-beijing",
+              "templateParams": [
+                "{code}",
+                "{ttlMinutes}"
+              ],
+              "codeTtlSec": 300,
+              "resendCooldownSec": 60,
+              "maxSendsPerHour": 5,
+              "maxVerifyAttempts": 3
+            },
+            "secretRefs": {
+              "secretId": "sms.original-version.secretId",
+              "secretKey": "sms.original-version.secretKey"
+            },
+            "updatedBy": "original-writer",
+            "updatedAt": 17
+          },
+          "updated_by": "original-writer",
+          "created_at": 7,
+          "updated_at": 8
+        },
+        {
+          "setting_key": "unrelated",
+          "value_json": {
+            "keep": true
+          },
+          "updated_by": "unrelated-writer",
+          "created_at": 9,
+          "updated_at": 10
+        }
+      ]
+    },
+    {
+      "name": "clear_required_secret",
+      "config": {},
+      "secrets": {
+        "secretKey": null
+      },
+      "status": 400,
+      "actualStatus": 400,
+      "result": null,
+      "stagedReferences": [],
+      "stagedFixtureValues": {},
+      "rows": [
+        {
+          "setting_key": "platform.v1.sms",
+          "value_json": {
+            "version": "original-version",
+            "config": {
+              "enabled": true,
+              "mockDelivery": false,
+              "sdkAppId": "fixture-app",
+              "signName": "fixture-sign",
+              "templateId": "fixture-template",
+              "region": "ap-beijing",
+              "templateParams": [
+                "{code}",
+                "{ttlMinutes}"
+              ],
+              "codeTtlSec": 300,
+              "resendCooldownSec": 60,
+              "maxSendsPerHour": 5,
+              "maxVerifyAttempts": 3
+            },
+            "secretRefs": {
+              "secretId": "sms.original-version.secretId",
+              "secretKey": "sms.original-version.secretKey"
+            },
+            "updatedBy": "original-writer",
+            "updatedAt": 17
+          },
+          "updated_by": "original-writer",
+          "created_at": 7,
+          "updated_at": 8
+        },
+        {
+          "setting_key": "unrelated",
+          "value_json": {
+            "keep": true
+          },
+          "updated_by": "unrelated-writer",
+          "created_at": 9,
+          "updated_at": 10
+        }
+      ]
+    },
+    {
+      "name": "mask_refused",
+      "config": {},
+      "secrets": {
+        "secretKey": "****hidden"
+      },
+      "status": 400,
+      "actualStatus": 400,
+      "result": null,
+      "stagedReferences": [],
+      "stagedFixtureValues": {},
+      "rows": [
+        {
+          "setting_key": "platform.v1.sms",
+          "value_json": {
+            "version": "original-version",
+            "config": {
+              "enabled": true,
+              "mockDelivery": false,
+              "sdkAppId": "fixture-app",
+              "signName": "fixture-sign",
+              "templateId": "fixture-template",
+              "region": "ap-beijing",
+              "templateParams": [
+                "{code}",
+                "{ttlMinutes}"
+              ],
+              "codeTtlSec": 300,
+              "resendCooldownSec": 60,
+              "maxSendsPerHour": 5,
+              "maxVerifyAttempts": 3
+            },
+            "secretRefs": {
+              "secretId": "sms.original-version.secretId",
+              "secretKey": "sms.original-version.secretKey"
+            },
+            "updatedBy": "original-writer",
+            "updatedAt": 17
+          },
+          "updated_by": "original-writer",
+          "created_at": 7,
+          "updated_at": 8
+        },
+        {
+          "setting_key": "unrelated",
+          "value_json": {
+            "keep": true
+          },
+          "updated_by": "unrelated-writer",
+          "created_at": 9,
+          "updated_at": 10
+        }
+      ]
+    },
+    {
+      "name": "foreign_secret",
+      "config": {},
+      "secrets": {
+        "other": "x"
+      },
+      "status": 400,
+      "actualStatus": 400,
+      "result": null,
+      "stagedReferences": [],
+      "stagedFixtureValues": {},
+      "rows": [
+        {
+          "setting_key": "platform.v1.sms",
+          "value_json": {
+            "version": "original-version",
+            "config": {
+              "enabled": true,
+              "mockDelivery": false,
+              "sdkAppId": "fixture-app",
+              "signName": "fixture-sign",
+              "templateId": "fixture-template",
+              "region": "ap-beijing",
+              "templateParams": [
+                "{code}",
+                "{ttlMinutes}"
+              ],
+              "codeTtlSec": 300,
+              "resendCooldownSec": 60,
+              "maxSendsPerHour": 5,
+              "maxVerifyAttempts": 3
+            },
+            "secretRefs": {
+              "secretId": "sms.original-version.secretId",
+              "secretKey": "sms.original-version.secretKey"
+            },
+            "updatedBy": "original-writer",
+            "updatedAt": 17
+          },
+          "updated_by": "original-writer",
+          "created_at": 7,
+          "updated_at": 8
+        },
+        {
+          "setting_key": "unrelated",
+          "value_json": {
+            "keep": true
+          },
+          "updated_by": "unrelated-writer",
+          "created_at": 9,
+          "updated_at": 10
+        }
+      ]
+    },
+    {
+      "name": "foreign_config",
+      "config": {
+        "other": "x"
+      },
+      "status": 400,
+      "actualStatus": 400,
+      "result": null,
+      "stagedReferences": [],
+      "stagedFixtureValues": {},
+      "rows": [
+        {
+          "setting_key": "platform.v1.sms",
+          "value_json": {
+            "version": "original-version",
+            "config": {
+              "enabled": true,
+              "mockDelivery": false,
+              "sdkAppId": "fixture-app",
+              "signName": "fixture-sign",
+              "templateId": "fixture-template",
+              "region": "ap-beijing",
+              "templateParams": [
+                "{code}",
+                "{ttlMinutes}"
+              ],
+              "codeTtlSec": 300,
+              "resendCooldownSec": 60,
+              "maxSendsPerHour": 5,
+              "maxVerifyAttempts": 3
+            },
+            "secretRefs": {
+              "secretId": "sms.original-version.secretId",
+              "secretKey": "sms.original-version.secretKey"
+            },
+            "updatedBy": "original-writer",
+            "updatedAt": 17
+          },
+          "updated_by": "original-writer",
+          "created_at": 7,
+          "updated_at": 8
+        },
+        {
+          "setting_key": "unrelated",
+          "value_json": {
+            "keep": true
+          },
+          "updated_by": "unrelated-writer",
+          "created_at": 9,
+          "updated_at": 10
+        }
+      ]
+    },
+    {
+      "name": "wrong_boolean",
+      "config": {
+        "enabled": 1
+      },
+      "status": 400,
+      "actualStatus": 400,
+      "result": null,
+      "stagedReferences": [],
+      "stagedFixtureValues": {},
+      "rows": [
+        {
+          "setting_key": "platform.v1.sms",
+          "value_json": {
+            "version": "original-version",
+            "config": {
+              "enabled": true,
+              "mockDelivery": false,
+              "sdkAppId": "fixture-app",
+              "signName": "fixture-sign",
+              "templateId": "fixture-template",
+              "region": "ap-beijing",
+              "templateParams": [
+                "{code}",
+                "{ttlMinutes}"
+              ],
+              "codeTtlSec": 300,
+              "resendCooldownSec": 60,
+              "maxSendsPerHour": 5,
+              "maxVerifyAttempts": 3
+            },
+            "secretRefs": {
+              "secretId": "sms.original-version.secretId",
+              "secretKey": "sms.original-version.secretKey"
+            },
+            "updatedBy": "original-writer",
+            "updatedAt": 17
+          },
+          "updated_by": "original-writer",
+          "created_at": 7,
+          "updated_at": 8
+        },
+        {
+          "setting_key": "unrelated",
+          "value_json": {
+            "keep": true
+          },
+          "updated_by": "unrelated-writer",
+          "created_at": 9,
+          "updated_at": 10
+        }
+      ]
+    },
+    {
+      "name": "wrong_lines",
+      "config": {
+        "templateParams": [
+          12
+        ]
+      },
+      "status": 400,
+      "actualStatus": 400,
+      "result": null,
+      "stagedReferences": [],
+      "stagedFixtureValues": {},
+      "rows": [
+        {
+          "setting_key": "platform.v1.sms",
+          "value_json": {
+            "version": "original-version",
+            "config": {
+              "enabled": true,
+              "mockDelivery": false,
+              "sdkAppId": "fixture-app",
+              "signName": "fixture-sign",
+              "templateId": "fixture-template",
+              "region": "ap-beijing",
+              "templateParams": [
+                "{code}",
+                "{ttlMinutes}"
+              ],
+              "codeTtlSec": 300,
+              "resendCooldownSec": 60,
+              "maxSendsPerHour": 5,
+              "maxVerifyAttempts": 3
+            },
+            "secretRefs": {
+              "secretId": "sms.original-version.secretId",
+              "secretKey": "sms.original-version.secretKey"
+            },
+            "updatedBy": "original-writer",
+            "updatedAt": 17
+          },
+          "updated_by": "original-writer",
+          "created_at": 7,
+          "updated_at": 8
+        },
+        {
+          "setting_key": "unrelated",
+          "value_json": {
+            "keep": true
+          },
+          "updated_by": "unrelated-writer",
+          "created_at": 9,
+          "updated_at": 10
+        }
+      ]
+    },
+    {
+      "name": "wrong_integer",
+      "config": {
+        "codeTtlSec": 1.5
+      },
+      "status": 400,
+      "actualStatus": 400,
+      "result": null,
+      "stagedReferences": [],
+      "stagedFixtureValues": {},
+      "rows": [
+        {
+          "setting_key": "platform.v1.sms",
+          "value_json": {
+            "version": "original-version",
+            "config": {
+              "enabled": true,
+              "mockDelivery": false,
+              "sdkAppId": "fixture-app",
+              "signName": "fixture-sign",
+              "templateId": "fixture-template",
+              "region": "ap-beijing",
+              "templateParams": [
+                "{code}",
+                "{ttlMinutes}"
+              ],
+              "codeTtlSec": 300,
+              "resendCooldownSec": 60,
+              "maxSendsPerHour": 5,
+              "maxVerifyAttempts": 3
+            },
+            "secretRefs": {
+              "secretId": "sms.original-version.secretId",
+              "secretKey": "sms.original-version.secretKey"
+            },
+            "updatedBy": "original-writer",
+            "updatedAt": 17
+          },
+          "updated_by": "original-writer",
+          "created_at": 7,
+          "updated_at": 8
+        },
+        {
+          "setting_key": "unrelated",
+          "value_json": {
+            "keep": true
+          },
+          "updated_by": "unrelated-writer",
+          "created_at": 9,
+          "updated_at": 10
+        }
+      ]
+    },
+    {
+      "name": "numeric_low",
+      "config": {
+        "codeTtlSec": 59
+      },
+      "status": 400,
+      "actualStatus": 400,
+      "result": null,
+      "stagedReferences": [],
+      "stagedFixtureValues": {},
+      "rows": [
+        {
+          "setting_key": "platform.v1.sms",
+          "value_json": {
+            "version": "original-version",
+            "config": {
+              "enabled": true,
+              "mockDelivery": false,
+              "sdkAppId": "fixture-app",
+              "signName": "fixture-sign",
+              "templateId": "fixture-template",
+              "region": "ap-beijing",
+              "templateParams": [
+                "{code}",
+                "{ttlMinutes}"
+              ],
+              "codeTtlSec": 300,
+              "resendCooldownSec": 60,
+              "maxSendsPerHour": 5,
+              "maxVerifyAttempts": 3
+            },
+            "secretRefs": {
+              "secretId": "sms.original-version.secretId",
+              "secretKey": "sms.original-version.secretKey"
+            },
+            "updatedBy": "original-writer",
+            "updatedAt": 17
+          },
+          "updated_by": "original-writer",
+          "created_at": 7,
+          "updated_at": 8
+        },
+        {
+          "setting_key": "unrelated",
+          "value_json": {
+            "keep": true
+          },
+          "updated_by": "unrelated-writer",
+          "created_at": 9,
+          "updated_at": 10
+        }
+      ]
+    },
+    {
+      "name": "numeric_high",
+      "config": {
+        "maxSendsPerHour": 101
+      },
+      "status": 400,
+      "actualStatus": 400,
+      "result": null,
+      "stagedReferences": [],
+      "stagedFixtureValues": {},
+      "rows": [
+        {
+          "setting_key": "platform.v1.sms",
+          "value_json": {
+            "version": "original-version",
+            "config": {
+              "enabled": true,
+              "mockDelivery": false,
+              "sdkAppId": "fixture-app",
+              "signName": "fixture-sign",
+              "templateId": "fixture-template",
+              "region": "ap-beijing",
+              "templateParams": [
+                "{code}",
+                "{ttlMinutes}"
+              ],
+              "codeTtlSec": 300,
+              "resendCooldownSec": 60,
+              "maxSendsPerHour": 5,
+              "maxVerifyAttempts": 3
+            },
+            "secretRefs": {
+              "secretId": "sms.original-version.secretId",
+              "secretKey": "sms.original-version.secretKey"
+            },
+            "updatedBy": "original-writer",
+            "updatedAt": 17
+          },
+          "updated_by": "original-writer",
+          "created_at": 7,
+          "updated_at": 8
+        },
+        {
+          "setting_key": "unrelated",
+          "value_json": {
+            "keep": true
+          },
+          "updated_by": "unrelated-writer",
+          "created_at": 9,
+          "updated_at": 10
+        }
+      ]
+    },
+    {
+      "name": "disabled_still_validates_limits",
+      "config": {
+        "enabled": false,
+        "maxVerifyAttempts": 0
+      },
+      "status": 400,
+      "actualStatus": 400,
+      "result": null,
+      "stagedReferences": [],
+      "stagedFixtureValues": {},
+      "rows": [
+        {
+          "setting_key": "platform.v1.sms",
+          "value_json": {
+            "version": "original-version",
+            "config": {
+              "enabled": true,
+              "mockDelivery": false,
+              "sdkAppId": "fixture-app",
+              "signName": "fixture-sign",
+              "templateId": "fixture-template",
+              "region": "ap-beijing",
+              "templateParams": [
+                "{code}",
+                "{ttlMinutes}"
+              ],
+              "codeTtlSec": 300,
+              "resendCooldownSec": 60,
+              "maxSendsPerHour": 5,
+              "maxVerifyAttempts": 3
+            },
+            "secretRefs": {
+              "secretId": "sms.original-version.secretId",
+              "secretKey": "sms.original-version.secretKey"
+            },
+            "updatedBy": "original-writer",
+            "updatedAt": 17
+          },
+          "updated_by": "original-writer",
+          "created_at": 7,
+          "updated_at": 8
+        },
+        {
+          "setting_key": "unrelated",
+          "value_json": {
+            "keep": true
+          },
+          "updated_by": "unrelated-writer",
+          "created_at": 9,
+          "updated_at": 10
+        }
+      ]
+    },
+    {
+      "name": "old_version",
+      "config": {},
+      "expectedVersion": "stale",
+      "status": 409,
+      "actualStatus": 409,
+      "result": null,
+      "stagedReferences": [],
+      "stagedFixtureValues": {},
+      "rows": [
+        {
+          "setting_key": "platform.v1.sms",
+          "value_json": {
+            "version": "original-version",
+            "config": {
+              "enabled": true,
+              "mockDelivery": false,
+              "sdkAppId": "fixture-app",
+              "signName": "fixture-sign",
+              "templateId": "fixture-template",
+              "region": "ap-beijing",
+              "templateParams": [
+                "{code}",
+                "{ttlMinutes}"
+              ],
+              "codeTtlSec": 300,
+              "resendCooldownSec": 60,
+              "maxSendsPerHour": 5,
+              "maxVerifyAttempts": 3
+            },
+            "secretRefs": {
+              "secretId": "sms.original-version.secretId",
+              "secretKey": "sms.original-version.secretKey"
+            },
+            "updatedBy": "original-writer",
+            "updatedAt": 17
+          },
+          "updated_by": "original-writer",
+          "created_at": 7,
+          "updated_at": 8
+        },
+        {
+          "setting_key": "unrelated",
+          "value_json": {
+            "keep": true
+          },
+          "updated_by": "unrelated-writer",
+          "created_at": 9,
+          "updated_at": 10
+        }
+      ]
+    },
+    {
+      "name": "readback_refused",
+      "config": {},
+      "badVerification": true,
+      "status": 503,
+      "actualStatus": 503,
+      "result": null,
+      "stagedReferences": [
+        "sms.frozen-next-version.secretId"
+      ],
+      "stagedFixtureValues": {
+        "sms.frozen-next-version.secretId": "fixture-original-id"
+      },
+      "rows": [
+        {
+          "setting_key": "platform.v1.sms",
+          "value_json": {
+            "version": "original-version",
+            "config": {
+              "enabled": true,
+              "mockDelivery": false,
+              "sdkAppId": "fixture-app",
+              "signName": "fixture-sign",
+              "templateId": "fixture-template",
+              "region": "ap-beijing",
+              "templateParams": [
+                "{code}",
+                "{ttlMinutes}"
+              ],
+              "codeTtlSec": 300,
+              "resendCooldownSec": 60,
+              "maxSendsPerHour": 5,
+              "maxVerifyAttempts": 3
+            },
+            "secretRefs": {
+              "secretId": "sms.original-version.secretId",
+              "secretKey": "sms.original-version.secretKey"
+            },
+            "updatedBy": "original-writer",
+            "updatedAt": 17
+          },
+          "updated_by": "original-writer",
+          "created_at": 7,
+          "updated_at": 8
+        },
+        {
+          "setting_key": "unrelated",
+          "value_json": {
+            "keep": true
+          },
+          "updated_by": "unrelated-writer",
+          "created_at": 9,
+          "updated_at": 10
+        }
+      ]
+    },
+    {
+      "name": "ecmascript_bom_text_trim",
+      "config": {
+        "signName": "﻿new sign﻿"
+      },
+      "actualStatus": 200,
+      "result": {
+        "version": "frozen-next-version",
+        "restartRequired": true
+      },
+      "stagedReferences": [
+        "sms.frozen-next-version.secretId",
+        "sms.frozen-next-version.secretKey"
+      ],
+      "stagedFixtureValues": {
+        "sms.frozen-next-version.secretId": "fixture-original-id",
+        "sms.frozen-next-version.secretKey": "fixture-original-key"
+      },
+      "rows": [
+        {
+          "setting_key": "platform.history.sms.original-version",
+          "value_json": {
+            "version": "original-version",
+            "config": {
+              "enabled": true,
+              "mockDelivery": false,
+              "sdkAppId": "fixture-app",
+              "signName": "fixture-sign",
+              "templateId": "fixture-template",
+              "region": "ap-beijing",
+              "templateParams": [
+                "{code}",
+                "{ttlMinutes}"
+              ],
+              "codeTtlSec": 300,
+              "resendCooldownSec": 60,
+              "maxSendsPerHour": 5,
+              "maxVerifyAttempts": 3
+            },
+            "secretRefs": {
+              "secretId": "sms.original-version.secretId",
+              "secretKey": "sms.original-version.secretKey"
+            },
+            "updatedBy": "original-writer",
+            "updatedAt": 17
+          },
+          "updated_by": "fixture-actor",
+          "created_at": 1800000000123,
+          "updated_at": 1800000000123
+        },
+        {
+          "setting_key": "platform.v1.sms",
+          "value_json": {
+            "version": "frozen-next-version",
+            "config": {
+              "enabled": true,
+              "mockDelivery": false,
+              "sdkAppId": "fixture-app",
+              "signName": "new sign",
+              "templateId": "fixture-template",
+              "region": "ap-beijing",
+              "templateParams": [
+                "{code}",
+                "{ttlMinutes}"
+              ],
+              "codeTtlSec": 300,
+              "resendCooldownSec": 60,
+              "maxSendsPerHour": 5,
+              "maxVerifyAttempts": 3
+            },
+            "secretRefs": {
+              "secretId": "sms.frozen-next-version.secretId",
+              "secretKey": "sms.frozen-next-version.secretKey"
+            },
+            "updatedBy": "fixture-actor",
+            "updatedAt": 1800000000123
+          },
+          "updated_by": "fixture-actor",
+          "created_at": 7,
+          "updated_at": 1800000000123
+        },
+        {
+          "setting_key": "unrelated",
+          "value_json": {
+            "keep": true
+          },
+          "updated_by": "unrelated-writer",
+          "created_at": 9,
+          "updated_at": 10
+        }
+      ]
+    },
+    {
+      "name": "ecmascript_secret_whitespace_preserved",
+      "config": {},
+      "secrets": {
+        "secretKey": "fixture-key"
+      },
+      "actualStatus": 200,
+      "result": {
+        "version": "frozen-next-version",
+        "restartRequired": true
+      },
+      "stagedReferences": [
+        "sms.frozen-next-version.secretId",
+        "sms.frozen-next-version.secretKey"
+      ],
+      "stagedFixtureValues": {
+        "sms.frozen-next-version.secretId": "fixture-original-id",
+        "sms.frozen-next-version.secretKey": "fixture-key"
+      },
+      "rows": [
+        {
+          "setting_key": "platform.history.sms.original-version",
+          "value_json": {
+            "version": "original-version",
+            "config": {
+              "enabled": true,
+              "mockDelivery": false,
+              "sdkAppId": "fixture-app",
+              "signName": "fixture-sign",
+              "templateId": "fixture-template",
+              "region": "ap-beijing",
+              "templateParams": [
+                "{code}",
+                "{ttlMinutes}"
+              ],
+              "codeTtlSec": 300,
+              "resendCooldownSec": 60,
+              "maxSendsPerHour": 5,
+              "maxVerifyAttempts": 3
+            },
+            "secretRefs": {
+              "secretId": "sms.original-version.secretId",
+              "secretKey": "sms.original-version.secretKey"
+            },
+            "updatedBy": "original-writer",
+            "updatedAt": 17
+          },
+          "updated_by": "fixture-actor",
+          "created_at": 1800000000123,
+          "updated_at": 1800000000123
+        },
+        {
+          "setting_key": "platform.v1.sms",
+          "value_json": {
+            "version": "frozen-next-version",
+            "config": {
+              "enabled": true,
+              "mockDelivery": false,
+              "sdkAppId": "fixture-app",
+              "signName": "fixture-sign",
+              "templateId": "fixture-template",
+              "region": "ap-beijing",
+              "templateParams": [
+                "{code}",
+                "{ttlMinutes}"
+              ],
+              "codeTtlSec": 300,
+              "resendCooldownSec": 60,
+              "maxSendsPerHour": 5,
+              "maxVerifyAttempts": 3
+            },
+            "secretRefs": {
+              "secretId": "sms.frozen-next-version.secretId",
+              "secretKey": "sms.frozen-next-version.secretKey"
+            },
+            "updatedBy": "fixture-actor",
+            "updatedAt": 1800000000123
+          },
+          "updated_by": "fixture-actor",
+          "created_at": 7,
+          "updated_at": 1800000000123
+        },
+        {
+          "setting_key": "unrelated",
+          "value_json": {
+            "keep": true
+          },
+          "updated_by": "unrelated-writer",
+          "created_at": 9,
+          "updated_at": 10
+        }
+      ]
+    }
+  ]
+}

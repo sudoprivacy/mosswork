@@ -12,7 +12,9 @@ import subprocess
 from pathlib import Path
 
 PROJECT_WORKFLOWS = {
+    ".github/workflows/mosswork-browser-ci.yml",
     ".github/workflows/mosswork-ci.yml",
+    ".github/workflows/mosswork-dashboard-ci.yml",
     ".github/workflows/mosswork-identity-ci.yml",
     ".github/workflows/mosswork-release.yml",
     ".github/workflows/mosswork-desktop-update.yml",
@@ -86,7 +88,7 @@ def excluded(name: str) -> bool:
     if any(name.startswith(item) if item.endswith("/") else name == item for item in EXCLUDED):
         return True
     parts = Path(name).parts
-    if any(part in {"__pycache__", ".venv", ".pytest_cache"} for part in parts):
+    if any(part in {"__pycache__", ".venv", ".pytest_cache", ".cache"} for part in parts):
         return True
     if "node_modules" in parts and not name.startswith(
         "src/octop/infra/agents/experts/library/meituan-living-assistant/skills/meituan-deals/scripts/node_modules/"

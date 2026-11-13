@@ -16,6 +16,7 @@ from octop.infra.identity.canonical import (
     CanonicalSnapshotService,
     SqliteCanonicalSnapshotStore,
     VerifiedHumanPrincipal,
+    has_signed_scope,
 )
 
 # sudoprivacy/moss@d0b84d4c8fd5905d9ec3f7c160f2ce633f535d0d:
@@ -153,6 +154,8 @@ async def test_preserves_one_human_and_distinct_real_company_members(canonical_d
     assert home.session_id is None
     assert home.credential_id == "verified-access-jti"
     assert home.credential_expires_at == _NOW + 300
+    assert home.scopes == ()
+    assert not has_signed_scope(home.scopes, "sessions:create")
     assert home.auth_app == "sudowork"
     assert home.key_id == "phone-login"
     assert canonical_db.read_bytes() == before
@@ -311,6 +314,14 @@ async def test_http_fields_are_not_promoted_to_a_verified_principal(canonical_db
     with pytest.raises(MossworkError) as caught:
         await service.snapshot("opaque-token")
     assert caught.value.status == 401
+
+
+async def test_mutable_scope_container_cannot_become_a_capability(canonical_db: Path) -> None:
+    scopes = ["*"]
+    with pytest.raises(MossworkError) as caught:
+        await _service(canonical_db, _principal(scopes=scopes)).snapshot("opaque-token")
+    assert caught.value.status == 401
+    assert not has_signed_scope(scopes, "sessions:create")  # type: ignore[arg-type]
 
 
 async def test_authority_failure_is_unavailable_not_absent(canonical_db: Path) -> None:

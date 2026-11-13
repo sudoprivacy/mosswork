@@ -1,0 +1,5550 @@
+{
+  "sourceCommit": "d0b84d4c8fd5905d9ec3f7c160f2ce633f535d0d",
+  "sourceHashes": {
+    "src/server/auth/service.ts": "4670964f241ed457d3104c6b2b92abe020dea37b6cff393e9aab797309be71fa",
+    "src/server/authCenter/db.ts": "f83b7ad772d28b54160315f96a7e3cd20648006cef4da5afd6082241c5571b0d",
+    "src/server/auth/token.ts": "825bc53f4037f7fdc90b8e46e1a4f1a73390e0070db1c6bd39f5691383f0bbb8",
+    "src/server/auth/roles.ts": "0c66eae89ab998d1a956a21d2c024f4edee0b838aecdcb7437b3ec821df08f90",
+    "src/server/server.ts": "db31af3e9145becb8ea84fca2781495fef9613000049671cb37fa6de78be30f6",
+    "src/server/identity/accountMemberships.ts": "50fbf5a23d9f3cbc56977acbefcc1b11dd00dd1b86b1a4fa5e7eefc9a77dc647"
+  },
+  "producer": "Exact original lifecycle, visibility/scope methods and hash/lookup/update SQL; real node:sqlite; fixture trusted auth and issueToken facts wrapper. Final account checks run original token.ts issuer/verifier and verifyIssuedAccessToken; only public synthetic machine JWTs in producer, no product JWT issuer",
+  "schema": "CREATE TABLE IF NOT EXISTS api_keys (\n        id TEXT PRIMARY KEY,\n        org_id TEXT NOT NULL REFERENCES organizations(id),\n        user_id TEXT NOT NULL REFERENCES users(id),\n        name TEXT NOT NULL,\n        prefix TEXT NOT NULL,\n        secret_hash TEXT NOT NULL,\n        scopes_json TEXT NOT NULL,\n        status TEXT NOT NULL DEFAULT 'active' CHECK (status IN ('active', 'revoked')),\n        created_at INTEGER NOT NULL,\n        last_used_at INTEGER\n      );",
+  "now": 2000000000123,
+  "org": "4ce65010-7331-415a-abaa-4d47387d845e",
+  "otherOrg": "d3f29104-c19b-4594-859c-a92734c82dbb",
+  "actor": "c2cc8374-8cdf-4936-8967-d891fb500634",
+  "target": "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb",
+  "otherTarget": "cccccccc-cccc-4ccc-8ccc-cccccccccccc",
+  "root": "root-department",
+  "child": "child-department",
+  "outside": "outside-department",
+  "originalKeyId": "dddddddd-dddd-4ddd-8ddd-dddddddddddd",
+  "generatedId": "ffffffff-ffff-4fff-8fff-ffffffffffff",
+  "originalPlainKey": "moss_sk_dddddddd-dddd-4ddd-8ddd-dddddddddddd.public-fixture-existing-secret",
+  "cases": [
+    {
+      "name": "admin_create",
+      "operation": "create",
+      "users": [
+        {
+          "id": "c2cc8374-8cdf-4936-8967-d891fb500634",
+          "org_id": "4ce65010-7331-415a-abaa-4d47387d845e",
+          "email": "home@example.test",
+          "name": "c2cc8374-8cdf-4936-8967-d891fb500634",
+          "department_id": "root-department",
+          "role": "admin",
+          "status": "active",
+          "membership_revision": 0,
+          "password_hash": null,
+          "password_updated_at": null,
+          "last_login_at": null,
+          "created_at": 1
+        },
+        {
+          "id": "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb",
+          "org_id": "4ce65010-7331-415a-abaa-4d47387d845e",
+          "email": "target@example.test",
+          "name": "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb",
+          "department_id": "child-department",
+          "role": "user",
+          "status": "active",
+          "membership_revision": 0,
+          "password_hash": null,
+          "password_updated_at": null,
+          "last_login_at": null,
+          "created_at": 1
+        },
+        {
+          "id": "cccccccc-cccc-4ccc-8ccc-cccccccccccc",
+          "org_id": "4ce65010-7331-415a-abaa-4d47387d845e",
+          "email": "outside@example.test",
+          "name": "cccccccc-cccc-4ccc-8ccc-cccccccccccc",
+          "department_id": "outside-department",
+          "role": "user",
+          "status": "active",
+          "membership_revision": 0,
+          "password_hash": null,
+          "password_updated_at": null,
+          "last_login_at": null,
+          "created_at": 1
+        }
+      ],
+      "departments": [
+        {
+          "id": "root-department",
+          "org_id": "4ce65010-7331-415a-abaa-4d47387d845e",
+          "parent_id": null,
+          "name": "root-department",
+          "created_at": 1,
+          "updated_at": 1
+        },
+        {
+          "id": "child-department",
+          "org_id": "4ce65010-7331-415a-abaa-4d47387d845e",
+          "parent_id": "root-department",
+          "name": "child-department",
+          "created_at": 1,
+          "updated_at": 1
+        },
+        {
+          "id": "outside-department",
+          "org_id": "4ce65010-7331-415a-abaa-4d47387d845e",
+          "parent_id": null,
+          "name": "outside-department",
+          "created_at": 1,
+          "updated_at": 1
+        }
+      ],
+      "accounts": [],
+      "links": [],
+      "beforeKeys": [
+        {
+          "id": "dddddddd-dddd-4ddd-8ddd-dddddddddddd",
+          "org_id": "4ce65010-7331-415a-abaa-4d47387d845e",
+          "user_id": "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb",
+          "name": "retained",
+          "prefix": "moss_sk_dddddddd",
+          "secret_hash": "39a3606378fe299cf39201bf9c36643b49bd2125f58916c18ef1f993960ed523",
+          "scopes_json": "[\"sessions:list\"]",
+          "status": "active",
+          "created_at": 1,
+          "last_used_at": null
+        },
+        {
+          "id": "eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee",
+          "org_id": "4ce65010-7331-415a-abaa-4d47387d845e",
+          "user_id": "cccccccc-cccc-4ccc-8ccc-cccccccccccc",
+          "name": "retained",
+          "prefix": "moss_sk_eeeeeeee",
+          "secret_hash": "39a3606378fe299cf39201bf9c36643b49bd2125f58916c18ef1f993960ed523",
+          "scopes_json": "[\"sessions:list\"]",
+          "status": "active",
+          "created_at": 2,
+          "last_used_at": null
+        }
+      ],
+      "requestedName": "  Test Key  ",
+      "requestedScopes": [
+        "sessions:list"
+      ],
+      "result": {
+        "api_key": {
+          "id": "ffffffff-ffff-4fff-8fff-ffffffffffff",
+          "orgId": "4ce65010-7331-415a-abaa-4d47387d845e",
+          "userId": "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb",
+          "name": "Test Key",
+          "prefix": "moss_sk_ffffffff",
+          "scopes": [
+            "sessions:list"
+          ],
+          "status": "active",
+          "createdAt": 2000000000123,
+          "lastUsedAt": null
+        },
+        "plain_text_key": "moss_sk_ffffffff-ffff-4fff-8fff-ffffffffffff.AAECAwQFBgcICQoLDA0ODxAREhMUFRYX"
+      },
+      "error": null,
+      "afterKeys": [
+        {
+          "id": "dddddddd-dddd-4ddd-8ddd-dddddddddddd",
+          "org_id": "4ce65010-7331-415a-abaa-4d47387d845e",
+          "user_id": "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb",
+          "name": "retained",
+          "prefix": "moss_sk_dddddddd",
+          "secret_hash": "39a3606378fe299cf39201bf9c36643b49bd2125f58916c18ef1f993960ed523",
+          "scopes_json": "[\"sessions:list\"]",
+          "status": "active",
+          "created_at": 1,
+          "last_used_at": null
+        },
+        {
+          "id": "eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee",
+          "org_id": "4ce65010-7331-415a-abaa-4d47387d845e",
+          "user_id": "cccccccc-cccc-4ccc-8ccc-cccccccccccc",
+          "name": "retained",
+          "prefix": "moss_sk_eeeeeeee",
+          "secret_hash": "39a3606378fe299cf39201bf9c36643b49bd2125f58916c18ef1f993960ed523",
+          "scopes_json": "[\"sessions:list\"]",
+          "status": "active",
+          "created_at": 2,
+          "last_used_at": null
+        },
+        {
+          "id": "ffffffff-ffff-4fff-8fff-ffffffffffff",
+          "org_id": "4ce65010-7331-415a-abaa-4d47387d845e",
+          "user_id": "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb",
+          "name": "Test Key",
+          "prefix": "moss_sk_ffffffff",
+          "secret_hash": "bffcb3cc4ae9b1be18646be4a2902233285f09e73e64b88a821c94fedf788462",
+          "scopes_json": "[\"sessions:list\"]",
+          "status": "active",
+          "created_at": 2000000000123,
+          "last_used_at": null
+        }
+      ]
+    },
+    {
+      "name": "trim_duplicates",
+      "operation": "create",
+      "users": [
+        {
+          "id": "c2cc8374-8cdf-4936-8967-d891fb500634",
+          "org_id": "4ce65010-7331-415a-abaa-4d47387d845e",
+          "email": "home@example.test",
+          "name": "c2cc8374-8cdf-4936-8967-d891fb500634",
+          "department_id": "root-department",
+          "role": "admin",
+          "status": "active",
+          "membership_revision": 0,
+          "password_hash": null,
+          "password_updated_at": null,
+          "last_login_at": null,
+          "created_at": 1
+        },
+        {
+          "id": "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb",
+          "org_id": "4ce65010-7331-415a-abaa-4d47387d845e",
+          "email": "target@example.test",
+          "name": "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb",
+          "department_id": "child-department",
+          "role": "user",
+          "status": "active",
+          "membership_revision": 0,
+          "password_hash": null,
+          "password_updated_at": null,
+          "last_login_at": null,
+          "created_at": 1
+        },
+        {
+          "id": "cccccccc-cccc-4ccc-8ccc-cccccccccccc",
+          "org_id": "4ce65010-7331-415a-abaa-4d47387d845e",
+          "email": "outside@example.test",
+          "name": "cccccccc-cccc-4ccc-8ccc-cccccccccccc",
+          "department_id": "outside-department",
+          "role": "user",
+          "status": "active",
+          "membership_revision": 0,
+          "password_hash": null,
+          "password_updated_at": null,
+          "last_login_at": null,
+          "created_at": 1
+        }
+      ],
+      "departments": [
+        {
+          "id": "root-department",
+          "org_id": "4ce65010-7331-415a-abaa-4d47387d845e",
+          "parent_id": null,
+          "name": "root-department",
+          "created_at": 1,
+          "updated_at": 1
+        },
+        {
+          "id": "child-department",
+          "org_id": "4ce65010-7331-415a-abaa-4d47387d845e",
+          "parent_id": "root-department",
+          "name": "child-department",
+          "created_at": 1,
+          "updated_at": 1
+        },
+        {
+          "id": "outside-department",
+          "org_id": "4ce65010-7331-415a-abaa-4d47387d845e",
+          "parent_id": null,
+          "name": "outside-department",
+          "created_at": 1,
+          "updated_at": 1
+        }
+      ],
+      "accounts": [],
+      "links": [],
+      "beforeKeys": [
+        {
+          "id": "dddddddd-dddd-4ddd-8ddd-dddddddddddd",
+          "org_id": "4ce65010-7331-415a-abaa-4d47387d845e",
+          "user_id": "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb",
+          "name": "retained",
+          "prefix": "moss_sk_dddddddd",
+          "secret_hash": "39a3606378fe299cf39201bf9c36643b49bd2125f58916c18ef1f993960ed523",
+          "scopes_json": "[\"sessions:list\"]",
+          "status": "active",
+          "created_at": 1,
+          "last_used_at": null
+        },
+        {
+          "id": "eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee",
+          "org_id": "4ce65010-7331-415a-abaa-4d47387d845e",
+          "user_id": "cccccccc-cccc-4ccc-8ccc-cccccccccccc",
+          "name": "retained",
+          "prefix": "moss_sk_eeeeeeee",
+          "secret_hash": "39a3606378fe299cf39201bf9c36643b49bd2125f58916c18ef1f993960ed523",
+          "scopes_json": "[\"sessions:list\"]",
+          "status": "active",
+          "created_at": 2,
+          "last_used_at": null
+        }
+      ],
+      "requestedName": "  Test Key  ",
+      "requestedScopes": [
+        " sessions:list ",
+        "",
+        "sessions:list"
+      ],
+      "result": {
+        "api_key": {
+          "id": "ffffffff-ffff-4fff-8fff-ffffffffffff",
+          "orgId": "4ce65010-7331-415a-abaa-4d47387d845e",
+          "userId": "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb",
+          "name": "Test Key",
+          "prefix": "moss_sk_ffffffff",
+          "scopes": [
+            "sessions:list",
+            "sessions:list"
+          ],
+          "status": "active",
+          "createdAt": 2000000000123,
+          "lastUsedAt": null
+        },
+        "plain_text_key": "moss_sk_ffffffff-ffff-4fff-8fff-ffffffffffff.AAECAwQFBgcICQoLDA0ODxAREhMUFRYX"
+      },
+      "error": null,
+      "afterKeys": [
+        {
+          "id": "dddddddd-dddd-4ddd-8ddd-dddddddddddd",
+          "org_id": "4ce65010-7331-415a-abaa-4d47387d845e",
+          "user_id": "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb",
+          "name": "retained",
+          "prefix": "moss_sk_dddddddd",
+          "secret_hash": "39a3606378fe299cf39201bf9c36643b49bd2125f58916c18ef1f993960ed523",
+          "scopes_json": "[\"sessions:list\"]",
+          "status": "active",
+          "created_at": 1,
+          "last_used_at": null
+        },
+        {
+          "id": "eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee",
+          "org_id": "4ce65010-7331-415a-abaa-4d47387d845e",
+          "user_id": "cccccccc-cccc-4ccc-8ccc-cccccccccccc",
+          "name": "retained",
+          "prefix": "moss_sk_eeeeeeee",
+          "secret_hash": "39a3606378fe299cf39201bf9c36643b49bd2125f58916c18ef1f993960ed523",
+          "scopes_json": "[\"sessions:list\"]",
+          "status": "active",
+          "created_at": 2,
+          "last_used_at": null
+        },
+        {
+          "id": "ffffffff-ffff-4fff-8fff-ffffffffffff",
+          "org_id": "4ce65010-7331-415a-abaa-4d47387d845e",
+          "user_id": "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb",
+          "name": "Test Key",
+          "prefix": "moss_sk_ffffffff",
+          "secret_hash": "bffcb3cc4ae9b1be18646be4a2902233285f09e73e64b88a821c94fedf788462",
+          "scopes_json": "[\"sessions:list\",\"sessions:list\"]",
+          "status": "active",
+          "created_at": 2000000000123,
+          "last_used_at": null
+        }
+      ]
+    },
+    {
+      "name": "admin_wide_scope",
+      "operation": "create",
+      "users": [
+        {
+          "id": "c2cc8374-8cdf-4936-8967-d891fb500634",
+          "org_id": "4ce65010-7331-415a-abaa-4d47387d845e",
+          "email": "home@example.test",
+          "name": "c2cc8374-8cdf-4936-8967-d891fb500634",
+          "department_id": "root-department",
+          "role": "admin",
+          "status": "active",
+          "membership_revision": 0,
+          "password_hash": null,
+          "password_updated_at": null,
+          "last_login_at": null,
+          "created_at": 1
+        },
+        {
+          "id": "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb",
+          "org_id": "4ce65010-7331-415a-abaa-4d47387d845e",
+          "email": "target@example.test",
+          "name": "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb",
+          "department_id": "child-department",
+          "role": "user",
+          "status": "active",
+          "membership_revision": 0,
+          "password_hash": null,
+          "password_updated_at": null,
+          "last_login_at": null,
+          "created_at": 1
+        },
+        {
+          "id": "cccccccc-cccc-4ccc-8ccc-cccccccccccc",
+          "org_id": "4ce65010-7331-415a-abaa-4d47387d845e",
+          "email": "outside@example.test",
+          "name": "cccccccc-cccc-4ccc-8ccc-cccccccccccc",
+          "department_id": "outside-department",
+          "role": "user",
+          "status": "active",
+          "membership_revision": 0,
+          "password_hash": null,
+          "password_updated_at": null,
+          "last_login_at": null,
+          "created_at": 1
+        }
+      ],
+      "departments": [
+        {
+          "id": "root-department",
+          "org_id": "4ce65010-7331-415a-abaa-4d47387d845e",
+          "parent_id": null,
+          "name": "root-department",
+          "created_at": 1,
+          "updated_at": 1
+        },
+        {
+          "id": "child-department",
+          "org_id": "4ce65010-7331-415a-abaa-4d47387d845e",
+          "parent_id": "root-department",
+          "name": "child-department",
+          "created_at": 1,
+          "updated_at": 1
+        },
+        {
+          "id": "outside-department",
+          "org_id": "4ce65010-7331-415a-abaa-4d47387d845e",
+          "parent_id": null,
+          "name": "outside-department",
+          "created_at": 1,
+          "updated_at": 1
+        }
+      ],
+      "accounts": [],
+      "links": [],
+      "beforeKeys": [
+        {
+          "id": "dddddddd-dddd-4ddd-8ddd-dddddddddddd",
+          "org_id": "4ce65010-7331-415a-abaa-4d47387d845e",
+          "user_id": "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb",
+          "name": "retained",
+          "prefix": "moss_sk_dddddddd",
+          "secret_hash": "39a3606378fe299cf39201bf9c36643b49bd2125f58916c18ef1f993960ed523",
+          "scopes_json": "[\"sessions:list\"]",
+          "status": "active",
+          "created_at": 1,
+          "last_used_at": null
+        },
+        {
+          "id": "eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee",
+          "org_id": "4ce65010-7331-415a-abaa-4d47387d845e",
+          "user_id": "cccccccc-cccc-4ccc-8ccc-cccccccccccc",
+          "name": "retained",
+          "prefix": "moss_sk_eeeeeeee",
+          "secret_hash": "39a3606378fe299cf39201bf9c36643b49bd2125f58916c18ef1f993960ed523",
+          "scopes_json": "[\"sessions:list\"]",
+          "status": "active",
+          "created_at": 2,
+          "last_used_at": null
+        }
+      ],
+      "requestedName": "  Test Key  ",
+      "requestedScopes": [
+        "*",
+        "future:arbitrary"
+      ],
+      "result": {
+        "api_key": {
+          "id": "ffffffff-ffff-4fff-8fff-ffffffffffff",
+          "orgId": "4ce65010-7331-415a-abaa-4d47387d845e",
+          "userId": "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb",
+          "name": "Test Key",
+          "prefix": "moss_sk_ffffffff",
+          "scopes": [
+            "*",
+            "future:arbitrary"
+          ],
+          "status": "active",
+          "createdAt": 2000000000123,
+          "lastUsedAt": null
+        },
+        "plain_text_key": "moss_sk_ffffffff-ffff-4fff-8fff-ffffffffffff.AAECAwQFBgcICQoLDA0ODxAREhMUFRYX"
+      },
+      "error": null,
+      "afterKeys": [
+        {
+          "id": "dddddddd-dddd-4ddd-8ddd-dddddddddddd",
+          "org_id": "4ce65010-7331-415a-abaa-4d47387d845e",
+          "user_id": "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb",
+          "name": "retained",
+          "prefix": "moss_sk_dddddddd",
+          "secret_hash": "39a3606378fe299cf39201bf9c36643b49bd2125f58916c18ef1f993960ed523",
+          "scopes_json": "[\"sessions:list\"]",
+          "status": "active",
+          "created_at": 1,
+          "last_used_at": null
+        },
+        {
+          "id": "eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee",
+          "org_id": "4ce65010-7331-415a-abaa-4d47387d845e",
+          "user_id": "cccccccc-cccc-4ccc-8ccc-cccccccccccc",
+          "name": "retained",
+          "prefix": "moss_sk_eeeeeeee",
+          "secret_hash": "39a3606378fe299cf39201bf9c36643b49bd2125f58916c18ef1f993960ed523",
+          "scopes_json": "[\"sessions:list\"]",
+          "status": "active",
+          "created_at": 2,
+          "last_used_at": null
+        },
+        {
+          "id": "ffffffff-ffff-4fff-8fff-ffffffffffff",
+          "org_id": "4ce65010-7331-415a-abaa-4d47387d845e",
+          "user_id": "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb",
+          "name": "Test Key",
+          "prefix": "moss_sk_ffffffff",
+          "secret_hash": "bffcb3cc4ae9b1be18646be4a2902233285f09e73e64b88a821c94fedf788462",
+          "scopes_json": "[\"*\",\"future:arbitrary\"]",
+          "status": "active",
+          "created_at": 2000000000123,
+          "last_used_at": null
+        }
+      ]
+    },
+    {
+      "name": "super_admin_create",
+      "operation": "create",
+      "users": [
+        {
+          "id": "c2cc8374-8cdf-4936-8967-d891fb500634",
+          "org_id": "4ce65010-7331-415a-abaa-4d47387d845e",
+          "email": "home@example.test",
+          "name": "c2cc8374-8cdf-4936-8967-d891fb500634",
+          "department_id": "root-department",
+          "role": "super_admin",
+          "status": "active",
+          "membership_revision": 0,
+          "password_hash": null,
+          "password_updated_at": null,
+          "last_login_at": null,
+          "created_at": 1
+        },
+        {
+          "id": "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb",
+          "org_id": "4ce65010-7331-415a-abaa-4d47387d845e",
+          "email": "target@example.test",
+          "name": "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb",
+          "department_id": "child-department",
+          "role": "user",
+          "status": "active",
+          "membership_revision": 0,
+          "password_hash": null,
+          "password_updated_at": null,
+          "last_login_at": null,
+          "created_at": 1
+        },
+        {
+          "id": "cccccccc-cccc-4ccc-8ccc-cccccccccccc",
+          "org_id": "4ce65010-7331-415a-abaa-4d47387d845e",
+          "email": "outside@example.test",
+          "name": "cccccccc-cccc-4ccc-8ccc-cccccccccccc",
+          "department_id": "outside-department",
+          "role": "user",
+          "status": "active",
+          "membership_revision": 0,
+          "password_hash": null,
+          "password_updated_at": null,
+          "last_login_at": null,
+          "created_at": 1
+        }
+      ],
+      "departments": [
+        {
+          "id": "root-department",
+          "org_id": "4ce65010-7331-415a-abaa-4d47387d845e",
+          "parent_id": null,
+          "name": "root-department",
+          "created_at": 1,
+          "updated_at": 1
+        },
+        {
+          "id": "child-department",
+          "org_id": "4ce65010-7331-415a-abaa-4d47387d845e",
+          "parent_id": "root-department",
+          "name": "child-department",
+          "created_at": 1,
+          "updated_at": 1
+        },
+        {
+          "id": "outside-department",
+          "org_id": "4ce65010-7331-415a-abaa-4d47387d845e",
+          "parent_id": null,
+          "name": "outside-department",
+          "created_at": 1,
+          "updated_at": 1
+        }
+      ],
+      "accounts": [],
+      "links": [],
+      "beforeKeys": [
+        {
+          "id": "dddddddd-dddd-4ddd-8ddd-dddddddddddd",
+          "org_id": "4ce65010-7331-415a-abaa-4d47387d845e",
+          "user_id": "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb",
+          "name": "retained",
+          "prefix": "moss_sk_dddddddd",
+          "secret_hash": "39a3606378fe299cf39201bf9c36643b49bd2125f58916c18ef1f993960ed523",
+          "scopes_json": "[\"sessions:list\"]",
+          "status": "active",
+          "created_at": 1,
+          "last_used_at": null
+        },
+        {
+          "id": "eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee",
+          "org_id": "4ce65010-7331-415a-abaa-4d47387d845e",
+          "user_id": "cccccccc-cccc-4ccc-8ccc-cccccccccccc",
+          "name": "retained",
+          "prefix": "moss_sk_eeeeeeee",
+          "secret_hash": "39a3606378fe299cf39201bf9c36643b49bd2125f58916c18ef1f993960ed523",
+          "scopes_json": "[\"sessions:list\"]",
+          "status": "active",
+          "created_at": 2,
+          "last_used_at": null
+        }
+      ],
+      "requestedName": "  Test Key  ",
+      "requestedScopes": [
+        "sessions:list"
+      ],
+      "result": {
+        "api_key": {
+          "id": "ffffffff-ffff-4fff-8fff-ffffffffffff",
+          "orgId": "4ce65010-7331-415a-abaa-4d47387d845e",
+          "userId": "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb",
+          "name": "Test Key",
+          "prefix": "moss_sk_ffffffff",
+          "scopes": [
+            "sessions:list"
+          ],
+          "status": "active",
+          "createdAt": 2000000000123,
+          "lastUsedAt": null
+        },
+        "plain_text_key": "moss_sk_ffffffff-ffff-4fff-8fff-ffffffffffff.AAECAwQFBgcICQoLDA0ODxAREhMUFRYX"
+      },
+      "error": null,
+      "afterKeys": [
+        {
+          "id": "dddddddd-dddd-4ddd-8ddd-dddddddddddd",
+          "org_id": "4ce65010-7331-415a-abaa-4d47387d845e",
+          "user_id": "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb",
+          "name": "retained",
+          "prefix": "moss_sk_dddddddd",
+          "secret_hash": "39a3606378fe299cf39201bf9c36643b49bd2125f58916c18ef1f993960ed523",
+          "scopes_json": "[\"sessions:list\"]",
+          "status": "active",
+          "created_at": 1,
+          "last_used_at": null
+        },
+        {
+          "id": "eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee",
+          "org_id": "4ce65010-7331-415a-abaa-4d47387d845e",
+          "user_id": "cccccccc-cccc-4ccc-8ccc-cccccccccccc",
+          "name": "retained",
+          "prefix": "moss_sk_eeeeeeee",
+          "secret_hash": "39a3606378fe299cf39201bf9c36643b49bd2125f58916c18ef1f993960ed523",
+          "scopes_json": "[\"sessions:list\"]",
+          "status": "active",
+          "created_at": 2,
+          "last_used_at": null
+        },
+        {
+          "id": "ffffffff-ffff-4fff-8fff-ffffffffffff",
+          "org_id": "4ce65010-7331-415a-abaa-4d47387d845e",
+          "user_id": "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb",
+          "name": "Test Key",
+          "prefix": "moss_sk_ffffffff",
+          "secret_hash": "bffcb3cc4ae9b1be18646be4a2902233285f09e73e64b88a821c94fedf788462",
+          "scopes_json": "[\"sessions:list\"]",
+          "status": "active",
+          "created_at": 2000000000123,
+          "last_used_at": null
+        }
+      ]
+    },
+    {
+      "name": "disabled_target",
+      "operation": "create",
+      "users": [
+        {
+          "id": "c2cc8374-8cdf-4936-8967-d891fb500634",
+          "org_id": "4ce65010-7331-415a-abaa-4d47387d845e",
+          "email": "home@example.test",
+          "name": "c2cc8374-8cdf-4936-8967-d891fb500634",
+          "department_id": "root-department",
+          "role": "admin",
+          "status": "active",
+          "membership_revision": 0,
+          "password_hash": null,
+          "password_updated_at": null,
+          "last_login_at": null,
+          "created_at": 1
+        },
+        {
+          "id": "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb",
+          "org_id": "4ce65010-7331-415a-abaa-4d47387d845e",
+          "email": "target@example.test",
+          "name": "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb",
+          "department_id": "child-department",
+          "role": "user",
+          "status": "disabled",
+          "membership_revision": 0,
+          "password_hash": null,
+          "password_updated_at": null,
+          "last_login_at": null,
+          "created_at": 1
+        },
+        {
+          "id": "cccccccc-cccc-4ccc-8ccc-cccccccccccc",
+          "org_id": "4ce65010-7331-415a-abaa-4d47387d845e",
+          "email": "outside@example.test",
+          "name": "cccccccc-cccc-4ccc-8ccc-cccccccccccc",
+          "department_id": "outside-department",
+          "role": "user",
+          "status": "active",
+          "membership_revision": 0,
+          "password_hash": null,
+          "password_updated_at": null,
+          "last_login_at": null,
+          "created_at": 1
+        }
+      ],
+      "departments": [
+        {
+          "id": "root-department",
+          "org_id": "4ce65010-7331-415a-abaa-4d47387d845e",
+          "parent_id": null,
+          "name": "root-department",
+          "created_at": 1,
+          "updated_at": 1
+        },
+        {
+          "id": "child-department",
+          "org_id": "4ce65010-7331-415a-abaa-4d47387d845e",
+          "parent_id": "root-department",
+          "name": "child-department",
+          "created_at": 1,
+          "updated_at": 1
+        },
+        {
+          "id": "outside-department",
+          "org_id": "4ce65010-7331-415a-abaa-4d47387d845e",
+          "parent_id": null,
+          "name": "outside-department",
+          "created_at": 1,
+          "updated_at": 1
+        }
+      ],
+      "accounts": [],
+      "links": [],
+      "beforeKeys": [
+        {
+          "id": "dddddddd-dddd-4ddd-8ddd-dddddddddddd",
+          "org_id": "4ce65010-7331-415a-abaa-4d47387d845e",
+          "user_id": "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb",
+          "name": "retained",
+          "prefix": "moss_sk_dddddddd",
+          "secret_hash": "39a3606378fe299cf39201bf9c36643b49bd2125f58916c18ef1f993960ed523",
+          "scopes_json": "[\"sessions:list\"]",
+          "status": "active",
+          "created_at": 1,
+          "last_used_at": null
+        },
+        {
+          "id": "eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee",
+          "org_id": "4ce65010-7331-415a-abaa-4d47387d845e",
+          "user_id": "cccccccc-cccc-4ccc-8ccc-cccccccccccc",
+          "name": "retained",
+          "prefix": "moss_sk_eeeeeeee",
+          "secret_hash": "39a3606378fe299cf39201bf9c36643b49bd2125f58916c18ef1f993960ed523",
+          "scopes_json": "[\"sessions:list\"]",
+          "status": "active",
+          "created_at": 2,
+          "last_used_at": null
+        }
+      ],
+      "requestedName": "  Test Key  ",
+      "requestedScopes": [
+        "sessions:list"
+      ],
+      "result": {
+        "api_key": {
+          "id": "ffffffff-ffff-4fff-8fff-ffffffffffff",
+          "orgId": "4ce65010-7331-415a-abaa-4d47387d845e",
+          "userId": "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb",
+          "name": "Test Key",
+          "prefix": "moss_sk_ffffffff",
+          "scopes": [
+            "sessions:list"
+          ],
+          "status": "active",
+          "createdAt": 2000000000123,
+          "lastUsedAt": null
+        },
+        "plain_text_key": "moss_sk_ffffffff-ffff-4fff-8fff-ffffffffffff.AAECAwQFBgcICQoLDA0ODxAREhMUFRYX"
+      },
+      "error": null,
+      "afterKeys": [
+        {
+          "id": "dddddddd-dddd-4ddd-8ddd-dddddddddddd",
+          "org_id": "4ce65010-7331-415a-abaa-4d47387d845e",
+          "user_id": "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb",
+          "name": "retained",
+          "prefix": "moss_sk_dddddddd",
+          "secret_hash": "39a3606378fe299cf39201bf9c36643b49bd2125f58916c18ef1f993960ed523",
+          "scopes_json": "[\"sessions:list\"]",
+          "status": "active",
+          "created_at": 1,
+          "last_used_at": null
+        },
+        {
+          "id": "eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee",
+          "org_id": "4ce65010-7331-415a-abaa-4d47387d845e",
+          "user_id": "cccccccc-cccc-4ccc-8ccc-cccccccccccc",
+          "name": "retained",
+          "prefix": "moss_sk_eeeeeeee",
+          "secret_hash": "39a3606378fe299cf39201bf9c36643b49bd2125f58916c18ef1f993960ed523",
+          "scopes_json": "[\"sessions:list\"]",
+          "status": "active",
+          "created_at": 2,
+          "last_used_at": null
+        },
+        {
+          "id": "ffffffff-ffff-4fff-8fff-ffffffffffff",
+          "org_id": "4ce65010-7331-415a-abaa-4d47387d845e",
+          "user_id": "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb",
+          "name": "Test Key",
+          "prefix": "moss_sk_ffffffff",
+          "secret_hash": "bffcb3cc4ae9b1be18646be4a2902233285f09e73e64b88a821c94fedf788462",
+          "scopes_json": "[\"sessions:list\"]",
+          "status": "active",
+          "created_at": 2000000000123,
+          "last_used_at": null
+        }
+      ]
+    },
+    {
+      "name": "foreign_target",
+      "operation": "create",
+      "users": [
+        {
+          "id": "c2cc8374-8cdf-4936-8967-d891fb500634",
+          "org_id": "4ce65010-7331-415a-abaa-4d47387d845e",
+          "email": "home@example.test",
+          "name": "c2cc8374-8cdf-4936-8967-d891fb500634",
+          "department_id": "root-department",
+          "role": "admin",
+          "status": "active",
+          "membership_revision": 0,
+          "password_hash": null,
+          "password_updated_at": null,
+          "last_login_at": null,
+          "created_at": 1
+        },
+        {
+          "id": "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb",
+          "org_id": "d3f29104-c19b-4594-859c-a92734c82dbb",
+          "email": "target@example.test",
+          "name": "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb",
+          "department_id": "child-department",
+          "role": "user",
+          "status": "active",
+          "membership_revision": 0,
+          "password_hash": null,
+          "password_updated_at": null,
+          "last_login_at": null,
+          "created_at": 1
+        },
+        {
+          "id": "cccccccc-cccc-4ccc-8ccc-cccccccccccc",
+          "org_id": "4ce65010-7331-415a-abaa-4d47387d845e",
+          "email": "outside@example.test",
+          "name": "cccccccc-cccc-4ccc-8ccc-cccccccccccc",
+          "department_id": "outside-department",
+          "role": "user",
+          "status": "active",
+          "membership_revision": 0,
+          "password_hash": null,
+          "password_updated_at": null,
+          "last_login_at": null,
+          "created_at": 1
+        }
+      ],
+      "departments": [
+        {
+          "id": "root-department",
+          "org_id": "4ce65010-7331-415a-abaa-4d47387d845e",
+          "parent_id": null,
+          "name": "root-department",
+          "created_at": 1,
+          "updated_at": 1
+        },
+        {
+          "id": "child-department",
+          "org_id": "4ce65010-7331-415a-abaa-4d47387d845e",
+          "parent_id": "root-department",
+          "name": "child-department",
+          "created_at": 1,
+          "updated_at": 1
+        },
+        {
+          "id": "outside-department",
+          "org_id": "4ce65010-7331-415a-abaa-4d47387d845e",
+          "parent_id": null,
+          "name": "outside-department",
+          "created_at": 1,
+          "updated_at": 1
+        }
+      ],
+      "accounts": [],
+      "links": [],
+      "beforeKeys": [
+        {
+          "id": "dddddddd-dddd-4ddd-8ddd-dddddddddddd",
+          "org_id": "d3f29104-c19b-4594-859c-a92734c82dbb",
+          "user_id": "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb",
+          "name": "retained",
+          "prefix": "moss_sk_dddddddd",
+          "secret_hash": "39a3606378fe299cf39201bf9c36643b49bd2125f58916c18ef1f993960ed523",
+          "scopes_json": "[\"sessions:list\"]",
+          "status": "active",
+          "created_at": 1,
+          "last_used_at": null
+        },
+        {
+          "id": "eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee",
+          "org_id": "4ce65010-7331-415a-abaa-4d47387d845e",
+          "user_id": "cccccccc-cccc-4ccc-8ccc-cccccccccccc",
+          "name": "retained",
+          "prefix": "moss_sk_eeeeeeee",
+          "secret_hash": "39a3606378fe299cf39201bf9c36643b49bd2125f58916c18ef1f993960ed523",
+          "scopes_json": "[\"sessions:list\"]",
+          "status": "active",
+          "created_at": 2,
+          "last_used_at": null
+        }
+      ],
+      "requestedName": "  Test Key  ",
+      "requestedScopes": [
+        "sessions:list"
+      ],
+      "result": null,
+      "error": {
+        "status": 404,
+        "message": "Unknown user_id"
+      },
+      "afterKeys": [
+        {
+          "id": "dddddddd-dddd-4ddd-8ddd-dddddddddddd",
+          "org_id": "d3f29104-c19b-4594-859c-a92734c82dbb",
+          "user_id": "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb",
+          "name": "retained",
+          "prefix": "moss_sk_dddddddd",
+          "secret_hash": "39a3606378fe299cf39201bf9c36643b49bd2125f58916c18ef1f993960ed523",
+          "scopes_json": "[\"sessions:list\"]",
+          "status": "active",
+          "created_at": 1,
+          "last_used_at": null
+        },
+        {
+          "id": "eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee",
+          "org_id": "4ce65010-7331-415a-abaa-4d47387d845e",
+          "user_id": "cccccccc-cccc-4ccc-8ccc-cccccccccccc",
+          "name": "retained",
+          "prefix": "moss_sk_eeeeeeee",
+          "secret_hash": "39a3606378fe299cf39201bf9c36643b49bd2125f58916c18ef1f993960ed523",
+          "scopes_json": "[\"sessions:list\"]",
+          "status": "active",
+          "created_at": 2,
+          "last_used_at": null
+        }
+      ]
+    },
+    {
+      "name": "dept_user_scope",
+      "operation": "create",
+      "users": [
+        {
+          "id": "c2cc8374-8cdf-4936-8967-d891fb500634",
+          "org_id": "4ce65010-7331-415a-abaa-4d47387d845e",
+          "email": "home@example.test",
+          "name": "c2cc8374-8cdf-4936-8967-d891fb500634",
+          "department_id": "root-department",
+          "role": "dept_admin",
+          "status": "active",
+          "membership_revision": 0,
+          "password_hash": null,
+          "password_updated_at": null,
+          "last_login_at": null,
+          "created_at": 1
+        },
+        {
+          "id": "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb",
+          "org_id": "4ce65010-7331-415a-abaa-4d47387d845e",
+          "email": "target@example.test",
+          "name": "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb",
+          "department_id": "child-department",
+          "role": "user",
+          "status": "active",
+          "membership_revision": 0,
+          "password_hash": null,
+          "password_updated_at": null,
+          "last_login_at": null,
+          "created_at": 1
+        },
+        {
+          "id": "cccccccc-cccc-4ccc-8ccc-cccccccccccc",
+          "org_id": "4ce65010-7331-415a-abaa-4d47387d845e",
+          "email": "outside@example.test",
+          "name": "cccccccc-cccc-4ccc-8ccc-cccccccccccc",
+          "department_id": "outside-department",
+          "role": "user",
+          "status": "active",
+          "membership_revision": 0,
+          "password_hash": null,
+          "password_updated_at": null,
+          "last_login_at": null,
+          "created_at": 1
+        }
+      ],
+      "departments": [
+        {
+          "id": "root-department",
+          "org_id": "4ce65010-7331-415a-abaa-4d47387d845e",
+          "parent_id": null,
+          "name": "root-department",
+          "created_at": 1,
+          "updated_at": 1
+        },
+        {
+          "id": "child-department",
+          "org_id": "4ce65010-7331-415a-abaa-4d47387d845e",
+          "parent_id": "root-department",
+          "name": "child-department",
+          "created_at": 1,
+          "updated_at": 1
+        },
+        {
+          "id": "outside-department",
+          "org_id": "4ce65010-7331-415a-abaa-4d47387d845e",
+          "parent_id": null,
+          "name": "outside-department",
+          "created_at": 1,
+          "updated_at": 1
+        }
+      ],
+      "accounts": [],
+      "links": [],
+      "beforeKeys": [
+        {
+          "id": "dddddddd-dddd-4ddd-8ddd-dddddddddddd",
+          "org_id": "4ce65010-7331-415a-abaa-4d47387d845e",
+          "user_id": "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb",
+          "name": "retained",
+          "prefix": "moss_sk_dddddddd",
+          "secret_hash": "39a3606378fe299cf39201bf9c36643b49bd2125f58916c18ef1f993960ed523",
+          "scopes_json": "[\"sessions:list\"]",
+          "status": "active",
+          "created_at": 1,
+          "last_used_at": null
+        },
+        {
+          "id": "eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee",
+          "org_id": "4ce65010-7331-415a-abaa-4d47387d845e",
+          "user_id": "cccccccc-cccc-4ccc-8ccc-cccccccccccc",
+          "name": "retained",
+          "prefix": "moss_sk_eeeeeeee",
+          "secret_hash": "39a3606378fe299cf39201bf9c36643b49bd2125f58916c18ef1f993960ed523",
+          "scopes_json": "[\"sessions:list\"]",
+          "status": "active",
+          "created_at": 2,
+          "last_used_at": null
+        }
+      ],
+      "requestedName": "  Test Key  ",
+      "requestedScopes": [
+        "sessions:list"
+      ],
+      "result": {
+        "api_key": {
+          "id": "ffffffff-ffff-4fff-8fff-ffffffffffff",
+          "orgId": "4ce65010-7331-415a-abaa-4d47387d845e",
+          "userId": "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb",
+          "name": "Test Key",
+          "prefix": "moss_sk_ffffffff",
+          "scopes": [
+            "sessions:list"
+          ],
+          "status": "active",
+          "createdAt": 2000000000123,
+          "lastUsedAt": null
+        },
+        "plain_text_key": "moss_sk_ffffffff-ffff-4fff-8fff-ffffffffffff.AAECAwQFBgcICQoLDA0ODxAREhMUFRYX"
+      },
+      "error": null,
+      "afterKeys": [
+        {
+          "id": "dddddddd-dddd-4ddd-8ddd-dddddddddddd",
+          "org_id": "4ce65010-7331-415a-abaa-4d47387d845e",
+          "user_id": "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb",
+          "name": "retained",
+          "prefix": "moss_sk_dddddddd",
+          "secret_hash": "39a3606378fe299cf39201bf9c36643b49bd2125f58916c18ef1f993960ed523",
+          "scopes_json": "[\"sessions:list\"]",
+          "status": "active",
+          "created_at": 1,
+          "last_used_at": null
+        },
+        {
+          "id": "eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee",
+          "org_id": "4ce65010-7331-415a-abaa-4d47387d845e",
+          "user_id": "cccccccc-cccc-4ccc-8ccc-cccccccccccc",
+          "name": "retained",
+          "prefix": "moss_sk_eeeeeeee",
+          "secret_hash": "39a3606378fe299cf39201bf9c36643b49bd2125f58916c18ef1f993960ed523",
+          "scopes_json": "[\"sessions:list\"]",
+          "status": "active",
+          "created_at": 2,
+          "last_used_at": null
+        },
+        {
+          "id": "ffffffff-ffff-4fff-8fff-ffffffffffff",
+          "org_id": "4ce65010-7331-415a-abaa-4d47387d845e",
+          "user_id": "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb",
+          "name": "Test Key",
+          "prefix": "moss_sk_ffffffff",
+          "secret_hash": "bffcb3cc4ae9b1be18646be4a2902233285f09e73e64b88a821c94fedf788462",
+          "scopes_json": "[\"sessions:list\"]",
+          "status": "active",
+          "created_at": 2000000000123,
+          "last_used_at": null
+        }
+      ]
+    },
+    {
+      "name": "dept_wide_scope",
+      "operation": "create",
+      "users": [
+        {
+          "id": "c2cc8374-8cdf-4936-8967-d891fb500634",
+          "org_id": "4ce65010-7331-415a-abaa-4d47387d845e",
+          "email": "home@example.test",
+          "name": "c2cc8374-8cdf-4936-8967-d891fb500634",
+          "department_id": "root-department",
+          "role": "dept_admin",
+          "status": "active",
+          "membership_revision": 0,
+          "password_hash": null,
+          "password_updated_at": null,
+          "last_login_at": null,
+          "created_at": 1
+        },
+        {
+          "id": "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb",
+          "org_id": "4ce65010-7331-415a-abaa-4d47387d845e",
+          "email": "target@example.test",
+          "name": "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb",
+          "department_id": "child-department",
+          "role": "user",
+          "status": "active",
+          "membership_revision": 0,
+          "password_hash": null,
+          "password_updated_at": null,
+          "last_login_at": null,
+          "created_at": 1
+        },
+        {
+          "id": "cccccccc-cccc-4ccc-8ccc-cccccccccccc",
+          "org_id": "4ce65010-7331-415a-abaa-4d47387d845e",
+          "email": "outside@example.test",
+          "name": "cccccccc-cccc-4ccc-8ccc-cccccccccccc",
+          "department_id": "outside-department",
+          "role": "user",
+          "status": "active",
+          "membership_revision": 0,
+          "password_hash": null,
+          "password_updated_at": null,
+          "last_login_at": null,
+          "created_at": 1
+        }
+      ],
+      "departments": [
+        {
+          "id": "root-department",
+          "org_id": "4ce65010-7331-415a-abaa-4d47387d845e",
+          "parent_id": null,
+          "name": "root-department",
+          "created_at": 1,
+          "updated_at": 1
+        },
+        {
+          "id": "child-department",
+          "org_id": "4ce65010-7331-415a-abaa-4d47387d845e",
+          "parent_id": "root-department",
+          "name": "child-department",
+          "created_at": 1,
+          "updated_at": 1
+        },
+        {
+          "id": "outside-department",
+          "org_id": "4ce65010-7331-415a-abaa-4d47387d845e",
+          "parent_id": null,
+          "name": "outside-department",
+          "created_at": 1,
+          "updated_at": 1
+        }
+      ],
+      "accounts": [],
+      "links": [],
+      "beforeKeys": [
+        {
+          "id": "dddddddd-dddd-4ddd-8ddd-dddddddddddd",
+          "org_id": "4ce65010-7331-415a-abaa-4d47387d845e",
+          "user_id": "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb",
+          "name": "retained",
+          "prefix": "moss_sk_dddddddd",
+          "secret_hash": "39a3606378fe299cf39201bf9c36643b49bd2125f58916c18ef1f993960ed523",
+          "scopes_json": "[\"sessions:list\"]",
+          "status": "active",
+          "created_at": 1,
+          "last_used_at": null
+        },
+        {
+          "id": "eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee",
+          "org_id": "4ce65010-7331-415a-abaa-4d47387d845e",
+          "user_id": "cccccccc-cccc-4ccc-8ccc-cccccccccccc",
+          "name": "retained",
+          "prefix": "moss_sk_eeeeeeee",
+          "secret_hash": "39a3606378fe299cf39201bf9c36643b49bd2125f58916c18ef1f993960ed523",
+          "scopes_json": "[\"sessions:list\"]",
+          "status": "active",
+          "created_at": 2,
+          "last_used_at": null
+        }
+      ],
+      "requestedName": "  Test Key  ",
+      "requestedScopes": [
+        "*"
+      ],
+      "result": null,
+      "error": {
+        "status": 403,
+        "message": "Department admin can only issue user-scoped API keys"
+      },
+      "afterKeys": [
+        {
+          "id": "dddddddd-dddd-4ddd-8ddd-dddddddddddd",
+          "org_id": "4ce65010-7331-415a-abaa-4d47387d845e",
+          "user_id": "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb",
+          "name": "retained",
+          "prefix": "moss_sk_dddddddd",
+          "secret_hash": "39a3606378fe299cf39201bf9c36643b49bd2125f58916c18ef1f993960ed523",
+          "scopes_json": "[\"sessions:list\"]",
+          "status": "active",
+          "created_at": 1,
+          "last_used_at": null
+        },
+        {
+          "id": "eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee",
+          "org_id": "4ce65010-7331-415a-abaa-4d47387d845e",
+          "user_id": "cccccccc-cccc-4ccc-8ccc-cccccccccccc",
+          "name": "retained",
+          "prefix": "moss_sk_eeeeeeee",
+          "secret_hash": "39a3606378fe299cf39201bf9c36643b49bd2125f58916c18ef1f993960ed523",
+          "scopes_json": "[\"sessions:list\"]",
+          "status": "active",
+          "created_at": 2,
+          "last_used_at": null
+        }
+      ]
+    },
+    {
+      "name": "dept_outside",
+      "operation": "create",
+      "users": [
+        {
+          "id": "c2cc8374-8cdf-4936-8967-d891fb500634",
+          "org_id": "4ce65010-7331-415a-abaa-4d47387d845e",
+          "email": "home@example.test",
+          "name": "c2cc8374-8cdf-4936-8967-d891fb500634",
+          "department_id": "root-department",
+          "role": "dept_admin",
+          "status": "active",
+          "membership_revision": 0,
+          "password_hash": null,
+          "password_updated_at": null,
+          "last_login_at": null,
+          "created_at": 1
+        },
+        {
+          "id": "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb",
+          "org_id": "4ce65010-7331-415a-abaa-4d47387d845e",
+          "email": "target@example.test",
+          "name": "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb",
+          "department_id": "outside-department",
+          "role": "user",
+          "status": "active",
+          "membership_revision": 0,
+          "password_hash": null,
+          "password_updated_at": null,
+          "last_login_at": null,
+          "created_at": 1
+        },
+        {
+          "id": "cccccccc-cccc-4ccc-8ccc-cccccccccccc",
+          "org_id": "4ce65010-7331-415a-abaa-4d47387d845e",
+          "email": "outside@example.test",
+          "name": "cccccccc-cccc-4ccc-8ccc-cccccccccccc",
+          "department_id": "outside-department",
+          "role": "user",
+          "status": "active",
+          "membership_revision": 0,
+          "password_hash": null,
+          "password_updated_at": null,
+          "last_login_at": null,
+          "created_at": 1
+        }
+      ],
+      "departments": [
+        {
+          "id": "root-department",
+          "org_id": "4ce65010-7331-415a-abaa-4d47387d845e",
+          "parent_id": null,
+          "name": "root-department",
+          "created_at": 1,
+          "updated_at": 1
+        },
+        {
+          "id": "child-department",
+          "org_id": "4ce65010-7331-415a-abaa-4d47387d845e",
+          "parent_id": "root-department",
+          "name": "child-department",
+          "created_at": 1,
+          "updated_at": 1
+        },
+        {
+          "id": "outside-department",
+          "org_id": "4ce65010-7331-415a-abaa-4d47387d845e",
+          "parent_id": null,
+          "name": "outside-department",
+          "created_at": 1,
+          "updated_at": 1
+        }
+      ],
+      "accounts": [],
+      "links": [],
+      "beforeKeys": [
+        {
+          "id": "dddddddd-dddd-4ddd-8ddd-dddddddddddd",
+          "org_id": "4ce65010-7331-415a-abaa-4d47387d845e",
+          "user_id": "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb",
+          "name": "retained",
+          "prefix": "moss_sk_dddddddd",
+          "secret_hash": "39a3606378fe299cf39201bf9c36643b49bd2125f58916c18ef1f993960ed523",
+          "scopes_json": "[\"sessions:list\"]",
+          "status": "active",
+          "created_at": 1,
+          "last_used_at": null
+        },
+        {
+          "id": "eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee",
+          "org_id": "4ce65010-7331-415a-abaa-4d47387d845e",
+          "user_id": "cccccccc-cccc-4ccc-8ccc-cccccccccccc",
+          "name": "retained",
+          "prefix": "moss_sk_eeeeeeee",
+          "secret_hash": "39a3606378fe299cf39201bf9c36643b49bd2125f58916c18ef1f993960ed523",
+          "scopes_json": "[\"sessions:list\"]",
+          "status": "active",
+          "created_at": 2,
+          "last_used_at": null
+        }
+      ],
+      "requestedName": "  Test Key  ",
+      "requestedScopes": [
+        "sessions:list"
+      ],
+      "result": null,
+      "error": {
+        "status": 403,
+        "message": "You cannot manage this user"
+      },
+      "afterKeys": [
+        {
+          "id": "dddddddd-dddd-4ddd-8ddd-dddddddddddd",
+          "org_id": "4ce65010-7331-415a-abaa-4d47387d845e",
+          "user_id": "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb",
+          "name": "retained",
+          "prefix": "moss_sk_dddddddd",
+          "secret_hash": "39a3606378fe299cf39201bf9c36643b49bd2125f58916c18ef1f993960ed523",
+          "scopes_json": "[\"sessions:list\"]",
+          "status": "active",
+          "created_at": 1,
+          "last_used_at": null
+        },
+        {
+          "id": "eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee",
+          "org_id": "4ce65010-7331-415a-abaa-4d47387d845e",
+          "user_id": "cccccccc-cccc-4ccc-8ccc-cccccccccccc",
+          "name": "retained",
+          "prefix": "moss_sk_eeeeeeee",
+          "secret_hash": "39a3606378fe299cf39201bf9c36643b49bd2125f58916c18ef1f993960ed523",
+          "scopes_json": "[\"sessions:list\"]",
+          "status": "active",
+          "created_at": 2,
+          "last_used_at": null
+        }
+      ]
+    },
+    {
+      "name": "dept_admin_target",
+      "operation": "create",
+      "users": [
+        {
+          "id": "c2cc8374-8cdf-4936-8967-d891fb500634",
+          "org_id": "4ce65010-7331-415a-abaa-4d47387d845e",
+          "email": "home@example.test",
+          "name": "c2cc8374-8cdf-4936-8967-d891fb500634",
+          "department_id": "root-department",
+          "role": "dept_admin",
+          "status": "active",
+          "membership_revision": 0,
+          "password_hash": null,
+          "password_updated_at": null,
+          "last_login_at": null,
+          "created_at": 1
+        },
+        {
+          "id": "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb",
+          "org_id": "4ce65010-7331-415a-abaa-4d47387d845e",
+          "email": "target@example.test",
+          "name": "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb",
+          "department_id": "child-department",
+          "role": "admin",
+          "status": "active",
+          "membership_revision": 0,
+          "password_hash": null,
+          "password_updated_at": null,
+          "last_login_at": null,
+          "created_at": 1
+        },
+        {
+          "id": "cccccccc-cccc-4ccc-8ccc-cccccccccccc",
+          "org_id": "4ce65010-7331-415a-abaa-4d47387d845e",
+          "email": "outside@example.test",
+          "name": "cccccccc-cccc-4ccc-8ccc-cccccccccccc",
+          "department_id": "outside-department",
+          "role": "user",
+          "status": "active",
+          "membership_revision": 0,
+          "password_hash": null,
+          "password_updated_at": null,
+          "last_login_at": null,
+          "created_at": 1
+        }
+      ],
+      "departments": [
+        {
+          "id": "root-department",
+          "org_id": "4ce65010-7331-415a-abaa-4d47387d845e",
+          "parent_id": null,
+          "name": "root-department",
+          "created_at": 1,
+          "updated_at": 1
+        },
+        {
+          "id": "child-department",
+          "org_id": "4ce65010-7331-415a-abaa-4d47387d845e",
+          "parent_id": "root-department",
+          "name": "child-department",
+          "created_at": 1,
+          "updated_at": 1
+        },
+        {
+          "id": "outside-department",
+          "org_id": "4ce65010-7331-415a-abaa-4d47387d845e",
+          "parent_id": null,
+          "name": "outside-department",
+          "created_at": 1,
+          "updated_at": 1
+        }
+      ],
+      "accounts": [],
+      "links": [],
+      "beforeKeys": [
+        {
+          "id": "dddddddd-dddd-4ddd-8ddd-dddddddddddd",
+          "org_id": "4ce65010-7331-415a-abaa-4d47387d845e",
+          "user_id": "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb",
+          "name": "retained",
+          "prefix": "moss_sk_dddddddd",
+          "secret_hash": "39a3606378fe299cf39201bf9c36643b49bd2125f58916c18ef1f993960ed523",
+          "scopes_json": "[\"sessions:list\"]",
+          "status": "active",
+          "created_at": 1,
+          "last_used_at": null
+        },
+        {
+          "id": "eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee",
+          "org_id": "4ce65010-7331-415a-abaa-4d47387d845e",
+          "user_id": "cccccccc-cccc-4ccc-8ccc-cccccccccccc",
+          "name": "retained",
+          "prefix": "moss_sk_eeeeeeee",
+          "secret_hash": "39a3606378fe299cf39201bf9c36643b49bd2125f58916c18ef1f993960ed523",
+          "scopes_json": "[\"sessions:list\"]",
+          "status": "active",
+          "created_at": 2,
+          "last_used_at": null
+        }
+      ],
+      "requestedName": "  Test Key  ",
+      "requestedScopes": [
+        "sessions:list"
+      ],
+      "result": null,
+      "error": {
+        "status": 403,
+        "message": "You cannot manage this user"
+      },
+      "afterKeys": [
+        {
+          "id": "dddddddd-dddd-4ddd-8ddd-dddddddddddd",
+          "org_id": "4ce65010-7331-415a-abaa-4d47387d845e",
+          "user_id": "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb",
+          "name": "retained",
+          "prefix": "moss_sk_dddddddd",
+          "secret_hash": "39a3606378fe299cf39201bf9c36643b49bd2125f58916c18ef1f993960ed523",
+          "scopes_json": "[\"sessions:list\"]",
+          "status": "active",
+          "created_at": 1,
+          "last_used_at": null
+        },
+        {
+          "id": "eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee",
+          "org_id": "4ce65010-7331-415a-abaa-4d47387d845e",
+          "user_id": "cccccccc-cccc-4ccc-8ccc-cccccccccccc",
+          "name": "retained",
+          "prefix": "moss_sk_eeeeeeee",
+          "secret_hash": "39a3606378fe299cf39201bf9c36643b49bd2125f58916c18ef1f993960ed523",
+          "scopes_json": "[\"sessions:list\"]",
+          "status": "active",
+          "created_at": 2,
+          "last_used_at": null
+        }
+      ]
+    },
+    {
+      "name": "dept_no_department",
+      "operation": "create",
+      "users": [
+        {
+          "id": "c2cc8374-8cdf-4936-8967-d891fb500634",
+          "org_id": "4ce65010-7331-415a-abaa-4d47387d845e",
+          "email": "home@example.test",
+          "name": "c2cc8374-8cdf-4936-8967-d891fb500634",
+          "department_id": null,
+          "role": "dept_admin",
+          "status": "active",
+          "membership_revision": 0,
+          "password_hash": null,
+          "password_updated_at": null,
+          "last_login_at": null,
+          "created_at": 1
+        },
+        {
+          "id": "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb",
+          "org_id": "4ce65010-7331-415a-abaa-4d47387d845e",
+          "email": "target@example.test",
+          "name": "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb",
+          "department_id": "child-department",
+          "role": "user",
+          "status": "active",
+          "membership_revision": 0,
+          "password_hash": null,
+          "password_updated_at": null,
+          "last_login_at": null,
+          "created_at": 1
+        },
+        {
+          "id": "cccccccc-cccc-4ccc-8ccc-cccccccccccc",
+          "org_id": "4ce65010-7331-415a-abaa-4d47387d845e",
+          "email": "outside@example.test",
+          "name": "cccccccc-cccc-4ccc-8ccc-cccccccccccc",
+          "department_id": "outside-department",
+          "role": "user",
+          "status": "active",
+          "membership_revision": 0,
+          "password_hash": null,
+          "password_updated_at": null,
+          "last_login_at": null,
+          "created_at": 1
+        }
+      ],
+      "departments": [
+        {
+          "id": "root-department",
+          "org_id": "4ce65010-7331-415a-abaa-4d47387d845e",
+          "parent_id": null,
+          "name": "root-department",
+          "created_at": 1,
+          "updated_at": 1
+        },
+        {
+          "id": "child-department",
+          "org_id": "4ce65010-7331-415a-abaa-4d47387d845e",
+          "parent_id": "root-department",
+          "name": "child-department",
+          "created_at": 1,
+          "updated_at": 1
+        },
+        {
+          "id": "outside-department",
+          "org_id": "4ce65010-7331-415a-abaa-4d47387d845e",
+          "parent_id": null,
+          "name": "outside-department",
+          "created_at": 1,
+          "updated_at": 1
+        }
+      ],
+      "accounts": [],
+      "links": [],
+      "beforeKeys": [
+        {
+          "id": "dddddddd-dddd-4ddd-8ddd-dddddddddddd",
+          "org_id": "4ce65010-7331-415a-abaa-4d47387d845e",
+          "user_id": "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb",
+          "name": "retained",
+          "prefix": "moss_sk_dddddddd",
+          "secret_hash": "39a3606378fe299cf39201bf9c36643b49bd2125f58916c18ef1f993960ed523",
+          "scopes_json": "[\"sessions:list\"]",
+          "status": "active",
+          "created_at": 1,
+          "last_used_at": null
+        },
+        {
+          "id": "eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee",
+          "org_id": "4ce65010-7331-415a-abaa-4d47387d845e",
+          "user_id": "cccccccc-cccc-4ccc-8ccc-cccccccccccc",
+          "name": "retained",
+          "prefix": "moss_sk_eeeeeeee",
+          "secret_hash": "39a3606378fe299cf39201bf9c36643b49bd2125f58916c18ef1f993960ed523",
+          "scopes_json": "[\"sessions:list\"]",
+          "status": "active",
+          "created_at": 2,
+          "last_used_at": null
+        }
+      ],
+      "requestedName": "  Test Key  ",
+      "requestedScopes": [
+        "sessions:list"
+      ],
+      "result": null,
+      "error": {
+        "status": 403,
+        "message": "You cannot manage this user"
+      },
+      "afterKeys": [
+        {
+          "id": "dddddddd-dddd-4ddd-8ddd-dddddddddddd",
+          "org_id": "4ce65010-7331-415a-abaa-4d47387d845e",
+          "user_id": "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb",
+          "name": "retained",
+          "prefix": "moss_sk_dddddddd",
+          "secret_hash": "39a3606378fe299cf39201bf9c36643b49bd2125f58916c18ef1f993960ed523",
+          "scopes_json": "[\"sessions:list\"]",
+          "status": "active",
+          "created_at": 1,
+          "last_used_at": null
+        },
+        {
+          "id": "eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee",
+          "org_id": "4ce65010-7331-415a-abaa-4d47387d845e",
+          "user_id": "cccccccc-cccc-4ccc-8ccc-cccccccccccc",
+          "name": "retained",
+          "prefix": "moss_sk_eeeeeeee",
+          "secret_hash": "39a3606378fe299cf39201bf9c36643b49bd2125f58916c18ef1f993960ed523",
+          "scopes_json": "[\"sessions:list\"]",
+          "status": "active",
+          "created_at": 2,
+          "last_used_at": null
+        }
+      ]
+    },
+    {
+      "name": "ordinary_user",
+      "operation": "create",
+      "users": [
+        {
+          "id": "c2cc8374-8cdf-4936-8967-d891fb500634",
+          "org_id": "4ce65010-7331-415a-abaa-4d47387d845e",
+          "email": "home@example.test",
+          "name": "c2cc8374-8cdf-4936-8967-d891fb500634",
+          "department_id": "root-department",
+          "role": "user",
+          "status": "active",
+          "membership_revision": 0,
+          "password_hash": null,
+          "password_updated_at": null,
+          "last_login_at": null,
+          "created_at": 1
+        },
+        {
+          "id": "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb",
+          "org_id": "4ce65010-7331-415a-abaa-4d47387d845e",
+          "email": "target@example.test",
+          "name": "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb",
+          "department_id": "child-department",
+          "role": "user",
+          "status": "active",
+          "membership_revision": 0,
+          "password_hash": null,
+          "password_updated_at": null,
+          "last_login_at": null,
+          "created_at": 1
+        },
+        {
+          "id": "cccccccc-cccc-4ccc-8ccc-cccccccccccc",
+          "org_id": "4ce65010-7331-415a-abaa-4d47387d845e",
+          "email": "outside@example.test",
+          "name": "cccccccc-cccc-4ccc-8ccc-cccccccccccc",
+          "department_id": "outside-department",
+          "role": "user",
+          "status": "active",
+          "membership_revision": 0,
+          "password_hash": null,
+          "password_updated_at": null,
+          "last_login_at": null,
+          "created_at": 1
+        }
+      ],
+      "departments": [
+        {
+          "id": "root-department",
+          "org_id": "4ce65010-7331-415a-abaa-4d47387d845e",
+          "parent_id": null,
+          "name": "root-department",
+          "created_at": 1,
+          "updated_at": 1
+        },
+        {
+          "id": "child-department",
+          "org_id": "4ce65010-7331-415a-abaa-4d47387d845e",
+          "parent_id": "root-department",
+          "name": "child-department",
+          "created_at": 1,
+          "updated_at": 1
+        },
+        {
+          "id": "outside-department",
+          "org_id": "4ce65010-7331-415a-abaa-4d47387d845e",
+          "parent_id": null,
+          "name": "outside-department",
+          "created_at": 1,
+          "updated_at": 1
+        }
+      ],
+      "accounts": [],
+      "links": [],
+      "beforeKeys": [
+        {
+          "id": "dddddddd-dddd-4ddd-8ddd-dddddddddddd",
+          "org_id": "4ce65010-7331-415a-abaa-4d47387d845e",
+          "user_id": "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb",
+          "name": "retained",
+          "prefix": "moss_sk_dddddddd",
+          "secret_hash": "39a3606378fe299cf39201bf9c36643b49bd2125f58916c18ef1f993960ed523",
+          "scopes_json": "[\"sessions:list\"]",
+          "status": "active",
+          "created_at": 1,
+          "last_used_at": null
+        },
+        {
+          "id": "eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee",
+          "org_id": "4ce65010-7331-415a-abaa-4d47387d845e",
+          "user_id": "cccccccc-cccc-4ccc-8ccc-cccccccccccc",
+          "name": "retained",
+          "prefix": "moss_sk_eeeeeeee",
+          "secret_hash": "39a3606378fe299cf39201bf9c36643b49bd2125f58916c18ef1f993960ed523",
+          "scopes_json": "[\"sessions:list\"]",
+          "status": "active",
+          "created_at": 2,
+          "last_used_at": null
+        }
+      ],
+      "requestedName": "  Test Key  ",
+      "requestedScopes": [
+        "sessions:list"
+      ],
+      "result": null,
+      "error": {
+        "status": 403,
+        "message": "You cannot manage this user"
+      },
+      "afterKeys": [
+        {
+          "id": "dddddddd-dddd-4ddd-8ddd-dddddddddddd",
+          "org_id": "4ce65010-7331-415a-abaa-4d47387d845e",
+          "user_id": "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb",
+          "name": "retained",
+          "prefix": "moss_sk_dddddddd",
+          "secret_hash": "39a3606378fe299cf39201bf9c36643b49bd2125f58916c18ef1f993960ed523",
+          "scopes_json": "[\"sessions:list\"]",
+          "status": "active",
+          "created_at": 1,
+          "last_used_at": null
+        },
+        {
+          "id": "eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee",
+          "org_id": "4ce65010-7331-415a-abaa-4d47387d845e",
+          "user_id": "cccccccc-cccc-4ccc-8ccc-cccccccccccc",
+          "name": "retained",
+          "prefix": "moss_sk_eeeeeeee",
+          "secret_hash": "39a3606378fe299cf39201bf9c36643b49bd2125f58916c18ef1f993960ed523",
+          "scopes_json": "[\"sessions:list\"]",
+          "status": "active",
+          "created_at": 2,
+          "last_used_at": null
+        }
+      ]
+    },
+    {
+      "name": "empty_name",
+      "operation": "create",
+      "users": [
+        {
+          "id": "c2cc8374-8cdf-4936-8967-d891fb500634",
+          "org_id": "4ce65010-7331-415a-abaa-4d47387d845e",
+          "email": "home@example.test",
+          "name": "c2cc8374-8cdf-4936-8967-d891fb500634",
+          "department_id": "root-department",
+          "role": "admin",
+          "status": "active",
+          "membership_revision": 0,
+          "password_hash": null,
+          "password_updated_at": null,
+          "last_login_at": null,
+          "created_at": 1
+        },
+        {
+          "id": "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb",
+          "org_id": "4ce65010-7331-415a-abaa-4d47387d845e",
+          "email": "target@example.test",
+          "name": "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb",
+          "department_id": "child-department",
+          "role": "user",
+          "status": "active",
+          "membership_revision": 0,
+          "password_hash": null,
+          "password_updated_at": null,
+          "last_login_at": null,
+          "created_at": 1
+        },
+        {
+          "id": "cccccccc-cccc-4ccc-8ccc-cccccccccccc",
+          "org_id": "4ce65010-7331-415a-abaa-4d47387d845e",
+          "email": "outside@example.test",
+          "name": "cccccccc-cccc-4ccc-8ccc-cccccccccccc",
+          "department_id": "outside-department",
+          "role": "user",
+          "status": "active",
+          "membership_revision": 0,
+          "password_hash": null,
+          "password_updated_at": null,
+          "last_login_at": null,
+          "created_at": 1
+        }
+      ],
+      "departments": [
+        {
+          "id": "root-department",
+          "org_id": "4ce65010-7331-415a-abaa-4d47387d845e",
+          "parent_id": null,
+          "name": "root-department",
+          "created_at": 1,
+          "updated_at": 1
+        },
+        {
+          "id": "child-department",
+          "org_id": "4ce65010-7331-415a-abaa-4d47387d845e",
+          "parent_id": "root-department",
+          "name": "child-department",
+          "created_at": 1,
+          "updated_at": 1
+        },
+        {
+          "id": "outside-department",
+          "org_id": "4ce65010-7331-415a-abaa-4d47387d845e",
+          "parent_id": null,
+          "name": "outside-department",
+          "created_at": 1,
+          "updated_at": 1
+        }
+      ],
+      "accounts": [],
+      "links": [],
+      "beforeKeys": [
+        {
+          "id": "dddddddd-dddd-4ddd-8ddd-dddddddddddd",
+          "org_id": "4ce65010-7331-415a-abaa-4d47387d845e",
+          "user_id": "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb",
+          "name": "retained",
+          "prefix": "moss_sk_dddddddd",
+          "secret_hash": "39a3606378fe299cf39201bf9c36643b49bd2125f58916c18ef1f993960ed523",
+          "scopes_json": "[\"sessions:list\"]",
+          "status": "active",
+          "created_at": 1,
+          "last_used_at": null
+        },
+        {
+          "id": "eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee",
+          "org_id": "4ce65010-7331-415a-abaa-4d47387d845e",
+          "user_id": "cccccccc-cccc-4ccc-8ccc-cccccccccccc",
+          "name": "retained",
+          "prefix": "moss_sk_eeeeeeee",
+          "secret_hash": "39a3606378fe299cf39201bf9c36643b49bd2125f58916c18ef1f993960ed523",
+          "scopes_json": "[\"sessions:list\"]",
+          "status": "active",
+          "created_at": 2,
+          "last_used_at": null
+        }
+      ],
+      "requestedName": "  ",
+      "requestedScopes": [
+        "sessions:list"
+      ],
+      "result": null,
+      "error": {
+        "status": 400,
+        "message": "Missing name or scopes"
+      },
+      "afterKeys": [
+        {
+          "id": "dddddddd-dddd-4ddd-8ddd-dddddddddddd",
+          "org_id": "4ce65010-7331-415a-abaa-4d47387d845e",
+          "user_id": "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb",
+          "name": "retained",
+          "prefix": "moss_sk_dddddddd",
+          "secret_hash": "39a3606378fe299cf39201bf9c36643b49bd2125f58916c18ef1f993960ed523",
+          "scopes_json": "[\"sessions:list\"]",
+          "status": "active",
+          "created_at": 1,
+          "last_used_at": null
+        },
+        {
+          "id": "eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee",
+          "org_id": "4ce65010-7331-415a-abaa-4d47387d845e",
+          "user_id": "cccccccc-cccc-4ccc-8ccc-cccccccccccc",
+          "name": "retained",
+          "prefix": "moss_sk_eeeeeeee",
+          "secret_hash": "39a3606378fe299cf39201bf9c36643b49bd2125f58916c18ef1f993960ed523",
+          "scopes_json": "[\"sessions:list\"]",
+          "status": "active",
+          "created_at": 2,
+          "last_used_at": null
+        }
+      ]
+    },
+    {
+      "name": "empty_scope",
+      "operation": "create",
+      "users": [
+        {
+          "id": "c2cc8374-8cdf-4936-8967-d891fb500634",
+          "org_id": "4ce65010-7331-415a-abaa-4d47387d845e",
+          "email": "home@example.test",
+          "name": "c2cc8374-8cdf-4936-8967-d891fb500634",
+          "department_id": "root-department",
+          "role": "admin",
+          "status": "active",
+          "membership_revision": 0,
+          "password_hash": null,
+          "password_updated_at": null,
+          "last_login_at": null,
+          "created_at": 1
+        },
+        {
+          "id": "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb",
+          "org_id": "4ce65010-7331-415a-abaa-4d47387d845e",
+          "email": "target@example.test",
+          "name": "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb",
+          "department_id": "child-department",
+          "role": "user",
+          "status": "active",
+          "membership_revision": 0,
+          "password_hash": null,
+          "password_updated_at": null,
+          "last_login_at": null,
+          "created_at": 1
+        },
+        {
+          "id": "cccccccc-cccc-4ccc-8ccc-cccccccccccc",
+          "org_id": "4ce65010-7331-415a-abaa-4d47387d845e",
+          "email": "outside@example.test",
+          "name": "cccccccc-cccc-4ccc-8ccc-cccccccccccc",
+          "department_id": "outside-department",
+          "role": "user",
+          "status": "active",
+          "membership_revision": 0,
+          "password_hash": null,
+          "password_updated_at": null,
+          "last_login_at": null,
+          "created_at": 1
+        }
+      ],
+      "departments": [
+        {
+          "id": "root-department",
+          "org_id": "4ce65010-7331-415a-abaa-4d47387d845e",
+          "parent_id": null,
+          "name": "root-department",
+          "created_at": 1,
+          "updated_at": 1
+        },
+        {
+          "id": "child-department",
+          "org_id": "4ce65010-7331-415a-abaa-4d47387d845e",
+          "parent_id": "root-department",
+          "name": "child-department",
+          "created_at": 1,
+          "updated_at": 1
+        },
+        {
+          "id": "outside-department",
+          "org_id": "4ce65010-7331-415a-abaa-4d47387d845e",
+          "parent_id": null,
+          "name": "outside-department",
+          "created_at": 1,
+          "updated_at": 1
+        }
+      ],
+      "accounts": [],
+      "links": [],
+      "beforeKeys": [
+        {
+          "id": "dddddddd-dddd-4ddd-8ddd-dddddddddddd",
+          "org_id": "4ce65010-7331-415a-abaa-4d47387d845e",
+          "user_id": "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb",
+          "name": "retained",
+          "prefix": "moss_sk_dddddddd",
+          "secret_hash": "39a3606378fe299cf39201bf9c36643b49bd2125f58916c18ef1f993960ed523",
+          "scopes_json": "[\"sessions:list\"]",
+          "status": "active",
+          "created_at": 1,
+          "last_used_at": null
+        },
+        {
+          "id": "eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee",
+          "org_id": "4ce65010-7331-415a-abaa-4d47387d845e",
+          "user_id": "cccccccc-cccc-4ccc-8ccc-cccccccccccc",
+          "name": "retained",
+          "prefix": "moss_sk_eeeeeeee",
+          "secret_hash": "39a3606378fe299cf39201bf9c36643b49bd2125f58916c18ef1f993960ed523",
+          "scopes_json": "[\"sessions:list\"]",
+          "status": "active",
+          "created_at": 2,
+          "last_used_at": null
+        }
+      ],
+      "requestedName": "  Test Key  ",
+      "requestedScopes": [
+        " "
+      ],
+      "result": null,
+      "error": {
+        "status": 400,
+        "message": "Missing name or scopes"
+      },
+      "afterKeys": [
+        {
+          "id": "dddddddd-dddd-4ddd-8ddd-dddddddddddd",
+          "org_id": "4ce65010-7331-415a-abaa-4d47387d845e",
+          "user_id": "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb",
+          "name": "retained",
+          "prefix": "moss_sk_dddddddd",
+          "secret_hash": "39a3606378fe299cf39201bf9c36643b49bd2125f58916c18ef1f993960ed523",
+          "scopes_json": "[\"sessions:list\"]",
+          "status": "active",
+          "created_at": 1,
+          "last_used_at": null
+        },
+        {
+          "id": "eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee",
+          "org_id": "4ce65010-7331-415a-abaa-4d47387d845e",
+          "user_id": "cccccccc-cccc-4ccc-8ccc-cccccccccccc",
+          "name": "retained",
+          "prefix": "moss_sk_eeeeeeee",
+          "secret_hash": "39a3606378fe299cf39201bf9c36643b49bd2125f58916c18ef1f993960ed523",
+          "scopes_json": "[\"sessions:list\"]",
+          "status": "active",
+          "created_at": 2,
+          "last_used_at": null
+        }
+      ]
+    },
+    {
+      "name": "key_collision",
+      "operation": "create",
+      "users": [
+        {
+          "id": "c2cc8374-8cdf-4936-8967-d891fb500634",
+          "org_id": "4ce65010-7331-415a-abaa-4d47387d845e",
+          "email": "home@example.test",
+          "name": "c2cc8374-8cdf-4936-8967-d891fb500634",
+          "department_id": "root-department",
+          "role": "admin",
+          "status": "active",
+          "membership_revision": 0,
+          "password_hash": null,
+          "password_updated_at": null,
+          "last_login_at": null,
+          "created_at": 1
+        },
+        {
+          "id": "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb",
+          "org_id": "4ce65010-7331-415a-abaa-4d47387d845e",
+          "email": "target@example.test",
+          "name": "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb",
+          "department_id": "child-department",
+          "role": "user",
+          "status": "active",
+          "membership_revision": 0,
+          "password_hash": null,
+          "password_updated_at": null,
+          "last_login_at": null,
+          "created_at": 1
+        },
+        {
+          "id": "cccccccc-cccc-4ccc-8ccc-cccccccccccc",
+          "org_id": "4ce65010-7331-415a-abaa-4d47387d845e",
+          "email": "outside@example.test",
+          "name": "cccccccc-cccc-4ccc-8ccc-cccccccccccc",
+          "department_id": "outside-department",
+          "role": "user",
+          "status": "active",
+          "membership_revision": 0,
+          "password_hash": null,
+          "password_updated_at": null,
+          "last_login_at": null,
+          "created_at": 1
+        }
+      ],
+      "departments": [
+        {
+          "id": "root-department",
+          "org_id": "4ce65010-7331-415a-abaa-4d47387d845e",
+          "parent_id": null,
+          "name": "root-department",
+          "created_at": 1,
+          "updated_at": 1
+        },
+        {
+          "id": "child-department",
+          "org_id": "4ce65010-7331-415a-abaa-4d47387d845e",
+          "parent_id": "root-department",
+          "name": "child-department",
+          "created_at": 1,
+          "updated_at": 1
+        },
+        {
+          "id": "outside-department",
+          "org_id": "4ce65010-7331-415a-abaa-4d47387d845e",
+          "parent_id": null,
+          "name": "outside-department",
+          "created_at": 1,
+          "updated_at": 1
+        }
+      ],
+      "accounts": [],
+      "links": [],
+      "beforeKeys": [
+        {
+          "id": "dddddddd-dddd-4ddd-8ddd-dddddddddddd",
+          "org_id": "4ce65010-7331-415a-abaa-4d47387d845e",
+          "user_id": "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb",
+          "name": "retained",
+          "prefix": "moss_sk_dddddddd",
+          "secret_hash": "39a3606378fe299cf39201bf9c36643b49bd2125f58916c18ef1f993960ed523",
+          "scopes_json": "[\"sessions:list\"]",
+          "status": "active",
+          "created_at": 1,
+          "last_used_at": null
+        },
+        {
+          "id": "eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee",
+          "org_id": "4ce65010-7331-415a-abaa-4d47387d845e",
+          "user_id": "cccccccc-cccc-4ccc-8ccc-cccccccccccc",
+          "name": "retained",
+          "prefix": "moss_sk_eeeeeeee",
+          "secret_hash": "39a3606378fe299cf39201bf9c36643b49bd2125f58916c18ef1f993960ed523",
+          "scopes_json": "[\"sessions:list\"]",
+          "status": "active",
+          "created_at": 2,
+          "last_used_at": null
+        }
+      ],
+      "requestedName": "  Test Key  ",
+      "requestedScopes": [
+        "sessions:list"
+      ],
+      "result": null,
+      "error": {
+        "status": null,
+        "message": "UNIQUE constraint failed: api_keys.id"
+      },
+      "afterKeys": [
+        {
+          "id": "dddddddd-dddd-4ddd-8ddd-dddddddddddd",
+          "org_id": "4ce65010-7331-415a-abaa-4d47387d845e",
+          "user_id": "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb",
+          "name": "retained",
+          "prefix": "moss_sk_dddddddd",
+          "secret_hash": "39a3606378fe299cf39201bf9c36643b49bd2125f58916c18ef1f993960ed523",
+          "scopes_json": "[\"sessions:list\"]",
+          "status": "active",
+          "created_at": 1,
+          "last_used_at": null
+        },
+        {
+          "id": "eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee",
+          "org_id": "4ce65010-7331-415a-abaa-4d47387d845e",
+          "user_id": "cccccccc-cccc-4ccc-8ccc-cccccccccccc",
+          "name": "retained",
+          "prefix": "moss_sk_eeeeeeee",
+          "secret_hash": "39a3606378fe299cf39201bf9c36643b49bd2125f58916c18ef1f993960ed523",
+          "scopes_json": "[\"sessions:list\"]",
+          "status": "active",
+          "created_at": 2,
+          "last_used_at": null
+        }
+      ]
+    },
+    {
+      "name": "admin_list",
+      "operation": "list",
+      "users": [
+        {
+          "id": "c2cc8374-8cdf-4936-8967-d891fb500634",
+          "org_id": "4ce65010-7331-415a-abaa-4d47387d845e",
+          "email": "home@example.test",
+          "name": "c2cc8374-8cdf-4936-8967-d891fb500634",
+          "department_id": "root-department",
+          "role": "admin",
+          "status": "active",
+          "membership_revision": 0,
+          "password_hash": null,
+          "password_updated_at": null,
+          "last_login_at": null,
+          "created_at": 1
+        },
+        {
+          "id": "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb",
+          "org_id": "4ce65010-7331-415a-abaa-4d47387d845e",
+          "email": "target@example.test",
+          "name": "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb",
+          "department_id": "child-department",
+          "role": "user",
+          "status": "active",
+          "membership_revision": 0,
+          "password_hash": null,
+          "password_updated_at": null,
+          "last_login_at": null,
+          "created_at": 1
+        },
+        {
+          "id": "cccccccc-cccc-4ccc-8ccc-cccccccccccc",
+          "org_id": "4ce65010-7331-415a-abaa-4d47387d845e",
+          "email": "outside@example.test",
+          "name": "cccccccc-cccc-4ccc-8ccc-cccccccccccc",
+          "department_id": "outside-department",
+          "role": "user",
+          "status": "active",
+          "membership_revision": 0,
+          "password_hash": null,
+          "password_updated_at": null,
+          "last_login_at": null,
+          "created_at": 1
+        }
+      ],
+      "departments": [
+        {
+          "id": "root-department",
+          "org_id": "4ce65010-7331-415a-abaa-4d47387d845e",
+          "parent_id": null,
+          "name": "root-department",
+          "created_at": 1,
+          "updated_at": 1
+        },
+        {
+          "id": "child-department",
+          "org_id": "4ce65010-7331-415a-abaa-4d47387d845e",
+          "parent_id": "root-department",
+          "name": "child-department",
+          "created_at": 1,
+          "updated_at": 1
+        },
+        {
+          "id": "outside-department",
+          "org_id": "4ce65010-7331-415a-abaa-4d47387d845e",
+          "parent_id": null,
+          "name": "outside-department",
+          "created_at": 1,
+          "updated_at": 1
+        }
+      ],
+      "accounts": [],
+      "links": [],
+      "beforeKeys": [
+        {
+          "id": "dddddddd-dddd-4ddd-8ddd-dddddddddddd",
+          "org_id": "4ce65010-7331-415a-abaa-4d47387d845e",
+          "user_id": "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb",
+          "name": "retained",
+          "prefix": "moss_sk_dddddddd",
+          "secret_hash": "39a3606378fe299cf39201bf9c36643b49bd2125f58916c18ef1f993960ed523",
+          "scopes_json": "[\"sessions:list\"]",
+          "status": "active",
+          "created_at": 1,
+          "last_used_at": null
+        },
+        {
+          "id": "eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee",
+          "org_id": "4ce65010-7331-415a-abaa-4d47387d845e",
+          "user_id": "cccccccc-cccc-4ccc-8ccc-cccccccccccc",
+          "name": "retained",
+          "prefix": "moss_sk_eeeeeeee",
+          "secret_hash": "39a3606378fe299cf39201bf9c36643b49bd2125f58916c18ef1f993960ed523",
+          "scopes_json": "[\"sessions:list\"]",
+          "status": "active",
+          "created_at": 2,
+          "last_used_at": null
+        }
+      ],
+      "requestedName": "  Test Key  ",
+      "requestedScopes": [
+        "sessions:list"
+      ],
+      "result": [
+        {
+          "id": "dddddddd-dddd-4ddd-8ddd-dddddddddddd",
+          "orgId": "4ce65010-7331-415a-abaa-4d47387d845e",
+          "userId": "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb",
+          "name": "retained",
+          "prefix": "moss_sk_dddddddd",
+          "scopes": [
+            "sessions:list"
+          ],
+          "status": "active",
+          "createdAt": 1,
+          "lastUsedAt": null
+        },
+        {
+          "id": "eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee",
+          "orgId": "4ce65010-7331-415a-abaa-4d47387d845e",
+          "userId": "cccccccc-cccc-4ccc-8ccc-cccccccccccc",
+          "name": "retained",
+          "prefix": "moss_sk_eeeeeeee",
+          "scopes": [
+            "sessions:list"
+          ],
+          "status": "active",
+          "createdAt": 2,
+          "lastUsedAt": null
+        }
+      ],
+      "error": null,
+      "afterKeys": [
+        {
+          "id": "dddddddd-dddd-4ddd-8ddd-dddddddddddd",
+          "org_id": "4ce65010-7331-415a-abaa-4d47387d845e",
+          "user_id": "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb",
+          "name": "retained",
+          "prefix": "moss_sk_dddddddd",
+          "secret_hash": "39a3606378fe299cf39201bf9c36643b49bd2125f58916c18ef1f993960ed523",
+          "scopes_json": "[\"sessions:list\"]",
+          "status": "active",
+          "created_at": 1,
+          "last_used_at": null
+        },
+        {
+          "id": "eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee",
+          "org_id": "4ce65010-7331-415a-abaa-4d47387d845e",
+          "user_id": "cccccccc-cccc-4ccc-8ccc-cccccccccccc",
+          "name": "retained",
+          "prefix": "moss_sk_eeeeeeee",
+          "secret_hash": "39a3606378fe299cf39201bf9c36643b49bd2125f58916c18ef1f993960ed523",
+          "scopes_json": "[\"sessions:list\"]",
+          "status": "active",
+          "created_at": 2,
+          "last_used_at": null
+        }
+      ]
+    },
+    {
+      "name": "dept_list",
+      "operation": "list",
+      "users": [
+        {
+          "id": "c2cc8374-8cdf-4936-8967-d891fb500634",
+          "org_id": "4ce65010-7331-415a-abaa-4d47387d845e",
+          "email": "home@example.test",
+          "name": "c2cc8374-8cdf-4936-8967-d891fb500634",
+          "department_id": "root-department",
+          "role": "dept_admin",
+          "status": "active",
+          "membership_revision": 0,
+          "password_hash": null,
+          "password_updated_at": null,
+          "last_login_at": null,
+          "created_at": 1
+        },
+        {
+          "id": "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb",
+          "org_id": "4ce65010-7331-415a-abaa-4d47387d845e",
+          "email": "target@example.test",
+          "name": "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb",
+          "department_id": "child-department",
+          "role": "user",
+          "status": "active",
+          "membership_revision": 0,
+          "password_hash": null,
+          "password_updated_at": null,
+          "last_login_at": null,
+          "created_at": 1
+        },
+        {
+          "id": "cccccccc-cccc-4ccc-8ccc-cccccccccccc",
+          "org_id": "4ce65010-7331-415a-abaa-4d47387d845e",
+          "email": "outside@example.test",
+          "name": "cccccccc-cccc-4ccc-8ccc-cccccccccccc",
+          "department_id": "outside-department",
+          "role": "user",
+          "status": "active",
+          "membership_revision": 0,
+          "password_hash": null,
+          "password_updated_at": null,
+          "last_login_at": null,
+          "created_at": 1
+        }
+      ],
+      "departments": [
+        {
+          "id": "root-department",
+          "org_id": "4ce65010-7331-415a-abaa-4d47387d845e",
+          "parent_id": null,
+          "name": "root-department",
+          "created_at": 1,
+          "updated_at": 1
+        },
+        {
+          "id": "child-department",
+          "org_id": "4ce65010-7331-415a-abaa-4d47387d845e",
+          "parent_id": "root-department",
+          "name": "child-department",
+          "created_at": 1,
+          "updated_at": 1
+        },
+        {
+          "id": "outside-department",
+          "org_id": "4ce65010-7331-415a-abaa-4d47387d845e",
+          "parent_id": null,
+          "name": "outside-department",
+          "created_at": 1,
+          "updated_at": 1
+        }
+      ],
+      "accounts": [],
+      "links": [],
+      "beforeKeys": [
+        {
+          "id": "dddddddd-dddd-4ddd-8ddd-dddddddddddd",
+          "org_id": "4ce65010-7331-415a-abaa-4d47387d845e",
+          "user_id": "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb",
+          "name": "retained",
+          "prefix": "moss_sk_dddddddd",
+          "secret_hash": "39a3606378fe299cf39201bf9c36643b49bd2125f58916c18ef1f993960ed523",
+          "scopes_json": "[\"sessions:list\"]",
+          "status": "active",
+          "created_at": 1,
+          "last_used_at": null
+        },
+        {
+          "id": "eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee",
+          "org_id": "4ce65010-7331-415a-abaa-4d47387d845e",
+          "user_id": "cccccccc-cccc-4ccc-8ccc-cccccccccccc",
+          "name": "retained",
+          "prefix": "moss_sk_eeeeeeee",
+          "secret_hash": "39a3606378fe299cf39201bf9c36643b49bd2125f58916c18ef1f993960ed523",
+          "scopes_json": "[\"sessions:list\"]",
+          "status": "active",
+          "created_at": 2,
+          "last_used_at": null
+        }
+      ],
+      "requestedName": "  Test Key  ",
+      "requestedScopes": [
+        "sessions:list"
+      ],
+      "result": [
+        {
+          "id": "dddddddd-dddd-4ddd-8ddd-dddddddddddd",
+          "orgId": "4ce65010-7331-415a-abaa-4d47387d845e",
+          "userId": "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb",
+          "name": "retained",
+          "prefix": "moss_sk_dddddddd",
+          "scopes": [
+            "sessions:list"
+          ],
+          "status": "active",
+          "createdAt": 1,
+          "lastUsedAt": null
+        }
+      ],
+      "error": null,
+      "afterKeys": [
+        {
+          "id": "dddddddd-dddd-4ddd-8ddd-dddddddddddd",
+          "org_id": "4ce65010-7331-415a-abaa-4d47387d845e",
+          "user_id": "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb",
+          "name": "retained",
+          "prefix": "moss_sk_dddddddd",
+          "secret_hash": "39a3606378fe299cf39201bf9c36643b49bd2125f58916c18ef1f993960ed523",
+          "scopes_json": "[\"sessions:list\"]",
+          "status": "active",
+          "created_at": 1,
+          "last_used_at": null
+        },
+        {
+          "id": "eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee",
+          "org_id": "4ce65010-7331-415a-abaa-4d47387d845e",
+          "user_id": "cccccccc-cccc-4ccc-8ccc-cccccccccccc",
+          "name": "retained",
+          "prefix": "moss_sk_eeeeeeee",
+          "secret_hash": "39a3606378fe299cf39201bf9c36643b49bd2125f58916c18ef1f993960ed523",
+          "scopes_json": "[\"sessions:list\"]",
+          "status": "active",
+          "created_at": 2,
+          "last_used_at": null
+        }
+      ]
+    },
+    {
+      "name": "user_list",
+      "operation": "list",
+      "users": [
+        {
+          "id": "c2cc8374-8cdf-4936-8967-d891fb500634",
+          "org_id": "4ce65010-7331-415a-abaa-4d47387d845e",
+          "email": "home@example.test",
+          "name": "c2cc8374-8cdf-4936-8967-d891fb500634",
+          "department_id": "root-department",
+          "role": "user",
+          "status": "active",
+          "membership_revision": 0,
+          "password_hash": null,
+          "password_updated_at": null,
+          "last_login_at": null,
+          "created_at": 1
+        },
+        {
+          "id": "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb",
+          "org_id": "4ce65010-7331-415a-abaa-4d47387d845e",
+          "email": "target@example.test",
+          "name": "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb",
+          "department_id": "child-department",
+          "role": "user",
+          "status": "active",
+          "membership_revision": 0,
+          "password_hash": null,
+          "password_updated_at": null,
+          "last_login_at": null,
+          "created_at": 1
+        },
+        {
+          "id": "cccccccc-cccc-4ccc-8ccc-cccccccccccc",
+          "org_id": "4ce65010-7331-415a-abaa-4d47387d845e",
+          "email": "outside@example.test",
+          "name": "cccccccc-cccc-4ccc-8ccc-cccccccccccc",
+          "department_id": "outside-department",
+          "role": "user",
+          "status": "active",
+          "membership_revision": 0,
+          "password_hash": null,
+          "password_updated_at": null,
+          "last_login_at": null,
+          "created_at": 1
+        }
+      ],
+      "departments": [
+        {
+          "id": "root-department",
+          "org_id": "4ce65010-7331-415a-abaa-4d47387d845e",
+          "parent_id": null,
+          "name": "root-department",
+          "created_at": 1,
+          "updated_at": 1
+        },
+        {
+          "id": "child-department",
+          "org_id": "4ce65010-7331-415a-abaa-4d47387d845e",
+          "parent_id": "root-department",
+          "name": "child-department",
+          "created_at": 1,
+          "updated_at": 1
+        },
+        {
+          "id": "outside-department",
+          "org_id": "4ce65010-7331-415a-abaa-4d47387d845e",
+          "parent_id": null,
+          "name": "outside-department",
+          "created_at": 1,
+          "updated_at": 1
+        }
+      ],
+      "accounts": [],
+      "links": [],
+      "beforeKeys": [
+        {
+          "id": "dddddddd-dddd-4ddd-8ddd-dddddddddddd",
+          "org_id": "4ce65010-7331-415a-abaa-4d47387d845e",
+          "user_id": "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb",
+          "name": "retained",
+          "prefix": "moss_sk_dddddddd",
+          "secret_hash": "39a3606378fe299cf39201bf9c36643b49bd2125f58916c18ef1f993960ed523",
+          "scopes_json": "[\"sessions:list\"]",
+          "status": "active",
+          "created_at": 1,
+          "last_used_at": null
+        },
+        {
+          "id": "eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee",
+          "org_id": "4ce65010-7331-415a-abaa-4d47387d845e",
+          "user_id": "cccccccc-cccc-4ccc-8ccc-cccccccccccc",
+          "name": "retained",
+          "prefix": "moss_sk_eeeeeeee",
+          "secret_hash": "39a3606378fe299cf39201bf9c36643b49bd2125f58916c18ef1f993960ed523",
+          "scopes_json": "[\"sessions:list\"]",
+          "status": "active",
+          "created_at": 2,
+          "last_used_at": null
+        }
+      ],
+      "requestedName": "  Test Key  ",
+      "requestedScopes": [
+        "sessions:list"
+      ],
+      "result": [],
+      "error": null,
+      "afterKeys": [
+        {
+          "id": "dddddddd-dddd-4ddd-8ddd-dddddddddddd",
+          "org_id": "4ce65010-7331-415a-abaa-4d47387d845e",
+          "user_id": "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb",
+          "name": "retained",
+          "prefix": "moss_sk_dddddddd",
+          "secret_hash": "39a3606378fe299cf39201bf9c36643b49bd2125f58916c18ef1f993960ed523",
+          "scopes_json": "[\"sessions:list\"]",
+          "status": "active",
+          "created_at": 1,
+          "last_used_at": null
+        },
+        {
+          "id": "eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee",
+          "org_id": "4ce65010-7331-415a-abaa-4d47387d845e",
+          "user_id": "cccccccc-cccc-4ccc-8ccc-cccccccccccc",
+          "name": "retained",
+          "prefix": "moss_sk_eeeeeeee",
+          "secret_hash": "39a3606378fe299cf39201bf9c36643b49bd2125f58916c18ef1f993960ed523",
+          "scopes_json": "[\"sessions:list\"]",
+          "status": "active",
+          "created_at": 2,
+          "last_used_at": null
+        }
+      ]
+    },
+    {
+      "name": "malformed_json",
+      "operation": "list",
+      "users": [
+        {
+          "id": "c2cc8374-8cdf-4936-8967-d891fb500634",
+          "org_id": "4ce65010-7331-415a-abaa-4d47387d845e",
+          "email": "home@example.test",
+          "name": "c2cc8374-8cdf-4936-8967-d891fb500634",
+          "department_id": "root-department",
+          "role": "admin",
+          "status": "active",
+          "membership_revision": 0,
+          "password_hash": null,
+          "password_updated_at": null,
+          "last_login_at": null,
+          "created_at": 1
+        },
+        {
+          "id": "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb",
+          "org_id": "4ce65010-7331-415a-abaa-4d47387d845e",
+          "email": "target@example.test",
+          "name": "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb",
+          "department_id": "child-department",
+          "role": "user",
+          "status": "active",
+          "membership_revision": 0,
+          "password_hash": null,
+          "password_updated_at": null,
+          "last_login_at": null,
+          "created_at": 1
+        },
+        {
+          "id": "cccccccc-cccc-4ccc-8ccc-cccccccccccc",
+          "org_id": "4ce65010-7331-415a-abaa-4d47387d845e",
+          "email": "outside@example.test",
+          "name": "cccccccc-cccc-4ccc-8ccc-cccccccccccc",
+          "department_id": "outside-department",
+          "role": "user",
+          "status": "active",
+          "membership_revision": 0,
+          "password_hash": null,
+          "password_updated_at": null,
+          "last_login_at": null,
+          "created_at": 1
+        }
+      ],
+      "departments": [
+        {
+          "id": "root-department",
+          "org_id": "4ce65010-7331-415a-abaa-4d47387d845e",
+          "parent_id": null,
+          "name": "root-department",
+          "created_at": 1,
+          "updated_at": 1
+        },
+        {
+          "id": "child-department",
+          "org_id": "4ce65010-7331-415a-abaa-4d47387d845e",
+          "parent_id": "root-department",
+          "name": "child-department",
+          "created_at": 1,
+          "updated_at": 1
+        },
+        {
+          "id": "outside-department",
+          "org_id": "4ce65010-7331-415a-abaa-4d47387d845e",
+          "parent_id": null,
+          "name": "outside-department",
+          "created_at": 1,
+          "updated_at": 1
+        }
+      ],
+      "accounts": [],
+      "links": [],
+      "beforeKeys": [
+        {
+          "id": "dddddddd-dddd-4ddd-8ddd-dddddddddddd",
+          "org_id": "4ce65010-7331-415a-abaa-4d47387d845e",
+          "user_id": "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb",
+          "name": "retained",
+          "prefix": "moss_sk_dddddddd",
+          "secret_hash": "39a3606378fe299cf39201bf9c36643b49bd2125f58916c18ef1f993960ed523",
+          "scopes_json": "bad",
+          "status": "active",
+          "created_at": 1,
+          "last_used_at": null
+        },
+        {
+          "id": "eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee",
+          "org_id": "4ce65010-7331-415a-abaa-4d47387d845e",
+          "user_id": "cccccccc-cccc-4ccc-8ccc-cccccccccccc",
+          "name": "retained",
+          "prefix": "moss_sk_eeeeeeee",
+          "secret_hash": "39a3606378fe299cf39201bf9c36643b49bd2125f58916c18ef1f993960ed523",
+          "scopes_json": "bad",
+          "status": "active",
+          "created_at": 2,
+          "last_used_at": null
+        }
+      ],
+      "requestedName": "  Test Key  ",
+      "requestedScopes": [
+        "sessions:list"
+      ],
+      "result": [
+        {
+          "id": "dddddddd-dddd-4ddd-8ddd-dddddddddddd",
+          "orgId": "4ce65010-7331-415a-abaa-4d47387d845e",
+          "userId": "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb",
+          "name": "retained",
+          "prefix": "moss_sk_dddddddd",
+          "scopes": [],
+          "status": "active",
+          "createdAt": 1,
+          "lastUsedAt": null
+        },
+        {
+          "id": "eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee",
+          "orgId": "4ce65010-7331-415a-abaa-4d47387d845e",
+          "userId": "cccccccc-cccc-4ccc-8ccc-cccccccccccc",
+          "name": "retained",
+          "prefix": "moss_sk_eeeeeeee",
+          "scopes": [],
+          "status": "active",
+          "createdAt": 2,
+          "lastUsedAt": null
+        }
+      ],
+      "error": null,
+      "afterKeys": [
+        {
+          "id": "dddddddd-dddd-4ddd-8ddd-dddddddddddd",
+          "org_id": "4ce65010-7331-415a-abaa-4d47387d845e",
+          "user_id": "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb",
+          "name": "retained",
+          "prefix": "moss_sk_dddddddd",
+          "secret_hash": "39a3606378fe299cf39201bf9c36643b49bd2125f58916c18ef1f993960ed523",
+          "scopes_json": "bad",
+          "status": "active",
+          "created_at": 1,
+          "last_used_at": null
+        },
+        {
+          "id": "eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee",
+          "org_id": "4ce65010-7331-415a-abaa-4d47387d845e",
+          "user_id": "cccccccc-cccc-4ccc-8ccc-cccccccccccc",
+          "name": "retained",
+          "prefix": "moss_sk_eeeeeeee",
+          "secret_hash": "39a3606378fe299cf39201bf9c36643b49bd2125f58916c18ef1f993960ed523",
+          "scopes_json": "bad",
+          "status": "active",
+          "created_at": 2,
+          "last_used_at": null
+        }
+      ]
+    },
+    {
+      "name": "mixed_json",
+      "operation": "list",
+      "users": [
+        {
+          "id": "c2cc8374-8cdf-4936-8967-d891fb500634",
+          "org_id": "4ce65010-7331-415a-abaa-4d47387d845e",
+          "email": "home@example.test",
+          "name": "c2cc8374-8cdf-4936-8967-d891fb500634",
+          "department_id": "root-department",
+          "role": "admin",
+          "status": "active",
+          "membership_revision": 0,
+          "password_hash": null,
+          "password_updated_at": null,
+          "last_login_at": null,
+          "created_at": 1
+        },
+        {
+          "id": "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb",
+          "org_id": "4ce65010-7331-415a-abaa-4d47387d845e",
+          "email": "target@example.test",
+          "name": "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb",
+          "department_id": "child-department",
+          "role": "user",
+          "status": "active",
+          "membership_revision": 0,
+          "password_hash": null,
+          "password_updated_at": null,
+          "last_login_at": null,
+          "created_at": 1
+        },
+        {
+          "id": "cccccccc-cccc-4ccc-8ccc-cccccccccccc",
+          "org_id": "4ce65010-7331-415a-abaa-4d47387d845e",
+          "email": "outside@example.test",
+          "name": "cccccccc-cccc-4ccc-8ccc-cccccccccccc",
+          "department_id": "outside-department",
+          "role": "user",
+          "status": "active",
+          "membership_revision": 0,
+          "password_hash": null,
+          "password_updated_at": null,
+          "last_login_at": null,
+          "created_at": 1
+        }
+      ],
+      "departments": [
+        {
+          "id": "root-department",
+          "org_id": "4ce65010-7331-415a-abaa-4d47387d845e",
+          "parent_id": null,
+          "name": "root-department",
+          "created_at": 1,
+          "updated_at": 1
+        },
+        {
+          "id": "child-department",
+          "org_id": "4ce65010-7331-415a-abaa-4d47387d845e",
+          "parent_id": "root-department",
+          "name": "child-department",
+          "created_at": 1,
+          "updated_at": 1
+        },
+        {
+          "id": "outside-department",
+          "org_id": "4ce65010-7331-415a-abaa-4d47387d845e",
+          "parent_id": null,
+          "name": "outside-department",
+          "created_at": 1,
+          "updated_at": 1
+        }
+      ],
+      "accounts": [],
+      "links": [],
+      "beforeKeys": [
+        {
+          "id": "dddddddd-dddd-4ddd-8ddd-dddddddddddd",
+          "org_id": "4ce65010-7331-415a-abaa-4d47387d845e",
+          "user_id": "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb",
+          "name": "retained",
+          "prefix": "moss_sk_dddddddd",
+          "secret_hash": "39a3606378fe299cf39201bf9c36643b49bd2125f58916c18ef1f993960ed523",
+          "scopes_json": "[\"sessions:list\",3,null,\"sessions:list\"]",
+          "status": "active",
+          "created_at": 1,
+          "last_used_at": null
+        },
+        {
+          "id": "eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee",
+          "org_id": "4ce65010-7331-415a-abaa-4d47387d845e",
+          "user_id": "cccccccc-cccc-4ccc-8ccc-cccccccccccc",
+          "name": "retained",
+          "prefix": "moss_sk_eeeeeeee",
+          "secret_hash": "39a3606378fe299cf39201bf9c36643b49bd2125f58916c18ef1f993960ed523",
+          "scopes_json": "[\"sessions:list\",3,null,\"sessions:list\"]",
+          "status": "active",
+          "created_at": 2,
+          "last_used_at": null
+        }
+      ],
+      "requestedName": "  Test Key  ",
+      "requestedScopes": [
+        "sessions:list"
+      ],
+      "result": [
+        {
+          "id": "dddddddd-dddd-4ddd-8ddd-dddddddddddd",
+          "orgId": "4ce65010-7331-415a-abaa-4d47387d845e",
+          "userId": "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb",
+          "name": "retained",
+          "prefix": "moss_sk_dddddddd",
+          "scopes": [
+            "sessions:list",
+            "sessions:list"
+          ],
+          "status": "active",
+          "createdAt": 1,
+          "lastUsedAt": null
+        },
+        {
+          "id": "eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee",
+          "orgId": "4ce65010-7331-415a-abaa-4d47387d845e",
+          "userId": "cccccccc-cccc-4ccc-8ccc-cccccccccccc",
+          "name": "retained",
+          "prefix": "moss_sk_eeeeeeee",
+          "scopes": [
+            "sessions:list",
+            "sessions:list"
+          ],
+          "status": "active",
+          "createdAt": 2,
+          "lastUsedAt": null
+        }
+      ],
+      "error": null,
+      "afterKeys": [
+        {
+          "id": "dddddddd-dddd-4ddd-8ddd-dddddddddddd",
+          "org_id": "4ce65010-7331-415a-abaa-4d47387d845e",
+          "user_id": "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb",
+          "name": "retained",
+          "prefix": "moss_sk_dddddddd",
+          "secret_hash": "39a3606378fe299cf39201bf9c36643b49bd2125f58916c18ef1f993960ed523",
+          "scopes_json": "[\"sessions:list\",3,null,\"sessions:list\"]",
+          "status": "active",
+          "created_at": 1,
+          "last_used_at": null
+        },
+        {
+          "id": "eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee",
+          "org_id": "4ce65010-7331-415a-abaa-4d47387d845e",
+          "user_id": "cccccccc-cccc-4ccc-8ccc-cccccccccccc",
+          "name": "retained",
+          "prefix": "moss_sk_eeeeeeee",
+          "secret_hash": "39a3606378fe299cf39201bf9c36643b49bd2125f58916c18ef1f993960ed523",
+          "scopes_json": "[\"sessions:list\",3,null,\"sessions:list\"]",
+          "status": "active",
+          "created_at": 2,
+          "last_used_at": null
+        }
+      ]
+    },
+    {
+      "name": "non_json_number",
+      "operation": "list",
+      "users": [
+        {
+          "id": "c2cc8374-8cdf-4936-8967-d891fb500634",
+          "org_id": "4ce65010-7331-415a-abaa-4d47387d845e",
+          "email": "home@example.test",
+          "name": "c2cc8374-8cdf-4936-8967-d891fb500634",
+          "department_id": "root-department",
+          "role": "admin",
+          "status": "active",
+          "membership_revision": 0,
+          "password_hash": null,
+          "password_updated_at": null,
+          "last_login_at": null,
+          "created_at": 1
+        },
+        {
+          "id": "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb",
+          "org_id": "4ce65010-7331-415a-abaa-4d47387d845e",
+          "email": "target@example.test",
+          "name": "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb",
+          "department_id": "child-department",
+          "role": "user",
+          "status": "active",
+          "membership_revision": 0,
+          "password_hash": null,
+          "password_updated_at": null,
+          "last_login_at": null,
+          "created_at": 1
+        },
+        {
+          "id": "cccccccc-cccc-4ccc-8ccc-cccccccccccc",
+          "org_id": "4ce65010-7331-415a-abaa-4d47387d845e",
+          "email": "outside@example.test",
+          "name": "cccccccc-cccc-4ccc-8ccc-cccccccccccc",
+          "department_id": "outside-department",
+          "role": "user",
+          "status": "active",
+          "membership_revision": 0,
+          "password_hash": null,
+          "password_updated_at": null,
+          "last_login_at": null,
+          "created_at": 1
+        }
+      ],
+      "departments": [
+        {
+          "id": "root-department",
+          "org_id": "4ce65010-7331-415a-abaa-4d47387d845e",
+          "parent_id": null,
+          "name": "root-department",
+          "created_at": 1,
+          "updated_at": 1
+        },
+        {
+          "id": "child-department",
+          "org_id": "4ce65010-7331-415a-abaa-4d47387d845e",
+          "parent_id": "root-department",
+          "name": "child-department",
+          "created_at": 1,
+          "updated_at": 1
+        },
+        {
+          "id": "outside-department",
+          "org_id": "4ce65010-7331-415a-abaa-4d47387d845e",
+          "parent_id": null,
+          "name": "outside-department",
+          "created_at": 1,
+          "updated_at": 1
+        }
+      ],
+      "accounts": [],
+      "links": [],
+      "beforeKeys": [
+        {
+          "id": "dddddddd-dddd-4ddd-8ddd-dddddddddddd",
+          "org_id": "4ce65010-7331-415a-abaa-4d47387d845e",
+          "user_id": "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb",
+          "name": "retained",
+          "prefix": "moss_sk_dddddddd",
+          "secret_hash": "39a3606378fe299cf39201bf9c36643b49bd2125f58916c18ef1f993960ed523",
+          "scopes_json": "[\"admin:users\",NaN]",
+          "status": "active",
+          "created_at": 1,
+          "last_used_at": null
+        },
+        {
+          "id": "eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee",
+          "org_id": "4ce65010-7331-415a-abaa-4d47387d845e",
+          "user_id": "cccccccc-cccc-4ccc-8ccc-cccccccccccc",
+          "name": "retained",
+          "prefix": "moss_sk_eeeeeeee",
+          "secret_hash": "39a3606378fe299cf39201bf9c36643b49bd2125f58916c18ef1f993960ed523",
+          "scopes_json": "[\"admin:users\",NaN]",
+          "status": "active",
+          "created_at": 2,
+          "last_used_at": null
+        }
+      ],
+      "requestedName": "  Test Key  ",
+      "requestedScopes": [
+        "sessions:list"
+      ],
+      "result": [
+        {
+          "id": "dddddddd-dddd-4ddd-8ddd-dddddddddddd",
+          "orgId": "4ce65010-7331-415a-abaa-4d47387d845e",
+          "userId": "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb",
+          "name": "retained",
+          "prefix": "moss_sk_dddddddd",
+          "scopes": [],
+          "status": "active",
+          "createdAt": 1,
+          "lastUsedAt": null
+        },
+        {
+          "id": "eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee",
+          "orgId": "4ce65010-7331-415a-abaa-4d47387d845e",
+          "userId": "cccccccc-cccc-4ccc-8ccc-cccccccccccc",
+          "name": "retained",
+          "prefix": "moss_sk_eeeeeeee",
+          "scopes": [],
+          "status": "active",
+          "createdAt": 2,
+          "lastUsedAt": null
+        }
+      ],
+      "error": null,
+      "afterKeys": [
+        {
+          "id": "dddddddd-dddd-4ddd-8ddd-dddddddddddd",
+          "org_id": "4ce65010-7331-415a-abaa-4d47387d845e",
+          "user_id": "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb",
+          "name": "retained",
+          "prefix": "moss_sk_dddddddd",
+          "secret_hash": "39a3606378fe299cf39201bf9c36643b49bd2125f58916c18ef1f993960ed523",
+          "scopes_json": "[\"admin:users\",NaN]",
+          "status": "active",
+          "created_at": 1,
+          "last_used_at": null
+        },
+        {
+          "id": "eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee",
+          "org_id": "4ce65010-7331-415a-abaa-4d47387d845e",
+          "user_id": "cccccccc-cccc-4ccc-8ccc-cccccccccccc",
+          "name": "retained",
+          "prefix": "moss_sk_eeeeeeee",
+          "secret_hash": "39a3606378fe299cf39201bf9c36643b49bd2125f58916c18ef1f993960ed523",
+          "scopes_json": "[\"admin:users\",NaN]",
+          "status": "active",
+          "created_at": 2,
+          "last_used_at": null
+        }
+      ]
+    },
+    {
+      "name": "unicode_scopes",
+      "operation": "create",
+      "users": [
+        {
+          "id": "c2cc8374-8cdf-4936-8967-d891fb500634",
+          "org_id": "4ce65010-7331-415a-abaa-4d47387d845e",
+          "email": "home@example.test",
+          "name": "c2cc8374-8cdf-4936-8967-d891fb500634",
+          "department_id": "root-department",
+          "role": "admin",
+          "status": "active",
+          "membership_revision": 0,
+          "password_hash": null,
+          "password_updated_at": null,
+          "last_login_at": null,
+          "created_at": 1
+        },
+        {
+          "id": "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb",
+          "org_id": "4ce65010-7331-415a-abaa-4d47387d845e",
+          "email": "target@example.test",
+          "name": "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb",
+          "department_id": "child-department",
+          "role": "user",
+          "status": "active",
+          "membership_revision": 0,
+          "password_hash": null,
+          "password_updated_at": null,
+          "last_login_at": null,
+          "created_at": 1
+        },
+        {
+          "id": "cccccccc-cccc-4ccc-8ccc-cccccccccccc",
+          "org_id": "4ce65010-7331-415a-abaa-4d47387d845e",
+          "email": "outside@example.test",
+          "name": "cccccccc-cccc-4ccc-8ccc-cccccccccccc",
+          "department_id": "outside-department",
+          "role": "user",
+          "status": "active",
+          "membership_revision": 0,
+          "password_hash": null,
+          "password_updated_at": null,
+          "last_login_at": null,
+          "created_at": 1
+        }
+      ],
+      "departments": [
+        {
+          "id": "root-department",
+          "org_id": "4ce65010-7331-415a-abaa-4d47387d845e",
+          "parent_id": null,
+          "name": "root-department",
+          "created_at": 1,
+          "updated_at": 1
+        },
+        {
+          "id": "child-department",
+          "org_id": "4ce65010-7331-415a-abaa-4d47387d845e",
+          "parent_id": "root-department",
+          "name": "child-department",
+          "created_at": 1,
+          "updated_at": 1
+        },
+        {
+          "id": "outside-department",
+          "org_id": "4ce65010-7331-415a-abaa-4d47387d845e",
+          "parent_id": null,
+          "name": "outside-department",
+          "created_at": 1,
+          "updated_at": 1
+        }
+      ],
+      "accounts": [],
+      "links": [],
+      "beforeKeys": [
+        {
+          "id": "dddddddd-dddd-4ddd-8ddd-dddddddddddd",
+          "org_id": "4ce65010-7331-415a-abaa-4d47387d845e",
+          "user_id": "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb",
+          "name": "retained",
+          "prefix": "moss_sk_dddddddd",
+          "secret_hash": "39a3606378fe299cf39201bf9c36643b49bd2125f58916c18ef1f993960ed523",
+          "scopes_json": "[\"sessions:list\"]",
+          "status": "active",
+          "created_at": 1,
+          "last_used_at": null
+        },
+        {
+          "id": "eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee",
+          "org_id": "4ce65010-7331-415a-abaa-4d47387d845e",
+          "user_id": "cccccccc-cccc-4ccc-8ccc-cccccccccccc",
+          "name": "retained",
+          "prefix": "moss_sk_eeeeeeee",
+          "secret_hash": "39a3606378fe299cf39201bf9c36643b49bd2125f58916c18ef1f993960ed523",
+          "scopes_json": "[\"sessions:list\"]",
+          "status": "active",
+          "created_at": 2,
+          "last_used_at": null
+        }
+      ],
+      "requestedName": "  Test Key  ",
+      "requestedScopes": [
+        "能力:读取"
+      ],
+      "result": {
+        "api_key": {
+          "id": "ffffffff-ffff-4fff-8fff-ffffffffffff",
+          "orgId": "4ce65010-7331-415a-abaa-4d47387d845e",
+          "userId": "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb",
+          "name": "Test Key",
+          "prefix": "moss_sk_ffffffff",
+          "scopes": [
+            "能力:读取"
+          ],
+          "status": "active",
+          "createdAt": 2000000000123,
+          "lastUsedAt": null
+        },
+        "plain_text_key": "moss_sk_ffffffff-ffff-4fff-8fff-ffffffffffff.AAECAwQFBgcICQoLDA0ODxAREhMUFRYX"
+      },
+      "error": null,
+      "afterKeys": [
+        {
+          "id": "dddddddd-dddd-4ddd-8ddd-dddddddddddd",
+          "org_id": "4ce65010-7331-415a-abaa-4d47387d845e",
+          "user_id": "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb",
+          "name": "retained",
+          "prefix": "moss_sk_dddddddd",
+          "secret_hash": "39a3606378fe299cf39201bf9c36643b49bd2125f58916c18ef1f993960ed523",
+          "scopes_json": "[\"sessions:list\"]",
+          "status": "active",
+          "created_at": 1,
+          "last_used_at": null
+        },
+        {
+          "id": "eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee",
+          "org_id": "4ce65010-7331-415a-abaa-4d47387d845e",
+          "user_id": "cccccccc-cccc-4ccc-8ccc-cccccccccccc",
+          "name": "retained",
+          "prefix": "moss_sk_eeeeeeee",
+          "secret_hash": "39a3606378fe299cf39201bf9c36643b49bd2125f58916c18ef1f993960ed523",
+          "scopes_json": "[\"sessions:list\"]",
+          "status": "active",
+          "created_at": 2,
+          "last_used_at": null
+        },
+        {
+          "id": "ffffffff-ffff-4fff-8fff-ffffffffffff",
+          "org_id": "4ce65010-7331-415a-abaa-4d47387d845e",
+          "user_id": "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb",
+          "name": "Test Key",
+          "prefix": "moss_sk_ffffffff",
+          "secret_hash": "bffcb3cc4ae9b1be18646be4a2902233285f09e73e64b88a821c94fedf788462",
+          "scopes_json": "[\"能力:读取\"]",
+          "status": "active",
+          "created_at": 2000000000123,
+          "last_used_at": null
+        }
+      ]
+    },
+    {
+      "name": "admin_revoke",
+      "operation": "revoke",
+      "users": [
+        {
+          "id": "c2cc8374-8cdf-4936-8967-d891fb500634",
+          "org_id": "4ce65010-7331-415a-abaa-4d47387d845e",
+          "email": "home@example.test",
+          "name": "c2cc8374-8cdf-4936-8967-d891fb500634",
+          "department_id": "root-department",
+          "role": "admin",
+          "status": "active",
+          "membership_revision": 0,
+          "password_hash": null,
+          "password_updated_at": null,
+          "last_login_at": null,
+          "created_at": 1
+        },
+        {
+          "id": "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb",
+          "org_id": "4ce65010-7331-415a-abaa-4d47387d845e",
+          "email": "target@example.test",
+          "name": "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb",
+          "department_id": "child-department",
+          "role": "user",
+          "status": "active",
+          "membership_revision": 0,
+          "password_hash": null,
+          "password_updated_at": null,
+          "last_login_at": null,
+          "created_at": 1
+        },
+        {
+          "id": "cccccccc-cccc-4ccc-8ccc-cccccccccccc",
+          "org_id": "4ce65010-7331-415a-abaa-4d47387d845e",
+          "email": "outside@example.test",
+          "name": "cccccccc-cccc-4ccc-8ccc-cccccccccccc",
+          "department_id": "outside-department",
+          "role": "user",
+          "status": "active",
+          "membership_revision": 0,
+          "password_hash": null,
+          "password_updated_at": null,
+          "last_login_at": null,
+          "created_at": 1
+        }
+      ],
+      "departments": [
+        {
+          "id": "root-department",
+          "org_id": "4ce65010-7331-415a-abaa-4d47387d845e",
+          "parent_id": null,
+          "name": "root-department",
+          "created_at": 1,
+          "updated_at": 1
+        },
+        {
+          "id": "child-department",
+          "org_id": "4ce65010-7331-415a-abaa-4d47387d845e",
+          "parent_id": "root-department",
+          "name": "child-department",
+          "created_at": 1,
+          "updated_at": 1
+        },
+        {
+          "id": "outside-department",
+          "org_id": "4ce65010-7331-415a-abaa-4d47387d845e",
+          "parent_id": null,
+          "name": "outside-department",
+          "created_at": 1,
+          "updated_at": 1
+        }
+      ],
+      "accounts": [],
+      "links": [],
+      "beforeKeys": [
+        {
+          "id": "dddddddd-dddd-4ddd-8ddd-dddddddddddd",
+          "org_id": "4ce65010-7331-415a-abaa-4d47387d845e",
+          "user_id": "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb",
+          "name": "retained",
+          "prefix": "moss_sk_dddddddd",
+          "secret_hash": "39a3606378fe299cf39201bf9c36643b49bd2125f58916c18ef1f993960ed523",
+          "scopes_json": "[\"sessions:list\"]",
+          "status": "active",
+          "created_at": 1,
+          "last_used_at": null
+        },
+        {
+          "id": "eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee",
+          "org_id": "4ce65010-7331-415a-abaa-4d47387d845e",
+          "user_id": "cccccccc-cccc-4ccc-8ccc-cccccccccccc",
+          "name": "retained",
+          "prefix": "moss_sk_eeeeeeee",
+          "secret_hash": "39a3606378fe299cf39201bf9c36643b49bd2125f58916c18ef1f993960ed523",
+          "scopes_json": "[\"sessions:list\"]",
+          "status": "active",
+          "created_at": 2,
+          "last_used_at": null
+        }
+      ],
+      "requestedName": "  Test Key  ",
+      "requestedScopes": [
+        "sessions:list"
+      ],
+      "result": {
+        "ok": true
+      },
+      "error": null,
+      "afterKeys": [
+        {
+          "id": "dddddddd-dddd-4ddd-8ddd-dddddddddddd",
+          "org_id": "4ce65010-7331-415a-abaa-4d47387d845e",
+          "user_id": "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb",
+          "name": "retained",
+          "prefix": "moss_sk_dddddddd",
+          "secret_hash": "39a3606378fe299cf39201bf9c36643b49bd2125f58916c18ef1f993960ed523",
+          "scopes_json": "[\"sessions:list\"]",
+          "status": "revoked",
+          "created_at": 1,
+          "last_used_at": null
+        },
+        {
+          "id": "eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee",
+          "org_id": "4ce65010-7331-415a-abaa-4d47387d845e",
+          "user_id": "cccccccc-cccc-4ccc-8ccc-cccccccccccc",
+          "name": "retained",
+          "prefix": "moss_sk_eeeeeeee",
+          "secret_hash": "39a3606378fe299cf39201bf9c36643b49bd2125f58916c18ef1f993960ed523",
+          "scopes_json": "[\"sessions:list\"]",
+          "status": "active",
+          "created_at": 2,
+          "last_used_at": null
+        }
+      ]
+    },
+    {
+      "name": "already_revoked",
+      "operation": "revoke",
+      "users": [
+        {
+          "id": "c2cc8374-8cdf-4936-8967-d891fb500634",
+          "org_id": "4ce65010-7331-415a-abaa-4d47387d845e",
+          "email": "home@example.test",
+          "name": "c2cc8374-8cdf-4936-8967-d891fb500634",
+          "department_id": "root-department",
+          "role": "admin",
+          "status": "active",
+          "membership_revision": 0,
+          "password_hash": null,
+          "password_updated_at": null,
+          "last_login_at": null,
+          "created_at": 1
+        },
+        {
+          "id": "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb",
+          "org_id": "4ce65010-7331-415a-abaa-4d47387d845e",
+          "email": "target@example.test",
+          "name": "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb",
+          "department_id": "child-department",
+          "role": "user",
+          "status": "active",
+          "membership_revision": 0,
+          "password_hash": null,
+          "password_updated_at": null,
+          "last_login_at": null,
+          "created_at": 1
+        },
+        {
+          "id": "cccccccc-cccc-4ccc-8ccc-cccccccccccc",
+          "org_id": "4ce65010-7331-415a-abaa-4d47387d845e",
+          "email": "outside@example.test",
+          "name": "cccccccc-cccc-4ccc-8ccc-cccccccccccc",
+          "department_id": "outside-department",
+          "role": "user",
+          "status": "active",
+          "membership_revision": 0,
+          "password_hash": null,
+          "password_updated_at": null,
+          "last_login_at": null,
+          "created_at": 1
+        }
+      ],
+      "departments": [
+        {
+          "id": "root-department",
+          "org_id": "4ce65010-7331-415a-abaa-4d47387d845e",
+          "parent_id": null,
+          "name": "root-department",
+          "created_at": 1,
+          "updated_at": 1
+        },
+        {
+          "id": "child-department",
+          "org_id": "4ce65010-7331-415a-abaa-4d47387d845e",
+          "parent_id": "root-department",
+          "name": "child-department",
+          "created_at": 1,
+          "updated_at": 1
+        },
+        {
+          "id": "outside-department",
+          "org_id": "4ce65010-7331-415a-abaa-4d47387d845e",
+          "parent_id": null,
+          "name": "outside-department",
+          "created_at": 1,
+          "updated_at": 1
+        }
+      ],
+      "accounts": [],
+      "links": [],
+      "beforeKeys": [
+        {
+          "id": "dddddddd-dddd-4ddd-8ddd-dddddddddddd",
+          "org_id": "4ce65010-7331-415a-abaa-4d47387d845e",
+          "user_id": "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb",
+          "name": "retained",
+          "prefix": "moss_sk_dddddddd",
+          "secret_hash": "39a3606378fe299cf39201bf9c36643b49bd2125f58916c18ef1f993960ed523",
+          "scopes_json": "[\"sessions:list\"]",
+          "status": "revoked",
+          "created_at": 1,
+          "last_used_at": null
+        },
+        {
+          "id": "eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee",
+          "org_id": "4ce65010-7331-415a-abaa-4d47387d845e",
+          "user_id": "cccccccc-cccc-4ccc-8ccc-cccccccccccc",
+          "name": "retained",
+          "prefix": "moss_sk_eeeeeeee",
+          "secret_hash": "39a3606378fe299cf39201bf9c36643b49bd2125f58916c18ef1f993960ed523",
+          "scopes_json": "[\"sessions:list\"]",
+          "status": "active",
+          "created_at": 2,
+          "last_used_at": null
+        }
+      ],
+      "requestedName": "  Test Key  ",
+      "requestedScopes": [
+        "sessions:list"
+      ],
+      "result": {
+        "ok": true
+      },
+      "error": null,
+      "afterKeys": [
+        {
+          "id": "dddddddd-dddd-4ddd-8ddd-dddddddddddd",
+          "org_id": "4ce65010-7331-415a-abaa-4d47387d845e",
+          "user_id": "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb",
+          "name": "retained",
+          "prefix": "moss_sk_dddddddd",
+          "secret_hash": "39a3606378fe299cf39201bf9c36643b49bd2125f58916c18ef1f993960ed523",
+          "scopes_json": "[\"sessions:list\"]",
+          "status": "revoked",
+          "created_at": 1,
+          "last_used_at": null
+        },
+        {
+          "id": "eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee",
+          "org_id": "4ce65010-7331-415a-abaa-4d47387d845e",
+          "user_id": "cccccccc-cccc-4ccc-8ccc-cccccccccccc",
+          "name": "retained",
+          "prefix": "moss_sk_eeeeeeee",
+          "secret_hash": "39a3606378fe299cf39201bf9c36643b49bd2125f58916c18ef1f993960ed523",
+          "scopes_json": "[\"sessions:list\"]",
+          "status": "active",
+          "created_at": 2,
+          "last_used_at": null
+        }
+      ]
+    },
+    {
+      "name": "dept_revoke",
+      "operation": "revoke",
+      "users": [
+        {
+          "id": "c2cc8374-8cdf-4936-8967-d891fb500634",
+          "org_id": "4ce65010-7331-415a-abaa-4d47387d845e",
+          "email": "home@example.test",
+          "name": "c2cc8374-8cdf-4936-8967-d891fb500634",
+          "department_id": "root-department",
+          "role": "dept_admin",
+          "status": "active",
+          "membership_revision": 0,
+          "password_hash": null,
+          "password_updated_at": null,
+          "last_login_at": null,
+          "created_at": 1
+        },
+        {
+          "id": "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb",
+          "org_id": "4ce65010-7331-415a-abaa-4d47387d845e",
+          "email": "target@example.test",
+          "name": "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb",
+          "department_id": "child-department",
+          "role": "user",
+          "status": "active",
+          "membership_revision": 0,
+          "password_hash": null,
+          "password_updated_at": null,
+          "last_login_at": null,
+          "created_at": 1
+        },
+        {
+          "id": "cccccccc-cccc-4ccc-8ccc-cccccccccccc",
+          "org_id": "4ce65010-7331-415a-abaa-4d47387d845e",
+          "email": "outside@example.test",
+          "name": "cccccccc-cccc-4ccc-8ccc-cccccccccccc",
+          "department_id": "outside-department",
+          "role": "user",
+          "status": "active",
+          "membership_revision": 0,
+          "password_hash": null,
+          "password_updated_at": null,
+          "last_login_at": null,
+          "created_at": 1
+        }
+      ],
+      "departments": [
+        {
+          "id": "root-department",
+          "org_id": "4ce65010-7331-415a-abaa-4d47387d845e",
+          "parent_id": null,
+          "name": "root-department",
+          "created_at": 1,
+          "updated_at": 1
+        },
+        {
+          "id": "child-department",
+          "org_id": "4ce65010-7331-415a-abaa-4d47387d845e",
+          "parent_id": "root-department",
+          "name": "child-department",
+          "created_at": 1,
+          "updated_at": 1
+        },
+        {
+          "id": "outside-department",
+          "org_id": "4ce65010-7331-415a-abaa-4d47387d845e",
+          "parent_id": null,
+          "name": "outside-department",
+          "created_at": 1,
+          "updated_at": 1
+        }
+      ],
+      "accounts": [],
+      "links": [],
+      "beforeKeys": [
+        {
+          "id": "dddddddd-dddd-4ddd-8ddd-dddddddddddd",
+          "org_id": "4ce65010-7331-415a-abaa-4d47387d845e",
+          "user_id": "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb",
+          "name": "retained",
+          "prefix": "moss_sk_dddddddd",
+          "secret_hash": "39a3606378fe299cf39201bf9c36643b49bd2125f58916c18ef1f993960ed523",
+          "scopes_json": "[\"sessions:list\"]",
+          "status": "active",
+          "created_at": 1,
+          "last_used_at": null
+        },
+        {
+          "id": "eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee",
+          "org_id": "4ce65010-7331-415a-abaa-4d47387d845e",
+          "user_id": "cccccccc-cccc-4ccc-8ccc-cccccccccccc",
+          "name": "retained",
+          "prefix": "moss_sk_eeeeeeee",
+          "secret_hash": "39a3606378fe299cf39201bf9c36643b49bd2125f58916c18ef1f993960ed523",
+          "scopes_json": "[\"sessions:list\"]",
+          "status": "active",
+          "created_at": 2,
+          "last_used_at": null
+        }
+      ],
+      "requestedName": "  Test Key  ",
+      "requestedScopes": [
+        "sessions:list"
+      ],
+      "result": {
+        "ok": true
+      },
+      "error": null,
+      "afterKeys": [
+        {
+          "id": "dddddddd-dddd-4ddd-8ddd-dddddddddddd",
+          "org_id": "4ce65010-7331-415a-abaa-4d47387d845e",
+          "user_id": "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb",
+          "name": "retained",
+          "prefix": "moss_sk_dddddddd",
+          "secret_hash": "39a3606378fe299cf39201bf9c36643b49bd2125f58916c18ef1f993960ed523",
+          "scopes_json": "[\"sessions:list\"]",
+          "status": "revoked",
+          "created_at": 1,
+          "last_used_at": null
+        },
+        {
+          "id": "eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee",
+          "org_id": "4ce65010-7331-415a-abaa-4d47387d845e",
+          "user_id": "cccccccc-cccc-4ccc-8ccc-cccccccccccc",
+          "name": "retained",
+          "prefix": "moss_sk_eeeeeeee",
+          "secret_hash": "39a3606378fe299cf39201bf9c36643b49bd2125f58916c18ef1f993960ed523",
+          "scopes_json": "[\"sessions:list\"]",
+          "status": "active",
+          "created_at": 2,
+          "last_used_at": null
+        }
+      ]
+    },
+    {
+      "name": "dept_revoke_outside",
+      "operation": "revoke",
+      "users": [
+        {
+          "id": "c2cc8374-8cdf-4936-8967-d891fb500634",
+          "org_id": "4ce65010-7331-415a-abaa-4d47387d845e",
+          "email": "home@example.test",
+          "name": "c2cc8374-8cdf-4936-8967-d891fb500634",
+          "department_id": "root-department",
+          "role": "dept_admin",
+          "status": "active",
+          "membership_revision": 0,
+          "password_hash": null,
+          "password_updated_at": null,
+          "last_login_at": null,
+          "created_at": 1
+        },
+        {
+          "id": "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb",
+          "org_id": "4ce65010-7331-415a-abaa-4d47387d845e",
+          "email": "target@example.test",
+          "name": "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb",
+          "department_id": "outside-department",
+          "role": "user",
+          "status": "active",
+          "membership_revision": 0,
+          "password_hash": null,
+          "password_updated_at": null,
+          "last_login_at": null,
+          "created_at": 1
+        },
+        {
+          "id": "cccccccc-cccc-4ccc-8ccc-cccccccccccc",
+          "org_id": "4ce65010-7331-415a-abaa-4d47387d845e",
+          "email": "outside@example.test",
+          "name": "cccccccc-cccc-4ccc-8ccc-cccccccccccc",
+          "department_id": "outside-department",
+          "role": "user",
+          "status": "active",
+          "membership_revision": 0,
+          "password_hash": null,
+          "password_updated_at": null,
+          "last_login_at": null,
+          "created_at": 1
+        }
+      ],
+      "departments": [
+        {
+          "id": "root-department",
+          "org_id": "4ce65010-7331-415a-abaa-4d47387d845e",
+          "parent_id": null,
+          "name": "root-department",
+          "created_at": 1,
+          "updated_at": 1
+        },
+        {
+          "id": "child-department",
+          "org_id": "4ce65010-7331-415a-abaa-4d47387d845e",
+          "parent_id": "root-department",
+          "name": "child-department",
+          "created_at": 1,
+          "updated_at": 1
+        },
+        {
+          "id": "outside-department",
+          "org_id": "4ce65010-7331-415a-abaa-4d47387d845e",
+          "parent_id": null,
+          "name": "outside-department",
+          "created_at": 1,
+          "updated_at": 1
+        }
+      ],
+      "accounts": [],
+      "links": [],
+      "beforeKeys": [
+        {
+          "id": "dddddddd-dddd-4ddd-8ddd-dddddddddddd",
+          "org_id": "4ce65010-7331-415a-abaa-4d47387d845e",
+          "user_id": "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb",
+          "name": "retained",
+          "prefix": "moss_sk_dddddddd",
+          "secret_hash": "39a3606378fe299cf39201bf9c36643b49bd2125f58916c18ef1f993960ed523",
+          "scopes_json": "[\"sessions:list\"]",
+          "status": "active",
+          "created_at": 1,
+          "last_used_at": null
+        },
+        {
+          "id": "eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee",
+          "org_id": "4ce65010-7331-415a-abaa-4d47387d845e",
+          "user_id": "cccccccc-cccc-4ccc-8ccc-cccccccccccc",
+          "name": "retained",
+          "prefix": "moss_sk_eeeeeeee",
+          "secret_hash": "39a3606378fe299cf39201bf9c36643b49bd2125f58916c18ef1f993960ed523",
+          "scopes_json": "[\"sessions:list\"]",
+          "status": "active",
+          "created_at": 2,
+          "last_used_at": null
+        }
+      ],
+      "requestedName": "  Test Key  ",
+      "requestedScopes": [
+        "sessions:list"
+      ],
+      "result": null,
+      "error": {
+        "status": 403,
+        "message": "You cannot manage this user"
+      },
+      "afterKeys": [
+        {
+          "id": "dddddddd-dddd-4ddd-8ddd-dddddddddddd",
+          "org_id": "4ce65010-7331-415a-abaa-4d47387d845e",
+          "user_id": "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb",
+          "name": "retained",
+          "prefix": "moss_sk_dddddddd",
+          "secret_hash": "39a3606378fe299cf39201bf9c36643b49bd2125f58916c18ef1f993960ed523",
+          "scopes_json": "[\"sessions:list\"]",
+          "status": "active",
+          "created_at": 1,
+          "last_used_at": null
+        },
+        {
+          "id": "eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee",
+          "org_id": "4ce65010-7331-415a-abaa-4d47387d845e",
+          "user_id": "cccccccc-cccc-4ccc-8ccc-cccccccccccc",
+          "name": "retained",
+          "prefix": "moss_sk_eeeeeeee",
+          "secret_hash": "39a3606378fe299cf39201bf9c36643b49bd2125f58916c18ef1f993960ed523",
+          "scopes_json": "[\"sessions:list\"]",
+          "status": "active",
+          "created_at": 2,
+          "last_used_at": null
+        }
+      ]
+    },
+    {
+      "name": "foreign_key",
+      "operation": "revoke",
+      "users": [
+        {
+          "id": "c2cc8374-8cdf-4936-8967-d891fb500634",
+          "org_id": "4ce65010-7331-415a-abaa-4d47387d845e",
+          "email": "home@example.test",
+          "name": "c2cc8374-8cdf-4936-8967-d891fb500634",
+          "department_id": "root-department",
+          "role": "admin",
+          "status": "active",
+          "membership_revision": 0,
+          "password_hash": null,
+          "password_updated_at": null,
+          "last_login_at": null,
+          "created_at": 1
+        },
+        {
+          "id": "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb",
+          "org_id": "4ce65010-7331-415a-abaa-4d47387d845e",
+          "email": "target@example.test",
+          "name": "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb",
+          "department_id": "child-department",
+          "role": "user",
+          "status": "active",
+          "membership_revision": 0,
+          "password_hash": null,
+          "password_updated_at": null,
+          "last_login_at": null,
+          "created_at": 1
+        },
+        {
+          "id": "cccccccc-cccc-4ccc-8ccc-cccccccccccc",
+          "org_id": "4ce65010-7331-415a-abaa-4d47387d845e",
+          "email": "outside@example.test",
+          "name": "cccccccc-cccc-4ccc-8ccc-cccccccccccc",
+          "department_id": "outside-department",
+          "role": "user",
+          "status": "active",
+          "membership_revision": 0,
+          "password_hash": null,
+          "password_updated_at": null,
+          "last_login_at": null,
+          "created_at": 1
+        }
+      ],
+      "departments": [
+        {
+          "id": "root-department",
+          "org_id": "4ce65010-7331-415a-abaa-4d47387d845e",
+          "parent_id": null,
+          "name": "root-department",
+          "created_at": 1,
+          "updated_at": 1
+        },
+        {
+          "id": "child-department",
+          "org_id": "4ce65010-7331-415a-abaa-4d47387d845e",
+          "parent_id": "root-department",
+          "name": "child-department",
+          "created_at": 1,
+          "updated_at": 1
+        },
+        {
+          "id": "outside-department",
+          "org_id": "4ce65010-7331-415a-abaa-4d47387d845e",
+          "parent_id": null,
+          "name": "outside-department",
+          "created_at": 1,
+          "updated_at": 1
+        }
+      ],
+      "accounts": [],
+      "links": [],
+      "beforeKeys": [
+        {
+          "id": "dddddddd-dddd-4ddd-8ddd-dddddddddddd",
+          "org_id": "d3f29104-c19b-4594-859c-a92734c82dbb",
+          "user_id": "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb",
+          "name": "retained",
+          "prefix": "moss_sk_dddddddd",
+          "secret_hash": "39a3606378fe299cf39201bf9c36643b49bd2125f58916c18ef1f993960ed523",
+          "scopes_json": "[\"sessions:list\"]",
+          "status": "active",
+          "created_at": 1,
+          "last_used_at": null
+        },
+        {
+          "id": "eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee",
+          "org_id": "4ce65010-7331-415a-abaa-4d47387d845e",
+          "user_id": "cccccccc-cccc-4ccc-8ccc-cccccccccccc",
+          "name": "retained",
+          "prefix": "moss_sk_eeeeeeee",
+          "secret_hash": "39a3606378fe299cf39201bf9c36643b49bd2125f58916c18ef1f993960ed523",
+          "scopes_json": "[\"sessions:list\"]",
+          "status": "active",
+          "created_at": 2,
+          "last_used_at": null
+        }
+      ],
+      "requestedName": "  Test Key  ",
+      "requestedScopes": [
+        "sessions:list"
+      ],
+      "result": null,
+      "error": {
+        "status": 404,
+        "message": "Unknown key_id"
+      },
+      "afterKeys": [
+        {
+          "id": "dddddddd-dddd-4ddd-8ddd-dddddddddddd",
+          "org_id": "d3f29104-c19b-4594-859c-a92734c82dbb",
+          "user_id": "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb",
+          "name": "retained",
+          "prefix": "moss_sk_dddddddd",
+          "secret_hash": "39a3606378fe299cf39201bf9c36643b49bd2125f58916c18ef1f993960ed523",
+          "scopes_json": "[\"sessions:list\"]",
+          "status": "active",
+          "created_at": 1,
+          "last_used_at": null
+        },
+        {
+          "id": "eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee",
+          "org_id": "4ce65010-7331-415a-abaa-4d47387d845e",
+          "user_id": "cccccccc-cccc-4ccc-8ccc-cccccccccccc",
+          "name": "retained",
+          "prefix": "moss_sk_eeeeeeee",
+          "secret_hash": "39a3606378fe299cf39201bf9c36643b49bd2125f58916c18ef1f993960ed523",
+          "scopes_json": "[\"sessions:list\"]",
+          "status": "active",
+          "created_at": 2,
+          "last_used_at": null
+        }
+      ]
+    },
+    {
+      "name": "verify_existing",
+      "operation": "verify",
+      "users": [
+        {
+          "id": "c2cc8374-8cdf-4936-8967-d891fb500634",
+          "org_id": "4ce65010-7331-415a-abaa-4d47387d845e",
+          "email": "home@example.test",
+          "name": "c2cc8374-8cdf-4936-8967-d891fb500634",
+          "department_id": "root-department",
+          "role": "admin",
+          "status": "active",
+          "membership_revision": 0,
+          "password_hash": null,
+          "password_updated_at": null,
+          "last_login_at": null,
+          "created_at": 1
+        },
+        {
+          "id": "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb",
+          "org_id": "4ce65010-7331-415a-abaa-4d47387d845e",
+          "email": "target@example.test",
+          "name": "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb",
+          "department_id": "child-department",
+          "role": "user",
+          "status": "active",
+          "membership_revision": 0,
+          "password_hash": null,
+          "password_updated_at": null,
+          "last_login_at": null,
+          "created_at": 1
+        },
+        {
+          "id": "cccccccc-cccc-4ccc-8ccc-cccccccccccc",
+          "org_id": "4ce65010-7331-415a-abaa-4d47387d845e",
+          "email": "outside@example.test",
+          "name": "cccccccc-cccc-4ccc-8ccc-cccccccccccc",
+          "department_id": "outside-department",
+          "role": "user",
+          "status": "active",
+          "membership_revision": 0,
+          "password_hash": null,
+          "password_updated_at": null,
+          "last_login_at": null,
+          "created_at": 1
+        }
+      ],
+      "departments": [
+        {
+          "id": "root-department",
+          "org_id": "4ce65010-7331-415a-abaa-4d47387d845e",
+          "parent_id": null,
+          "name": "root-department",
+          "created_at": 1,
+          "updated_at": 1
+        },
+        {
+          "id": "child-department",
+          "org_id": "4ce65010-7331-415a-abaa-4d47387d845e",
+          "parent_id": "root-department",
+          "name": "child-department",
+          "created_at": 1,
+          "updated_at": 1
+        },
+        {
+          "id": "outside-department",
+          "org_id": "4ce65010-7331-415a-abaa-4d47387d845e",
+          "parent_id": null,
+          "name": "outside-department",
+          "created_at": 1,
+          "updated_at": 1
+        }
+      ],
+      "accounts": [],
+      "links": [],
+      "beforeKeys": [
+        {
+          "id": "dddddddd-dddd-4ddd-8ddd-dddddddddddd",
+          "org_id": "4ce65010-7331-415a-abaa-4d47387d845e",
+          "user_id": "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb",
+          "name": "retained",
+          "prefix": "moss_sk_dddddddd",
+          "secret_hash": "39a3606378fe299cf39201bf9c36643b49bd2125f58916c18ef1f993960ed523",
+          "scopes_json": "[\"sessions:list\"]",
+          "status": "active",
+          "created_at": 1,
+          "last_used_at": null
+        },
+        {
+          "id": "eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee",
+          "org_id": "4ce65010-7331-415a-abaa-4d47387d845e",
+          "user_id": "cccccccc-cccc-4ccc-8ccc-cccccccccccc",
+          "name": "retained",
+          "prefix": "moss_sk_eeeeeeee",
+          "secret_hash": "39a3606378fe299cf39201bf9c36643b49bd2125f58916c18ef1f993960ed523",
+          "scopes_json": "[\"sessions:list\"]",
+          "status": "active",
+          "created_at": 2,
+          "last_used_at": null
+        }
+      ],
+      "requestedName": "  Test Key  ",
+      "requestedScopes": [
+        "sessions:list"
+      ],
+      "result": {
+        "keyId": "dddddddd-dddd-4ddd-8ddd-dddddddddddd",
+        "userId": "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb",
+        "orgId": "4ce65010-7331-415a-abaa-4d47387d845e",
+        "role": "user",
+        "scopes": [
+          "sessions:list"
+        ]
+      },
+      "error": null,
+      "afterKeys": [
+        {
+          "id": "dddddddd-dddd-4ddd-8ddd-dddddddddddd",
+          "org_id": "4ce65010-7331-415a-abaa-4d47387d845e",
+          "user_id": "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb",
+          "name": "retained",
+          "prefix": "moss_sk_dddddddd",
+          "secret_hash": "39a3606378fe299cf39201bf9c36643b49bd2125f58916c18ef1f993960ed523",
+          "scopes_json": "[\"sessions:list\"]",
+          "status": "active",
+          "created_at": 1,
+          "last_used_at": 2000000000123
+        },
+        {
+          "id": "eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee",
+          "org_id": "4ce65010-7331-415a-abaa-4d47387d845e",
+          "user_id": "cccccccc-cccc-4ccc-8ccc-cccccccccccc",
+          "name": "retained",
+          "prefix": "moss_sk_eeeeeeee",
+          "secret_hash": "39a3606378fe299cf39201bf9c36643b49bd2125f58916c18ef1f993960ed523",
+          "scopes_json": "[\"sessions:list\"]",
+          "status": "active",
+          "created_at": 2,
+          "last_used_at": null
+        }
+      ]
+    },
+    {
+      "name": "wrong_secret",
+      "operation": "verify",
+      "users": [
+        {
+          "id": "c2cc8374-8cdf-4936-8967-d891fb500634",
+          "org_id": "4ce65010-7331-415a-abaa-4d47387d845e",
+          "email": "home@example.test",
+          "name": "c2cc8374-8cdf-4936-8967-d891fb500634",
+          "department_id": "root-department",
+          "role": "admin",
+          "status": "active",
+          "membership_revision": 0,
+          "password_hash": null,
+          "password_updated_at": null,
+          "last_login_at": null,
+          "created_at": 1
+        },
+        {
+          "id": "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb",
+          "org_id": "4ce65010-7331-415a-abaa-4d47387d845e",
+          "email": "target@example.test",
+          "name": "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb",
+          "department_id": "child-department",
+          "role": "user",
+          "status": "active",
+          "membership_revision": 0,
+          "password_hash": null,
+          "password_updated_at": null,
+          "last_login_at": null,
+          "created_at": 1
+        },
+        {
+          "id": "cccccccc-cccc-4ccc-8ccc-cccccccccccc",
+          "org_id": "4ce65010-7331-415a-abaa-4d47387d845e",
+          "email": "outside@example.test",
+          "name": "cccccccc-cccc-4ccc-8ccc-cccccccccccc",
+          "department_id": "outside-department",
+          "role": "user",
+          "status": "active",
+          "membership_revision": 0,
+          "password_hash": null,
+          "password_updated_at": null,
+          "last_login_at": null,
+          "created_at": 1
+        }
+      ],
+      "departments": [
+        {
+          "id": "root-department",
+          "org_id": "4ce65010-7331-415a-abaa-4d47387d845e",
+          "parent_id": null,
+          "name": "root-department",
+          "created_at": 1,
+          "updated_at": 1
+        },
+        {
+          "id": "child-department",
+          "org_id": "4ce65010-7331-415a-abaa-4d47387d845e",
+          "parent_id": "root-department",
+          "name": "child-department",
+          "created_at": 1,
+          "updated_at": 1
+        },
+        {
+          "id": "outside-department",
+          "org_id": "4ce65010-7331-415a-abaa-4d47387d845e",
+          "parent_id": null,
+          "name": "outside-department",
+          "created_at": 1,
+          "updated_at": 1
+        }
+      ],
+      "accounts": [],
+      "links": [],
+      "beforeKeys": [
+        {
+          "id": "dddddddd-dddd-4ddd-8ddd-dddddddddddd",
+          "org_id": "4ce65010-7331-415a-abaa-4d47387d845e",
+          "user_id": "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb",
+          "name": "retained",
+          "prefix": "moss_sk_dddddddd",
+          "secret_hash": "39a3606378fe299cf39201bf9c36643b49bd2125f58916c18ef1f993960ed523",
+          "scopes_json": "[\"sessions:list\"]",
+          "status": "active",
+          "created_at": 1,
+          "last_used_at": null
+        },
+        {
+          "id": "eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee",
+          "org_id": "4ce65010-7331-415a-abaa-4d47387d845e",
+          "user_id": "cccccccc-cccc-4ccc-8ccc-cccccccccccc",
+          "name": "retained",
+          "prefix": "moss_sk_eeeeeeee",
+          "secret_hash": "39a3606378fe299cf39201bf9c36643b49bd2125f58916c18ef1f993960ed523",
+          "scopes_json": "[\"sessions:list\"]",
+          "status": "active",
+          "created_at": 2,
+          "last_used_at": null
+        }
+      ],
+      "requestedName": "  Test Key  ",
+      "requestedScopes": [
+        "sessions:list"
+      ],
+      "result": null,
+      "error": {
+        "status": 401,
+        "message": "Invalid API key"
+      },
+      "afterKeys": [
+        {
+          "id": "dddddddd-dddd-4ddd-8ddd-dddddddddddd",
+          "org_id": "4ce65010-7331-415a-abaa-4d47387d845e",
+          "user_id": "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb",
+          "name": "retained",
+          "prefix": "moss_sk_dddddddd",
+          "secret_hash": "39a3606378fe299cf39201bf9c36643b49bd2125f58916c18ef1f993960ed523",
+          "scopes_json": "[\"sessions:list\"]",
+          "status": "active",
+          "created_at": 1,
+          "last_used_at": null
+        },
+        {
+          "id": "eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee",
+          "org_id": "4ce65010-7331-415a-abaa-4d47387d845e",
+          "user_id": "cccccccc-cccc-4ccc-8ccc-cccccccccccc",
+          "name": "retained",
+          "prefix": "moss_sk_eeeeeeee",
+          "secret_hash": "39a3606378fe299cf39201bf9c36643b49bd2125f58916c18ef1f993960ed523",
+          "scopes_json": "[\"sessions:list\"]",
+          "status": "active",
+          "created_at": 2,
+          "last_used_at": null
+        }
+      ]
+    },
+    {
+      "name": "revoked_key",
+      "operation": "verify",
+      "users": [
+        {
+          "id": "c2cc8374-8cdf-4936-8967-d891fb500634",
+          "org_id": "4ce65010-7331-415a-abaa-4d47387d845e",
+          "email": "home@example.test",
+          "name": "c2cc8374-8cdf-4936-8967-d891fb500634",
+          "department_id": "root-department",
+          "role": "admin",
+          "status": "active",
+          "membership_revision": 0,
+          "password_hash": null,
+          "password_updated_at": null,
+          "last_login_at": null,
+          "created_at": 1
+        },
+        {
+          "id": "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb",
+          "org_id": "4ce65010-7331-415a-abaa-4d47387d845e",
+          "email": "target@example.test",
+          "name": "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb",
+          "department_id": "child-department",
+          "role": "user",
+          "status": "active",
+          "membership_revision": 0,
+          "password_hash": null,
+          "password_updated_at": null,
+          "last_login_at": null,
+          "created_at": 1
+        },
+        {
+          "id": "cccccccc-cccc-4ccc-8ccc-cccccccccccc",
+          "org_id": "4ce65010-7331-415a-abaa-4d47387d845e",
+          "email": "outside@example.test",
+          "name": "cccccccc-cccc-4ccc-8ccc-cccccccccccc",
+          "department_id": "outside-department",
+          "role": "user",
+          "status": "active",
+          "membership_revision": 0,
+          "password_hash": null,
+          "password_updated_at": null,
+          "last_login_at": null,
+          "created_at": 1
+        }
+      ],
+      "departments": [
+        {
+          "id": "root-department",
+          "org_id": "4ce65010-7331-415a-abaa-4d47387d845e",
+          "parent_id": null,
+          "name": "root-department",
+          "created_at": 1,
+          "updated_at": 1
+        },
+        {
+          "id": "child-department",
+          "org_id": "4ce65010-7331-415a-abaa-4d47387d845e",
+          "parent_id": "root-department",
+          "name": "child-department",
+          "created_at": 1,
+          "updated_at": 1
+        },
+        {
+          "id": "outside-department",
+          "org_id": "4ce65010-7331-415a-abaa-4d47387d845e",
+          "parent_id": null,
+          "name": "outside-department",
+          "created_at": 1,
+          "updated_at": 1
+        }
+      ],
+      "accounts": [],
+      "links": [],
+      "beforeKeys": [
+        {
+          "id": "dddddddd-dddd-4ddd-8ddd-dddddddddddd",
+          "org_id": "4ce65010-7331-415a-abaa-4d47387d845e",
+          "user_id": "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb",
+          "name": "retained",
+          "prefix": "moss_sk_dddddddd",
+          "secret_hash": "39a3606378fe299cf39201bf9c36643b49bd2125f58916c18ef1f993960ed523",
+          "scopes_json": "[\"sessions:list\"]",
+          "status": "revoked",
+          "created_at": 1,
+          "last_used_at": null
+        },
+        {
+          "id": "eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee",
+          "org_id": "4ce65010-7331-415a-abaa-4d47387d845e",
+          "user_id": "cccccccc-cccc-4ccc-8ccc-cccccccccccc",
+          "name": "retained",
+          "prefix": "moss_sk_eeeeeeee",
+          "secret_hash": "39a3606378fe299cf39201bf9c36643b49bd2125f58916c18ef1f993960ed523",
+          "scopes_json": "[\"sessions:list\"]",
+          "status": "active",
+          "created_at": 2,
+          "last_used_at": null
+        }
+      ],
+      "requestedName": "  Test Key  ",
+      "requestedScopes": [
+        "sessions:list"
+      ],
+      "result": null,
+      "error": {
+        "status": 401,
+        "message": "Invalid API key"
+      },
+      "afterKeys": [
+        {
+          "id": "dddddddd-dddd-4ddd-8ddd-dddddddddddd",
+          "org_id": "4ce65010-7331-415a-abaa-4d47387d845e",
+          "user_id": "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb",
+          "name": "retained",
+          "prefix": "moss_sk_dddddddd",
+          "secret_hash": "39a3606378fe299cf39201bf9c36643b49bd2125f58916c18ef1f993960ed523",
+          "scopes_json": "[\"sessions:list\"]",
+          "status": "revoked",
+          "created_at": 1,
+          "last_used_at": null
+        },
+        {
+          "id": "eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee",
+          "org_id": "4ce65010-7331-415a-abaa-4d47387d845e",
+          "user_id": "cccccccc-cccc-4ccc-8ccc-cccccccccccc",
+          "name": "retained",
+          "prefix": "moss_sk_eeeeeeee",
+          "secret_hash": "39a3606378fe299cf39201bf9c36643b49bd2125f58916c18ef1f993960ed523",
+          "scopes_json": "[\"sessions:list\"]",
+          "status": "active",
+          "created_at": 2,
+          "last_used_at": null
+        }
+      ]
+    },
+    {
+      "name": "disabled_owner",
+      "operation": "verify",
+      "users": [
+        {
+          "id": "c2cc8374-8cdf-4936-8967-d891fb500634",
+          "org_id": "4ce65010-7331-415a-abaa-4d47387d845e",
+          "email": "home@example.test",
+          "name": "c2cc8374-8cdf-4936-8967-d891fb500634",
+          "department_id": "root-department",
+          "role": "admin",
+          "status": "active",
+          "membership_revision": 0,
+          "password_hash": null,
+          "password_updated_at": null,
+          "last_login_at": null,
+          "created_at": 1
+        },
+        {
+          "id": "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb",
+          "org_id": "4ce65010-7331-415a-abaa-4d47387d845e",
+          "email": "target@example.test",
+          "name": "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb",
+          "department_id": "child-department",
+          "role": "user",
+          "status": "disabled",
+          "membership_revision": 0,
+          "password_hash": null,
+          "password_updated_at": null,
+          "last_login_at": null,
+          "created_at": 1
+        },
+        {
+          "id": "cccccccc-cccc-4ccc-8ccc-cccccccccccc",
+          "org_id": "4ce65010-7331-415a-abaa-4d47387d845e",
+          "email": "outside@example.test",
+          "name": "cccccccc-cccc-4ccc-8ccc-cccccccccccc",
+          "department_id": "outside-department",
+          "role": "user",
+          "status": "active",
+          "membership_revision": 0,
+          "password_hash": null,
+          "password_updated_at": null,
+          "last_login_at": null,
+          "created_at": 1
+        }
+      ],
+      "departments": [
+        {
+          "id": "root-department",
+          "org_id": "4ce65010-7331-415a-abaa-4d47387d845e",
+          "parent_id": null,
+          "name": "root-department",
+          "created_at": 1,
+          "updated_at": 1
+        },
+        {
+          "id": "child-department",
+          "org_id": "4ce65010-7331-415a-abaa-4d47387d845e",
+          "parent_id": "root-department",
+          "name": "child-department",
+          "created_at": 1,
+          "updated_at": 1
+        },
+        {
+          "id": "outside-department",
+          "org_id": "4ce65010-7331-415a-abaa-4d47387d845e",
+          "parent_id": null,
+          "name": "outside-department",
+          "created_at": 1,
+          "updated_at": 1
+        }
+      ],
+      "accounts": [],
+      "links": [],
+      "beforeKeys": [
+        {
+          "id": "dddddddd-dddd-4ddd-8ddd-dddddddddddd",
+          "org_id": "4ce65010-7331-415a-abaa-4d47387d845e",
+          "user_id": "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb",
+          "name": "retained",
+          "prefix": "moss_sk_dddddddd",
+          "secret_hash": "39a3606378fe299cf39201bf9c36643b49bd2125f58916c18ef1f993960ed523",
+          "scopes_json": "[\"sessions:list\"]",
+          "status": "active",
+          "created_at": 1,
+          "last_used_at": null
+        },
+        {
+          "id": "eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee",
+          "org_id": "4ce65010-7331-415a-abaa-4d47387d845e",
+          "user_id": "cccccccc-cccc-4ccc-8ccc-cccccccccccc",
+          "name": "retained",
+          "prefix": "moss_sk_eeeeeeee",
+          "secret_hash": "39a3606378fe299cf39201bf9c36643b49bd2125f58916c18ef1f993960ed523",
+          "scopes_json": "[\"sessions:list\"]",
+          "status": "active",
+          "created_at": 2,
+          "last_used_at": null
+        }
+      ],
+      "requestedName": "  Test Key  ",
+      "requestedScopes": [
+        "sessions:list"
+      ],
+      "result": null,
+      "error": {
+        "status": 401,
+        "message": "API key owner is invalid"
+      },
+      "afterKeys": [
+        {
+          "id": "dddddddd-dddd-4ddd-8ddd-dddddddddddd",
+          "org_id": "4ce65010-7331-415a-abaa-4d47387d845e",
+          "user_id": "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb",
+          "name": "retained",
+          "prefix": "moss_sk_dddddddd",
+          "secret_hash": "39a3606378fe299cf39201bf9c36643b49bd2125f58916c18ef1f993960ed523",
+          "scopes_json": "[\"sessions:list\"]",
+          "status": "active",
+          "created_at": 1,
+          "last_used_at": null
+        },
+        {
+          "id": "eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee",
+          "org_id": "4ce65010-7331-415a-abaa-4d47387d845e",
+          "user_id": "cccccccc-cccc-4ccc-8ccc-cccccccccccc",
+          "name": "retained",
+          "prefix": "moss_sk_eeeeeeee",
+          "secret_hash": "39a3606378fe299cf39201bf9c36643b49bd2125f58916c18ef1f993960ed523",
+          "scopes_json": "[\"sessions:list\"]",
+          "status": "active",
+          "created_at": 2,
+          "last_used_at": null
+        }
+      ]
+    },
+    {
+      "name": "missing_owner",
+      "operation": "verify",
+      "users": [
+        {
+          "id": "c2cc8374-8cdf-4936-8967-d891fb500634",
+          "org_id": "4ce65010-7331-415a-abaa-4d47387d845e",
+          "email": "home@example.test",
+          "name": "c2cc8374-8cdf-4936-8967-d891fb500634",
+          "department_id": "root-department",
+          "role": "admin",
+          "status": "active",
+          "membership_revision": 0,
+          "password_hash": null,
+          "password_updated_at": null,
+          "last_login_at": null,
+          "created_at": 1
+        },
+        {
+          "id": "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb",
+          "org_id": "4ce65010-7331-415a-abaa-4d47387d845e",
+          "email": "target@example.test",
+          "name": "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb",
+          "department_id": "child-department",
+          "role": "user",
+          "status": "active",
+          "membership_revision": 0,
+          "password_hash": null,
+          "password_updated_at": null,
+          "last_login_at": null,
+          "created_at": 1
+        },
+        {
+          "id": "cccccccc-cccc-4ccc-8ccc-cccccccccccc",
+          "org_id": "4ce65010-7331-415a-abaa-4d47387d845e",
+          "email": "outside@example.test",
+          "name": "cccccccc-cccc-4ccc-8ccc-cccccccccccc",
+          "department_id": "outside-department",
+          "role": "user",
+          "status": "active",
+          "membership_revision": 0,
+          "password_hash": null,
+          "password_updated_at": null,
+          "last_login_at": null,
+          "created_at": 1
+        }
+      ],
+      "departments": [
+        {
+          "id": "root-department",
+          "org_id": "4ce65010-7331-415a-abaa-4d47387d845e",
+          "parent_id": null,
+          "name": "root-department",
+          "created_at": 1,
+          "updated_at": 1
+        },
+        {
+          "id": "child-department",
+          "org_id": "4ce65010-7331-415a-abaa-4d47387d845e",
+          "parent_id": "root-department",
+          "name": "child-department",
+          "created_at": 1,
+          "updated_at": 1
+        },
+        {
+          "id": "outside-department",
+          "org_id": "4ce65010-7331-415a-abaa-4d47387d845e",
+          "parent_id": null,
+          "name": "outside-department",
+          "created_at": 1,
+          "updated_at": 1
+        }
+      ],
+      "accounts": [],
+      "links": [],
+      "beforeKeys": [
+        {
+          "id": "dddddddd-dddd-4ddd-8ddd-dddddddddddd",
+          "org_id": "4ce65010-7331-415a-abaa-4d47387d845e",
+          "user_id": "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb",
+          "name": "retained",
+          "prefix": "moss_sk_dddddddd",
+          "secret_hash": "39a3606378fe299cf39201bf9c36643b49bd2125f58916c18ef1f993960ed523",
+          "scopes_json": "[\"sessions:list\"]",
+          "status": "active",
+          "created_at": 1,
+          "last_used_at": null
+        },
+        {
+          "id": "eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee",
+          "org_id": "4ce65010-7331-415a-abaa-4d47387d845e",
+          "user_id": "cccccccc-cccc-4ccc-8ccc-cccccccccccc",
+          "name": "retained",
+          "prefix": "moss_sk_eeeeeeee",
+          "secret_hash": "39a3606378fe299cf39201bf9c36643b49bd2125f58916c18ef1f993960ed523",
+          "scopes_json": "[\"sessions:list\"]",
+          "status": "active",
+          "created_at": 2,
+          "last_used_at": null
+        }
+      ],
+      "requestedName": "  Test Key  ",
+      "requestedScopes": [
+        "sessions:list"
+      ],
+      "result": null,
+      "error": {
+        "status": 401,
+        "message": "API key owner is invalid"
+      },
+      "afterKeys": [
+        {
+          "id": "dddddddd-dddd-4ddd-8ddd-dddddddddddd",
+          "org_id": "4ce65010-7331-415a-abaa-4d47387d845e",
+          "user_id": "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb",
+          "name": "retained",
+          "prefix": "moss_sk_dddddddd",
+          "secret_hash": "39a3606378fe299cf39201bf9c36643b49bd2125f58916c18ef1f993960ed523",
+          "scopes_json": "[\"sessions:list\"]",
+          "status": "active",
+          "created_at": 1,
+          "last_used_at": null
+        },
+        {
+          "id": "eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee",
+          "org_id": "4ce65010-7331-415a-abaa-4d47387d845e",
+          "user_id": "cccccccc-cccc-4ccc-8ccc-cccccccccccc",
+          "name": "retained",
+          "prefix": "moss_sk_eeeeeeee",
+          "secret_hash": "39a3606378fe299cf39201bf9c36643b49bd2125f58916c18ef1f993960ed523",
+          "scopes_json": "[\"sessions:list\"]",
+          "status": "active",
+          "created_at": 2,
+          "last_used_at": null
+        }
+      ]
+    },
+    {
+      "name": "malformed_key",
+      "operation": "verify",
+      "users": [
+        {
+          "id": "c2cc8374-8cdf-4936-8967-d891fb500634",
+          "org_id": "4ce65010-7331-415a-abaa-4d47387d845e",
+          "email": "home@example.test",
+          "name": "c2cc8374-8cdf-4936-8967-d891fb500634",
+          "department_id": "root-department",
+          "role": "admin",
+          "status": "active",
+          "membership_revision": 0,
+          "password_hash": null,
+          "password_updated_at": null,
+          "last_login_at": null,
+          "created_at": 1
+        },
+        {
+          "id": "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb",
+          "org_id": "4ce65010-7331-415a-abaa-4d47387d845e",
+          "email": "target@example.test",
+          "name": "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb",
+          "department_id": "child-department",
+          "role": "user",
+          "status": "active",
+          "membership_revision": 0,
+          "password_hash": null,
+          "password_updated_at": null,
+          "last_login_at": null,
+          "created_at": 1
+        },
+        {
+          "id": "cccccccc-cccc-4ccc-8ccc-cccccccccccc",
+          "org_id": "4ce65010-7331-415a-abaa-4d47387d845e",
+          "email": "outside@example.test",
+          "name": "cccccccc-cccc-4ccc-8ccc-cccccccccccc",
+          "department_id": "outside-department",
+          "role": "user",
+          "status": "active",
+          "membership_revision": 0,
+          "password_hash": null,
+          "password_updated_at": null,
+          "last_login_at": null,
+          "created_at": 1
+        }
+      ],
+      "departments": [
+        {
+          "id": "root-department",
+          "org_id": "4ce65010-7331-415a-abaa-4d47387d845e",
+          "parent_id": null,
+          "name": "root-department",
+          "created_at": 1,
+          "updated_at": 1
+        },
+        {
+          "id": "child-department",
+          "org_id": "4ce65010-7331-415a-abaa-4d47387d845e",
+          "parent_id": "root-department",
+          "name": "child-department",
+          "created_at": 1,
+          "updated_at": 1
+        },
+        {
+          "id": "outside-department",
+          "org_id": "4ce65010-7331-415a-abaa-4d47387d845e",
+          "parent_id": null,
+          "name": "outside-department",
+          "created_at": 1,
+          "updated_at": 1
+        }
+      ],
+      "accounts": [],
+      "links": [],
+      "beforeKeys": [
+        {
+          "id": "dddddddd-dddd-4ddd-8ddd-dddddddddddd",
+          "org_id": "4ce65010-7331-415a-abaa-4d47387d845e",
+          "user_id": "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb",
+          "name": "retained",
+          "prefix": "moss_sk_dddddddd",
+          "secret_hash": "39a3606378fe299cf39201bf9c36643b49bd2125f58916c18ef1f993960ed523",
+          "scopes_json": "[\"sessions:list\"]",
+          "status": "active",
+          "created_at": 1,
+          "last_used_at": null
+        },
+        {
+          "id": "eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee",
+          "org_id": "4ce65010-7331-415a-abaa-4d47387d845e",
+          "user_id": "cccccccc-cccc-4ccc-8ccc-cccccccccccc",
+          "name": "retained",
+          "prefix": "moss_sk_eeeeeeee",
+          "secret_hash": "39a3606378fe299cf39201bf9c36643b49bd2125f58916c18ef1f993960ed523",
+          "scopes_json": "[\"sessions:list\"]",
+          "status": "active",
+          "created_at": 2,
+          "last_used_at": null
+        }
+      ],
+      "requestedName": "  Test Key  ",
+      "requestedScopes": [
+        "sessions:list"
+      ],
+      "result": null,
+      "error": {
+        "status": 401,
+        "message": "Invalid API key"
+      },
+      "afterKeys": [
+        {
+          "id": "dddddddd-dddd-4ddd-8ddd-dddddddddddd",
+          "org_id": "4ce65010-7331-415a-abaa-4d47387d845e",
+          "user_id": "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb",
+          "name": "retained",
+          "prefix": "moss_sk_dddddddd",
+          "secret_hash": "39a3606378fe299cf39201bf9c36643b49bd2125f58916c18ef1f993960ed523",
+          "scopes_json": "[\"sessions:list\"]",
+          "status": "active",
+          "created_at": 1,
+          "last_used_at": null
+        },
+        {
+          "id": "eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee",
+          "org_id": "4ce65010-7331-415a-abaa-4d47387d845e",
+          "user_id": "cccccccc-cccc-4ccc-8ccc-cccccccccccc",
+          "name": "retained",
+          "prefix": "moss_sk_eeeeeeee",
+          "secret_hash": "39a3606378fe299cf39201bf9c36643b49bd2125f58916c18ef1f993960ed523",
+          "scopes_json": "[\"sessions:list\"]",
+          "status": "active",
+          "created_at": 2,
+          "last_used_at": null
+        }
+      ]
+    },
+    {
+      "name": "linked_account_active",
+      "operation": "final_verify",
+      "users": [
+        {
+          "id": "c2cc8374-8cdf-4936-8967-d891fb500634",
+          "org_id": "4ce65010-7331-415a-abaa-4d47387d845e",
+          "email": "home@example.test",
+          "name": "c2cc8374-8cdf-4936-8967-d891fb500634",
+          "department_id": "root-department",
+          "role": "admin",
+          "status": "active",
+          "membership_revision": 0,
+          "password_hash": null,
+          "password_updated_at": null,
+          "last_login_at": null,
+          "created_at": 1
+        },
+        {
+          "id": "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb",
+          "org_id": "4ce65010-7331-415a-abaa-4d47387d845e",
+          "email": "target@example.test",
+          "name": "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb",
+          "department_id": "child-department",
+          "role": "user",
+          "status": "active",
+          "membership_revision": 0,
+          "password_hash": null,
+          "password_updated_at": null,
+          "last_login_at": null,
+          "created_at": 1
+        },
+        {
+          "id": "cccccccc-cccc-4ccc-8ccc-cccccccccccc",
+          "org_id": "4ce65010-7331-415a-abaa-4d47387d845e",
+          "email": "outside@example.test",
+          "name": "cccccccc-cccc-4ccc-8ccc-cccccccccccc",
+          "department_id": "outside-department",
+          "role": "user",
+          "status": "active",
+          "membership_revision": 0,
+          "password_hash": null,
+          "password_updated_at": null,
+          "last_login_at": null,
+          "created_at": 1
+        }
+      ],
+      "departments": [
+        {
+          "id": "root-department",
+          "org_id": "4ce65010-7331-415a-abaa-4d47387d845e",
+          "parent_id": null,
+          "name": "root-department",
+          "created_at": 1,
+          "updated_at": 1
+        },
+        {
+          "id": "child-department",
+          "org_id": "4ce65010-7331-415a-abaa-4d47387d845e",
+          "parent_id": "root-department",
+          "name": "child-department",
+          "created_at": 1,
+          "updated_at": 1
+        },
+        {
+          "id": "outside-department",
+          "org_id": "4ce65010-7331-415a-abaa-4d47387d845e",
+          "parent_id": null,
+          "name": "outside-department",
+          "created_at": 1,
+          "updated_at": 1
+        }
+      ],
+      "accounts": [
+        {
+          "id": "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+          "phone": null,
+          "status": "active",
+          "created_at": 1
+        }
+      ],
+      "links": [
+        {
+          "account_id": "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+          "org_id": "4ce65010-7331-415a-abaa-4d47387d845e",
+          "user_id": "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb",
+          "created_at": 1
+        }
+      ],
+      "beforeKeys": [
+        {
+          "id": "dddddddd-dddd-4ddd-8ddd-dddddddddddd",
+          "org_id": "4ce65010-7331-415a-abaa-4d47387d845e",
+          "user_id": "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb",
+          "name": "retained",
+          "prefix": "moss_sk_dddddddd",
+          "secret_hash": "39a3606378fe299cf39201bf9c36643b49bd2125f58916c18ef1f993960ed523",
+          "scopes_json": "[\"sessions:list\"]",
+          "status": "active",
+          "created_at": 1,
+          "last_used_at": null
+        },
+        {
+          "id": "eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee",
+          "org_id": "4ce65010-7331-415a-abaa-4d47387d845e",
+          "user_id": "cccccccc-cccc-4ccc-8ccc-cccccccccccc",
+          "name": "retained",
+          "prefix": "moss_sk_eeeeeeee",
+          "secret_hash": "39a3606378fe299cf39201bf9c36643b49bd2125f58916c18ef1f993960ed523",
+          "scopes_json": "[\"sessions:list\"]",
+          "status": "active",
+          "created_at": 2,
+          "last_used_at": null
+        }
+      ],
+      "requestedName": "  Test Key  ",
+      "requestedScopes": [
+        "sessions:list"
+      ],
+      "result": {
+        "accepted": true
+      },
+      "error": null,
+      "afterKeys": [
+        {
+          "id": "dddddddd-dddd-4ddd-8ddd-dddddddddddd",
+          "org_id": "4ce65010-7331-415a-abaa-4d47387d845e",
+          "user_id": "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb",
+          "name": "retained",
+          "prefix": "moss_sk_dddddddd",
+          "secret_hash": "39a3606378fe299cf39201bf9c36643b49bd2125f58916c18ef1f993960ed523",
+          "scopes_json": "[\"sessions:list\"]",
+          "status": "active",
+          "created_at": 1,
+          "last_used_at": null
+        },
+        {
+          "id": "eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee",
+          "org_id": "4ce65010-7331-415a-abaa-4d47387d845e",
+          "user_id": "cccccccc-cccc-4ccc-8ccc-cccccccccccc",
+          "name": "retained",
+          "prefix": "moss_sk_eeeeeeee",
+          "secret_hash": "39a3606378fe299cf39201bf9c36643b49bd2125f58916c18ef1f993960ed523",
+          "scopes_json": "[\"sessions:list\"]",
+          "status": "active",
+          "created_at": 2,
+          "last_used_at": null
+        }
+      ]
+    },
+    {
+      "name": "linked_account_disabled",
+      "operation": "final_verify",
+      "users": [
+        {
+          "id": "c2cc8374-8cdf-4936-8967-d891fb500634",
+          "org_id": "4ce65010-7331-415a-abaa-4d47387d845e",
+          "email": "home@example.test",
+          "name": "c2cc8374-8cdf-4936-8967-d891fb500634",
+          "department_id": "root-department",
+          "role": "admin",
+          "status": "active",
+          "membership_revision": 0,
+          "password_hash": null,
+          "password_updated_at": null,
+          "last_login_at": null,
+          "created_at": 1
+        },
+        {
+          "id": "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb",
+          "org_id": "4ce65010-7331-415a-abaa-4d47387d845e",
+          "email": "target@example.test",
+          "name": "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb",
+          "department_id": "child-department",
+          "role": "user",
+          "status": "active",
+          "membership_revision": 0,
+          "password_hash": null,
+          "password_updated_at": null,
+          "last_login_at": null,
+          "created_at": 1
+        },
+        {
+          "id": "cccccccc-cccc-4ccc-8ccc-cccccccccccc",
+          "org_id": "4ce65010-7331-415a-abaa-4d47387d845e",
+          "email": "outside@example.test",
+          "name": "cccccccc-cccc-4ccc-8ccc-cccccccccccc",
+          "department_id": "outside-department",
+          "role": "user",
+          "status": "active",
+          "membership_revision": 0,
+          "password_hash": null,
+          "password_updated_at": null,
+          "last_login_at": null,
+          "created_at": 1
+        }
+      ],
+      "departments": [
+        {
+          "id": "root-department",
+          "org_id": "4ce65010-7331-415a-abaa-4d47387d845e",
+          "parent_id": null,
+          "name": "root-department",
+          "created_at": 1,
+          "updated_at": 1
+        },
+        {
+          "id": "child-department",
+          "org_id": "4ce65010-7331-415a-abaa-4d47387d845e",
+          "parent_id": "root-department",
+          "name": "child-department",
+          "created_at": 1,
+          "updated_at": 1
+        },
+        {
+          "id": "outside-department",
+          "org_id": "4ce65010-7331-415a-abaa-4d47387d845e",
+          "parent_id": null,
+          "name": "outside-department",
+          "created_at": 1,
+          "updated_at": 1
+        }
+      ],
+      "accounts": [
+        {
+          "id": "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+          "phone": null,
+          "status": "disabled",
+          "created_at": 1
+        }
+      ],
+      "links": [
+        {
+          "account_id": "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+          "org_id": "4ce65010-7331-415a-abaa-4d47387d845e",
+          "user_id": "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb",
+          "created_at": 1
+        }
+      ],
+      "beforeKeys": [
+        {
+          "id": "dddddddd-dddd-4ddd-8ddd-dddddddddddd",
+          "org_id": "4ce65010-7331-415a-abaa-4d47387d845e",
+          "user_id": "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb",
+          "name": "retained",
+          "prefix": "moss_sk_dddddddd",
+          "secret_hash": "39a3606378fe299cf39201bf9c36643b49bd2125f58916c18ef1f993960ed523",
+          "scopes_json": "[\"sessions:list\"]",
+          "status": "active",
+          "created_at": 1,
+          "last_used_at": null
+        },
+        {
+          "id": "eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee",
+          "org_id": "4ce65010-7331-415a-abaa-4d47387d845e",
+          "user_id": "cccccccc-cccc-4ccc-8ccc-cccccccccccc",
+          "name": "retained",
+          "prefix": "moss_sk_eeeeeeee",
+          "secret_hash": "39a3606378fe299cf39201bf9c36643b49bd2125f58916c18ef1f993960ed523",
+          "scopes_json": "[\"sessions:list\"]",
+          "status": "active",
+          "created_at": 2,
+          "last_used_at": null
+        }
+      ],
+      "requestedName": "  Test Key  ",
+      "requestedScopes": [
+        "sessions:list"
+      ],
+      "result": {
+        "accepted": false
+      },
+      "error": null,
+      "afterKeys": [
+        {
+          "id": "dddddddd-dddd-4ddd-8ddd-dddddddddddd",
+          "org_id": "4ce65010-7331-415a-abaa-4d47387d845e",
+          "user_id": "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb",
+          "name": "retained",
+          "prefix": "moss_sk_dddddddd",
+          "secret_hash": "39a3606378fe299cf39201bf9c36643b49bd2125f58916c18ef1f993960ed523",
+          "scopes_json": "[\"sessions:list\"]",
+          "status": "active",
+          "created_at": 1,
+          "last_used_at": null
+        },
+        {
+          "id": "eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee",
+          "org_id": "4ce65010-7331-415a-abaa-4d47387d845e",
+          "user_id": "cccccccc-cccc-4ccc-8ccc-cccccccccccc",
+          "name": "retained",
+          "prefix": "moss_sk_eeeeeeee",
+          "secret_hash": "39a3606378fe299cf39201bf9c36643b49bd2125f58916c18ef1f993960ed523",
+          "scopes_json": "[\"sessions:list\"]",
+          "status": "active",
+          "created_at": 2,
+          "last_used_at": null
+        }
+      ]
+    },
+    {
+      "name": "linked_account_locked",
+      "operation": "final_verify",
+      "users": [
+        {
+          "id": "c2cc8374-8cdf-4936-8967-d891fb500634",
+          "org_id": "4ce65010-7331-415a-abaa-4d47387d845e",
+          "email": "home@example.test",
+          "name": "c2cc8374-8cdf-4936-8967-d891fb500634",
+          "department_id": "root-department",
+          "role": "admin",
+          "status": "active",
+          "membership_revision": 0,
+          "password_hash": null,
+          "password_updated_at": null,
+          "last_login_at": null,
+          "created_at": 1
+        },
+        {
+          "id": "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb",
+          "org_id": "4ce65010-7331-415a-abaa-4d47387d845e",
+          "email": "target@example.test",
+          "name": "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb",
+          "department_id": "child-department",
+          "role": "user",
+          "status": "active",
+          "membership_revision": 0,
+          "password_hash": null,
+          "password_updated_at": null,
+          "last_login_at": null,
+          "created_at": 1
+        },
+        {
+          "id": "cccccccc-cccc-4ccc-8ccc-cccccccccccc",
+          "org_id": "4ce65010-7331-415a-abaa-4d47387d845e",
+          "email": "outside@example.test",
+          "name": "cccccccc-cccc-4ccc-8ccc-cccccccccccc",
+          "department_id": "outside-department",
+          "role": "user",
+          "status": "active",
+          "membership_revision": 0,
+          "password_hash": null,
+          "password_updated_at": null,
+          "last_login_at": null,
+          "created_at": 1
+        }
+      ],
+      "departments": [
+        {
+          "id": "root-department",
+          "org_id": "4ce65010-7331-415a-abaa-4d47387d845e",
+          "parent_id": null,
+          "name": "root-department",
+          "created_at": 1,
+          "updated_at": 1
+        },
+        {
+          "id": "child-department",
+          "org_id": "4ce65010-7331-415a-abaa-4d47387d845e",
+          "parent_id": "root-department",
+          "name": "child-department",
+          "created_at": 1,
+          "updated_at": 1
+        },
+        {
+          "id": "outside-department",
+          "org_id": "4ce65010-7331-415a-abaa-4d47387d845e",
+          "parent_id": null,
+          "name": "outside-department",
+          "created_at": 1,
+          "updated_at": 1
+        }
+      ],
+      "accounts": [
+        {
+          "id": "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+          "phone": null,
+          "status": "locked",
+          "created_at": 1
+        }
+      ],
+      "links": [
+        {
+          "account_id": "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+          "org_id": "4ce65010-7331-415a-abaa-4d47387d845e",
+          "user_id": "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb",
+          "created_at": 1
+        }
+      ],
+      "beforeKeys": [
+        {
+          "id": "dddddddd-dddd-4ddd-8ddd-dddddddddddd",
+          "org_id": "4ce65010-7331-415a-abaa-4d47387d845e",
+          "user_id": "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb",
+          "name": "retained",
+          "prefix": "moss_sk_dddddddd",
+          "secret_hash": "39a3606378fe299cf39201bf9c36643b49bd2125f58916c18ef1f993960ed523",
+          "scopes_json": "[\"sessions:list\"]",
+          "status": "active",
+          "created_at": 1,
+          "last_used_at": null
+        },
+        {
+          "id": "eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee",
+          "org_id": "4ce65010-7331-415a-abaa-4d47387d845e",
+          "user_id": "cccccccc-cccc-4ccc-8ccc-cccccccccccc",
+          "name": "retained",
+          "prefix": "moss_sk_eeeeeeee",
+          "secret_hash": "39a3606378fe299cf39201bf9c36643b49bd2125f58916c18ef1f993960ed523",
+          "scopes_json": "[\"sessions:list\"]",
+          "status": "active",
+          "created_at": 2,
+          "last_used_at": null
+        }
+      ],
+      "requestedName": "  Test Key  ",
+      "requestedScopes": [
+        "sessions:list"
+      ],
+      "result": {
+        "accepted": false
+      },
+      "error": null,
+      "afterKeys": [
+        {
+          "id": "dddddddd-dddd-4ddd-8ddd-dddddddddddd",
+          "org_id": "4ce65010-7331-415a-abaa-4d47387d845e",
+          "user_id": "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb",
+          "name": "retained",
+          "prefix": "moss_sk_dddddddd",
+          "secret_hash": "39a3606378fe299cf39201bf9c36643b49bd2125f58916c18ef1f993960ed523",
+          "scopes_json": "[\"sessions:list\"]",
+          "status": "active",
+          "created_at": 1,
+          "last_used_at": null
+        },
+        {
+          "id": "eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee",
+          "org_id": "4ce65010-7331-415a-abaa-4d47387d845e",
+          "user_id": "cccccccc-cccc-4ccc-8ccc-cccccccccccc",
+          "name": "retained",
+          "prefix": "moss_sk_eeeeeeee",
+          "secret_hash": "39a3606378fe299cf39201bf9c36643b49bd2125f58916c18ef1f993960ed523",
+          "scopes_json": "[\"sessions:list\"]",
+          "status": "active",
+          "created_at": 2,
+          "last_used_at": null
+        }
+      ]
+    },
+    {
+      "name": "linked_account_missing",
+      "operation": "final_verify",
+      "users": [
+        {
+          "id": "c2cc8374-8cdf-4936-8967-d891fb500634",
+          "org_id": "4ce65010-7331-415a-abaa-4d47387d845e",
+          "email": "home@example.test",
+          "name": "c2cc8374-8cdf-4936-8967-d891fb500634",
+          "department_id": "root-department",
+          "role": "admin",
+          "status": "active",
+          "membership_revision": 0,
+          "password_hash": null,
+          "password_updated_at": null,
+          "last_login_at": null,
+          "created_at": 1
+        },
+        {
+          "id": "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb",
+          "org_id": "4ce65010-7331-415a-abaa-4d47387d845e",
+          "email": "target@example.test",
+          "name": "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb",
+          "department_id": "child-department",
+          "role": "user",
+          "status": "active",
+          "membership_revision": 0,
+          "password_hash": null,
+          "password_updated_at": null,
+          "last_login_at": null,
+          "created_at": 1
+        },
+        {
+          "id": "cccccccc-cccc-4ccc-8ccc-cccccccccccc",
+          "org_id": "4ce65010-7331-415a-abaa-4d47387d845e",
+          "email": "outside@example.test",
+          "name": "cccccccc-cccc-4ccc-8ccc-cccccccccccc",
+          "department_id": "outside-department",
+          "role": "user",
+          "status": "active",
+          "membership_revision": 0,
+          "password_hash": null,
+          "password_updated_at": null,
+          "last_login_at": null,
+          "created_at": 1
+        }
+      ],
+      "departments": [
+        {
+          "id": "root-department",
+          "org_id": "4ce65010-7331-415a-abaa-4d47387d845e",
+          "parent_id": null,
+          "name": "root-department",
+          "created_at": 1,
+          "updated_at": 1
+        },
+        {
+          "id": "child-department",
+          "org_id": "4ce65010-7331-415a-abaa-4d47387d845e",
+          "parent_id": "root-department",
+          "name": "child-department",
+          "created_at": 1,
+          "updated_at": 1
+        },
+        {
+          "id": "outside-department",
+          "org_id": "4ce65010-7331-415a-abaa-4d47387d845e",
+          "parent_id": null,
+          "name": "outside-department",
+          "created_at": 1,
+          "updated_at": 1
+        }
+      ],
+      "accounts": [],
+      "links": [
+        {
+          "account_id": "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+          "org_id": "4ce65010-7331-415a-abaa-4d47387d845e",
+          "user_id": "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb",
+          "created_at": 1
+        }
+      ],
+      "beforeKeys": [
+        {
+          "id": "dddddddd-dddd-4ddd-8ddd-dddddddddddd",
+          "org_id": "4ce65010-7331-415a-abaa-4d47387d845e",
+          "user_id": "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb",
+          "name": "retained",
+          "prefix": "moss_sk_dddddddd",
+          "secret_hash": "39a3606378fe299cf39201bf9c36643b49bd2125f58916c18ef1f993960ed523",
+          "scopes_json": "[\"sessions:list\"]",
+          "status": "active",
+          "created_at": 1,
+          "last_used_at": null
+        },
+        {
+          "id": "eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee",
+          "org_id": "4ce65010-7331-415a-abaa-4d47387d845e",
+          "user_id": "cccccccc-cccc-4ccc-8ccc-cccccccccccc",
+          "name": "retained",
+          "prefix": "moss_sk_eeeeeeee",
+          "secret_hash": "39a3606378fe299cf39201bf9c36643b49bd2125f58916c18ef1f993960ed523",
+          "scopes_json": "[\"sessions:list\"]",
+          "status": "active",
+          "created_at": 2,
+          "last_used_at": null
+        }
+      ],
+      "requestedName": "  Test Key  ",
+      "requestedScopes": [
+        "sessions:list"
+      ],
+      "result": {
+        "accepted": false
+      },
+      "error": null,
+      "afterKeys": [
+        {
+          "id": "dddddddd-dddd-4ddd-8ddd-dddddddddddd",
+          "org_id": "4ce65010-7331-415a-abaa-4d47387d845e",
+          "user_id": "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb",
+          "name": "retained",
+          "prefix": "moss_sk_dddddddd",
+          "secret_hash": "39a3606378fe299cf39201bf9c36643b49bd2125f58916c18ef1f993960ed523",
+          "scopes_json": "[\"sessions:list\"]",
+          "status": "active",
+          "created_at": 1,
+          "last_used_at": null
+        },
+        {
+          "id": "eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee",
+          "org_id": "4ce65010-7331-415a-abaa-4d47387d845e",
+          "user_id": "cccccccc-cccc-4ccc-8ccc-cccccccccccc",
+          "name": "retained",
+          "prefix": "moss_sk_eeeeeeee",
+          "secret_hash": "39a3606378fe299cf39201bf9c36643b49bd2125f58916c18ef1f993960ed523",
+          "scopes_json": "[\"sessions:list\"]",
+          "status": "active",
+          "created_at": 2,
+          "last_used_at": null
+        }
+      ]
+    },
+    {
+      "name": "legacy_unlinked_account",
+      "operation": "final_verify",
+      "users": [
+        {
+          "id": "c2cc8374-8cdf-4936-8967-d891fb500634",
+          "org_id": "4ce65010-7331-415a-abaa-4d47387d845e",
+          "email": "home@example.test",
+          "name": "c2cc8374-8cdf-4936-8967-d891fb500634",
+          "department_id": "root-department",
+          "role": "admin",
+          "status": "active",
+          "membership_revision": 0,
+          "password_hash": null,
+          "password_updated_at": null,
+          "last_login_at": null,
+          "created_at": 1
+        },
+        {
+          "id": "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb",
+          "org_id": "4ce65010-7331-415a-abaa-4d47387d845e",
+          "email": "target@example.test",
+          "name": "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb",
+          "department_id": "child-department",
+          "role": "user",
+          "status": "active",
+          "membership_revision": 0,
+          "password_hash": null,
+          "password_updated_at": null,
+          "last_login_at": null,
+          "created_at": 1
+        },
+        {
+          "id": "cccccccc-cccc-4ccc-8ccc-cccccccccccc",
+          "org_id": "4ce65010-7331-415a-abaa-4d47387d845e",
+          "email": "outside@example.test",
+          "name": "cccccccc-cccc-4ccc-8ccc-cccccccccccc",
+          "department_id": "outside-department",
+          "role": "user",
+          "status": "active",
+          "membership_revision": 0,
+          "password_hash": null,
+          "password_updated_at": null,
+          "last_login_at": null,
+          "created_at": 1
+        }
+      ],
+      "departments": [
+        {
+          "id": "root-department",
+          "org_id": "4ce65010-7331-415a-abaa-4d47387d845e",
+          "parent_id": null,
+          "name": "root-department",
+          "created_at": 1,
+          "updated_at": 1
+        },
+        {
+          "id": "child-department",
+          "org_id": "4ce65010-7331-415a-abaa-4d47387d845e",
+          "parent_id": "root-department",
+          "name": "child-department",
+          "created_at": 1,
+          "updated_at": 1
+        },
+        {
+          "id": "outside-department",
+          "org_id": "4ce65010-7331-415a-abaa-4d47387d845e",
+          "parent_id": null,
+          "name": "outside-department",
+          "created_at": 1,
+          "updated_at": 1
+        }
+      ],
+      "accounts": [],
+      "links": [],
+      "beforeKeys": [
+        {
+          "id": "dddddddd-dddd-4ddd-8ddd-dddddddddddd",
+          "org_id": "4ce65010-7331-415a-abaa-4d47387d845e",
+          "user_id": "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb",
+          "name": "retained",
+          "prefix": "moss_sk_dddddddd",
+          "secret_hash": "39a3606378fe299cf39201bf9c36643b49bd2125f58916c18ef1f993960ed523",
+          "scopes_json": "[\"sessions:list\"]",
+          "status": "active",
+          "created_at": 1,
+          "last_used_at": null
+        },
+        {
+          "id": "eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee",
+          "org_id": "4ce65010-7331-415a-abaa-4d47387d845e",
+          "user_id": "cccccccc-cccc-4ccc-8ccc-cccccccccccc",
+          "name": "retained",
+          "prefix": "moss_sk_eeeeeeee",
+          "secret_hash": "39a3606378fe299cf39201bf9c36643b49bd2125f58916c18ef1f993960ed523",
+          "scopes_json": "[\"sessions:list\"]",
+          "status": "active",
+          "created_at": 2,
+          "last_used_at": null
+        }
+      ],
+      "requestedName": "  Test Key  ",
+      "requestedScopes": [
+        "sessions:list"
+      ],
+      "result": {
+        "accepted": true
+      },
+      "error": null,
+      "afterKeys": [
+        {
+          "id": "dddddddd-dddd-4ddd-8ddd-dddddddddddd",
+          "org_id": "4ce65010-7331-415a-abaa-4d47387d845e",
+          "user_id": "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb",
+          "name": "retained",
+          "prefix": "moss_sk_dddddddd",
+          "secret_hash": "39a3606378fe299cf39201bf9c36643b49bd2125f58916c18ef1f993960ed523",
+          "scopes_json": "[\"sessions:list\"]",
+          "status": "active",
+          "created_at": 1,
+          "last_used_at": null
+        },
+        {
+          "id": "eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee",
+          "org_id": "4ce65010-7331-415a-abaa-4d47387d845e",
+          "user_id": "cccccccc-cccc-4ccc-8ccc-cccccccccccc",
+          "name": "retained",
+          "prefix": "moss_sk_eeeeeeee",
+          "secret_hash": "39a3606378fe299cf39201bf9c36643b49bd2125f58916c18ef1f993960ed523",
+          "scopes_json": "[\"sessions:list\"]",
+          "status": "active",
+          "created_at": 2,
+          "last_used_at": null
+        }
+      ]
+    }
+  ]
+}

@@ -7,14 +7,7 @@ import React, {
 } from "react";
 import { Button, Select, Tag, Tooltip, Space } from "antd";
 import { useTranslation } from "react-i18next";
-import {
-  AlertTriangle,
-  ArrowLeftRight,
-  Globe,
-  Monitor,
-  RefreshCw,
-  User,
-} from "lucide-react";
+import { AlertTriangle, Globe, Monitor, RefreshCw } from "lucide-react";
 import { api } from "../../api";
 import { bridgeApi } from "../../api/modules/bridge";
 import type {
@@ -77,6 +70,7 @@ const BrowserWorkspace: React.FC<BrowserWorkspaceProps> = ({
   } = useViewportMode("mosswork:browser-panel:viewport-mode", "1280x800");
   const {
     status,
+    inputReady,
     tabs,
     sessionInfo,
     connect,
@@ -152,7 +146,7 @@ const BrowserWorkspace: React.FC<BrowserWorkspaceProps> = ({
   // modes, the viewport stays pinned to the user's preset; container resize
   // just rescales the canvas via CSS. Shared with /remote-browser via hook.
   useAutoViewportResize({
-    enabled: vpMode === "auto",
+    enabled: vpMode === "auto" && sessionInfo?.control_owner === "user",
     containerRef: canvasContainerRef,
     isStreaming,
     sendEvent,
@@ -193,7 +187,7 @@ const BrowserWorkspace: React.FC<BrowserWorkspaceProps> = ({
     }
   }, [sessionInfo, sessionId, t]);
 
-  // Initial HTTP fetch for session metadata (handoff buttons, current URL).
+  // Initial HTTP fetch for session metadata and current URL.
   useEffect(() => {
     let cancelled = false;
     (async () => {
@@ -241,31 +235,6 @@ const BrowserWorkspace: React.FC<BrowserWorkspaceProps> = ({
       startStream(sessionId ?? "", target);
     }
   }, [url, isStreaming, sessionId, streamNavigate, startStream]);
-
-  // -------------------------------------------------------------------------
-  // Handoff
-  // -------------------------------------------------------------------------
-  const handleHandoff = useCallback(
-    async (target: "agent" | "user") => {
-      const sid = sessionId ?? sessionInfo?.session_id ?? session?.session_id;
-      if (!sid) return;
-      try {
-        const resp = bridgeConnectionId
-          ? await bridgeApi.browserHandoff(
-              bridgeConnectionId,
-              sid,
-              target,
-              "user_button",
-            )
-          : await api.handoff(sid, target, "user_button");
-        if (resp.ok) setSession(resp.session as BrowserSession);
-      } catch (err) {
-        console.error("Handoff failed:", err);
-        showApiError(err, t("browserWorkspace.handoffFailed"), t);
-      }
-    },
-    [sessionId, sessionInfo, session, bridgeConnectionId, t],
-  );
 
   const handleRetry = useCallback(() => {
     // Pass an empty url so the backend reattaches to whatever tab the
@@ -360,7 +329,9 @@ const BrowserWorkspace: React.FC<BrowserWorkspaceProps> = ({
           navUrl={url}
           onNavUrlChange={setUrl}
           onNavigate={handleNavigate}
-          interactive={isStreaming && isInteractive}
+          interactive={isStreaming && isInteractive && inputReady}
+          waitingForFrame={isStreaming && isInteractive && !inputReady}
+          controlHint={t("browserWorkspace.nativeControlHint")}
           onReconnect={handleRetry}
           bookmarked={bookmarked}
           onToggleBookmark={onToggleBookmark}
@@ -372,7 +343,7 @@ const BrowserWorkspace: React.FC<BrowserWorkspaceProps> = ({
         />
       </div>
 
-      {/* Footer — control / stream / resolution, then handoff actions */}
+      {/* Footer — control, stream and resolution. Conversation owns Stop/resume. */}
       <div className={styles.footer}>
         {hasSession ? (
           <>
@@ -411,23 +382,6 @@ const BrowserWorkspace: React.FC<BrowserWorkspaceProps> = ({
               </Tooltip>
             </div>
             <Space className={styles.footerRight} size={6}>
-              {controlOwner === "user" ? (
-                <Button
-                  size="small"
-                  icon={<ArrowLeftRight size={14} />}
-                  onClick={() => handleHandoff("agent")}
-                >
-                  {t("browserWorkspace.returnToAgent")}
-                </Button>
-              ) : (
-                <Button
-                  size="small"
-                  icon={<User size={14} />}
-                  onClick={() => handleHandoff("user")}
-                >
-                  {t("browserWorkspace.takeover")}
-                </Button>
-              )}
               {environment === "desktop" && (
                 <Tooltip title={t("browserWorkspace.openDesktopChrome")}>
                   <Button size="small" icon={<Monitor size={14} />}>

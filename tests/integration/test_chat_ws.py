@@ -29,6 +29,67 @@ def _chat_ws(c: httpx.AsyncClient, aid: str, auth: dict[str, str]) -> Any:
     return ws_connect(c._mosswork_app, chat_ws_path(aid, auth))  # type: ignore[attr-defined]
 
 
+async def test_native_stop_and_new_message_fence_the_shared_browser(env: Any) -> None:
+    """Native auth/Stop/queue/new-message flow shares the real browser barrier.
+
+    The model is the existing fake harness; real Chrome transport is qualified
+    separately by tools/accept_browser_control.py.
+    """
+    from ai_dev_browser.remote.control import ControlError
+
+    from octop.api.deps import resolve_user_from_token
+    from octop.api.routers.chat.models import ChatTurnBody
+    from octop.api.routers.chat.turn import prepare_dashboard_turn
+    from octop.infra.browser.control import profile_control, resume_user_browser
+
+    c, srv, fake, auth, bob_auth, aid = env
+    owner = resolve_user_from_token(srv, auth["Authorization"].removeprefix("Bearer "))
+    tid = (await c.post(f"/api/agents/{aid}/threads", headers=auth)).json()["thread_id"]
+    prepared = await prepare_dashboard_turn(
+        srv, agent_id=aid, user=owner, turn=ChatTurnBody(text="queued before Stop", thread_id=tid)
+    )
+    controls = await profile_control(f"user-{owner.id}", srv.paths.root)
+    admitted = prepared.browser_control_epoch
+    assert admitted == controls.core.epoch
+
+    url = f"/api/agents/{aid}/threads/{tid}/cancel"
+    refused = await c.post(url, headers=bob_auth)
+    assert refused.status_code == 403
+    assert controls.owner == "agent" and controls.core.epoch == admitted
+    stopped = await c.post(url, headers=auth)
+    assert stopped.status_code == 200, stopped.text
+    assert controls.owner == "user" and controls.core.epoch > admitted
+    await resume_user_browser(owner.id, srv.paths.root, admitted)
+    assert controls.owner == "user", "An old queued message silently resumed the browser"
+
+    event = {
+        "type": "mousedown",
+        "controlEpoch": controls.core.epoch,
+        "targetEpoch": controls.core.target_epoch,
+        "button": "left",
+    }
+
+    async def input_operation() -> None:
+        pass
+
+    await controls.input("viewer", event, input_operation)
+    try:
+        await resume_user_browser(owner.id, srv.paths.root, controls.core.epoch)
+    except ControlError as error:
+        assert error.code == "browser_input_in_progress"
+    else:
+        raise AssertionError("A new turn resumed during held pointer input")
+    await controls.detach("viewer", lambda _event: input_operation())
+    assert controls.owner == "user"
+
+    chunks = await _consume_ws_turn(c, aid, auth, text="Continue", thread_id=tid)
+    assert chunks[-1]["type"] == "done", chunks
+    assert controls.owner == "agent"
+    harness = srv.app_runtime.agent_registry.get_agent(aid)
+    assert harness.last_request["configurable"]["mosswork_browser_epoch"] == controls.core.epoch
+    assert controls.core.epoch > admitted + 1
+
+
 @pytest.fixture
 async def env(tmp_mosswork_home: Path) -> AsyncIterator[Any]:
     write_mosswork_config(tmp_mosswork_home, enable_api_docs=True)

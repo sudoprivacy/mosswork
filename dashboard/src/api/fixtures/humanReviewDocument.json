@@ -1,0 +1,44 @@
+{
+  "original": {
+    "target": {
+      "projectId": "project-original",
+      "reviewId": "11111111111111111111111111111111"
+    },
+    "document": {
+      "record": {
+        "format": "sudograph-served-review/v1",
+        "authority_ref": "authority-fixture",
+        "model_ref": "model-fixture",
+        "resource_ref": "project-original",
+        "source_refs": ["source:original"],
+        "revision": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "context_digest": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+        "endpoint": "/review/11111111111111111111111111111111/v1",
+        "html_sha256": "d85e8b16f184fdc457a5beee737f683e8a19c8e4afa7aec0931a416c8a1ecddc",
+        "record_sha256": "b33d54cf04e6249496b9bbb2080b5e770ad878c10026105e9254fe4d39fcbf62"
+      },
+      "html": "<!doctype html><title>审阅原文</title><p>Original immutable document</p>"
+    }
+  },
+  "other": {
+    "target": {
+      "projectId": "project-other",
+      "reviewId": "22222222222222222222222222222222"
+    },
+    "document": {
+      "record": {
+        "format": "sudograph-served-review/v1",
+        "authority_ref": "authority-fixture",
+        "model_ref": "model-fixture",
+        "resource_ref": "project-other",
+        "source_refs": ["source:original"],
+        "revision": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "context_digest": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+        "endpoint": "/review/22222222222222222222222222222222/v1",
+        "html_sha256": "750c7fbb652a86789a30a529f86a01e171a8b08c0fc1e86639b0dd4a6997c6e9",
+        "record_sha256": "5a7f439c1682fb38b2f5a8240d95a865fc6b1c086c95292b3da027df42f2f0f4"
+      },
+      "html": "<!doctype html><title>Other original review</title><p>Original immutable document</p>"
+    }
+  }
+}

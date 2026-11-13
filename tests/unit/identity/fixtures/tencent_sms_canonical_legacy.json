@@ -1,0 +1,406 @@
+{
+  "sourceCommit": "d0b84d4c8fd5905d9ec3f7c160f2ce633f535d0d",
+  "sourcePath": "src/server/auth/smsTencent.ts",
+  "sourceSha256": "cae1323814c328db621598e8608c0befcc08058a99f89b9ba7ddcc0f12f7e24b",
+  "producer": "Exact original buildAuthorization/renderTemplateParams/sendTencentSms, fixed public dummy credentials/time and stub fetch; no network or live SMS",
+  "consumerTightenings": [
+    "Require exactly one explicit Ok acknowledgement; absent/empty/multiple receipts fail closed",
+    "Any Response.Error member refuses, including malformed/null",
+    "Sanitize upstream errors; fixed endpoint, no redirect or retry",
+    "Require the existing canonical bare phone and numeric code"
+  ],
+  "credentials": {
+    "secretId": "AKIDTEST",
+    "secretKey": "SECRETTEST"
+  },
+  "settings": {
+    "sdkAppId": "1400000000",
+    "signName": "测试 Test",
+    "templateId": "1234567",
+    "region": "ap-beijing",
+    "templateParams": ["{code}", "{ttlMinutes}"]
+  },
+  "phone": "13800138000",
+  "code": "123456",
+  "now": 1700000000999,
+  "requests": [
+    {
+      "name": "two",
+      "params": ["{code}", "{ttlMinutes}"],
+      "ttlSeconds": 300,
+      "ttlMinutes": 5,
+      "wire": {
+        "url": "https://sms.tencentcloudapi.com",
+        "headers": {
+          "Content-Type": "application/json; charset=utf-8",
+          "Host": "sms.tencentcloudapi.com",
+          "X-TC-Action": "SendSms",
+          "X-TC-Version": "2021-01-11",
+          "X-TC-Timestamp": "1700000000",
+          "X-TC-Region": "ap-beijing",
+          "Authorization": "TC3-HMAC-SHA256 Credential=AKIDTEST/2023-11-14/sms/tc3_request, SignedHeaders=content-type;host, Signature=054157f69b6349e231ba55ffea92b1cbb2bb40d489535f88dde0adc4061480da"
+        },
+        "body": "{\"PhoneNumberSet\":[\"+8613800138000\"],\"SmsSdkAppId\":\"1400000000\",\"SignName\":\"测试 Test\",\"TemplateId\":\"1234567\",\"TemplateParamSet\":[\"123456\",\"5\"]}"
+      }
+    },
+    {
+      "name": "one",
+      "params": ["{code}"],
+      "ttlSeconds": 300,
+      "ttlMinutes": 5,
+      "wire": {
+        "url": "https://sms.tencentcloudapi.com",
+        "headers": {
+          "Content-Type": "application/json; charset=utf-8",
+          "Host": "sms.tencentcloudapi.com",
+          "X-TC-Action": "SendSms",
+          "X-TC-Version": "2021-01-11",
+          "X-TC-Timestamp": "1700000000",
+          "X-TC-Region": "ap-beijing",
+          "Authorization": "TC3-HMAC-SHA256 Credential=AKIDTEST/2023-11-14/sms/tc3_request, SignedHeaders=content-type;host, Signature=69ad40dce0813d89f8a213c7fef64d620d38e4bdf3a1e2153df28e78ed2a85b2"
+        },
+        "body": "{\"PhoneNumberSet\":[\"+8613800138000\"],\"SmsSdkAppId\":\"1400000000\",\"SignName\":\"测试 Test\",\"TemplateId\":\"1234567\",\"TemplateParamSet\":[\"123456\"]}"
+      }
+    },
+    {
+      "name": "literals",
+      "params": ["SudoWork", "{code}", "{unknown}"],
+      "ttlSeconds": 300,
+      "ttlMinutes": 5,
+      "wire": {
+        "url": "https://sms.tencentcloudapi.com",
+        "headers": {
+          "Content-Type": "application/json; charset=utf-8",
+          "Host": "sms.tencentcloudapi.com",
+          "X-TC-Action": "SendSms",
+          "X-TC-Version": "2021-01-11",
+          "X-TC-Timestamp": "1700000000",
+          "X-TC-Region": "ap-beijing",
+          "Authorization": "TC3-HMAC-SHA256 Credential=AKIDTEST/2023-11-14/sms/tc3_request, SignedHeaders=content-type;host, Signature=37883ab797fdf5681f6d373996a1ecd69b86315187c8baf328a3439cae59b98e"
+        },
+        "body": "{\"PhoneNumberSet\":[\"+8613800138000\"],\"SmsSdkAppId\":\"1400000000\",\"SignName\":\"测试 Test\",\"TemplateId\":\"1234567\",\"TemplateParamSet\":[\"SudoWork\",\"123456\",\"{unknown}\"]}"
+      }
+    },
+    {
+      "name": "repeated",
+      "params": ["code={code};again={code};ttl={ttlMinutes}/{ttlMinutes}"],
+      "ttlSeconds": 330,
+      "ttlMinutes": 6,
+      "wire": {
+        "url": "https://sms.tencentcloudapi.com",
+        "headers": {
+          "Content-Type": "application/json; charset=utf-8",
+          "Host": "sms.tencentcloudapi.com",
+          "X-TC-Action": "SendSms",
+          "X-TC-Version": "2021-01-11",
+          "X-TC-Timestamp": "1700000000",
+          "X-TC-Region": "ap-beijing",
+          "Authorization": "TC3-HMAC-SHA256 Credential=AKIDTEST/2023-11-14/sms/tc3_request, SignedHeaders=content-type;host, Signature=61eb0ff4e18fb9b6b7d326f0899b35dca4c2861c873fbe3acdad9652189ed9ee"
+        },
+        "body": "{\"PhoneNumberSet\":[\"+8613800138000\"],\"SmsSdkAppId\":\"1400000000\",\"SignName\":\"测试 Test\",\"TemplateId\":\"1234567\",\"TemplateParamSet\":[\"code=123456;again=123456;ttl=6/6\"]}"
+      }
+    },
+    {
+      "name": "empty",
+      "params": [],
+      "ttlSeconds": 300,
+      "ttlMinutes": 5,
+      "wire": {
+        "url": "https://sms.tencentcloudapi.com",
+        "headers": {
+          "Content-Type": "application/json; charset=utf-8",
+          "Host": "sms.tencentcloudapi.com",
+          "X-TC-Action": "SendSms",
+          "X-TC-Version": "2021-01-11",
+          "X-TC-Timestamp": "1700000000",
+          "X-TC-Region": "ap-beijing",
+          "Authorization": "TC3-HMAC-SHA256 Credential=AKIDTEST/2023-11-14/sms/tc3_request, SignedHeaders=content-type;host, Signature=e8d5388de5b21e9c49236b078a15a003ae3c0683bd02e19ec3a90f37fee89656"
+        },
+        "body": "{\"PhoneNumberSet\":[\"+8613800138000\"],\"SmsSdkAppId\":\"1400000000\",\"SignName\":\"测试 Test\",\"TemplateId\":\"1234567\",\"TemplateParamSet\":[]}"
+      }
+    },
+    {
+      "name": "minimum",
+      "params": ["{ttlMinutes}"],
+      "ttlSeconds": 1,
+      "ttlMinutes": 1,
+      "wire": {
+        "url": "https://sms.tencentcloudapi.com",
+        "headers": {
+          "Content-Type": "application/json; charset=utf-8",
+          "Host": "sms.tencentcloudapi.com",
+          "X-TC-Action": "SendSms",
+          "X-TC-Version": "2021-01-11",
+          "X-TC-Timestamp": "1700000000",
+          "X-TC-Region": "ap-beijing",
+          "Authorization": "TC3-HMAC-SHA256 Credential=AKIDTEST/2023-11-14/sms/tc3_request, SignedHeaders=content-type;host, Signature=255949cc4a688e3fef56bc6045449db10d52b675ffe4624a6bf091e2993ca7e0"
+        },
+        "body": "{\"PhoneNumberSet\":[\"+8613800138000\"],\"SmsSdkAppId\":\"1400000000\",\"SignName\":\"测试 Test\",\"TemplateId\":\"1234567\",\"TemplateParamSet\":[\"1\"]}"
+      }
+    },
+    {
+      "name": "round_down",
+      "params": ["{ttlMinutes}"],
+      "ttlSeconds": 89,
+      "ttlMinutes": 1,
+      "wire": {
+        "url": "https://sms.tencentcloudapi.com",
+        "headers": {
+          "Content-Type": "application/json; charset=utf-8",
+          "Host": "sms.tencentcloudapi.com",
+          "X-TC-Action": "SendSms",
+          "X-TC-Version": "2021-01-11",
+          "X-TC-Timestamp": "1700000000",
+          "X-TC-Region": "ap-beijing",
+          "Authorization": "TC3-HMAC-SHA256 Credential=AKIDTEST/2023-11-14/sms/tc3_request, SignedHeaders=content-type;host, Signature=255949cc4a688e3fef56bc6045449db10d52b675ffe4624a6bf091e2993ca7e0"
+        },
+        "body": "{\"PhoneNumberSet\":[\"+8613800138000\"],\"SmsSdkAppId\":\"1400000000\",\"SignName\":\"测试 Test\",\"TemplateId\":\"1234567\",\"TemplateParamSet\":[\"1\"]}"
+      }
+    },
+    {
+      "name": "half_round_up",
+      "params": ["{ttlMinutes}"],
+      "ttlSeconds": 90,
+      "ttlMinutes": 2,
+      "wire": {
+        "url": "https://sms.tencentcloudapi.com",
+        "headers": {
+          "Content-Type": "application/json; charset=utf-8",
+          "Host": "sms.tencentcloudapi.com",
+          "X-TC-Action": "SendSms",
+          "X-TC-Version": "2021-01-11",
+          "X-TC-Timestamp": "1700000000",
+          "X-TC-Region": "ap-beijing",
+          "Authorization": "TC3-HMAC-SHA256 Credential=AKIDTEST/2023-11-14/sms/tc3_request, SignedHeaders=content-type;host, Signature=92ad3bc8dd13b5e82df8ed2c357a7082000239c4fe14ab9b21f5b0b319ebac3c"
+        },
+        "body": "{\"PhoneNumberSet\":[\"+8613800138000\"],\"SmsSdkAppId\":\"1400000000\",\"SignName\":\"测试 Test\",\"TemplateId\":\"1234567\",\"TemplateParamSet\":[\"2\"]}"
+      }
+    }
+  ],
+  "signatures": [
+    {
+      "name": "base",
+      "payload": "{\"a\":1}",
+      "key": "SECRETTEST",
+      "timestamp": 1700000000,
+      "authorization": "TC3-HMAC-SHA256 Credential=AKIDTEST/2023-11-14/sms/tc3_request, SignedHeaders=content-type;host, Signature=cd82aafd756f7ba869def1983f8f57835dc41ebe1b182a71b0a2682b4f986430"
+    },
+    {
+      "name": "payload_changed",
+      "payload": "{\"a\":2}",
+      "key": "SECRETTEST",
+      "timestamp": 1700000000,
+      "authorization": "TC3-HMAC-SHA256 Credential=AKIDTEST/2023-11-14/sms/tc3_request, SignedHeaders=content-type;host, Signature=9a9bc6a18d3e29010d336aaae08428b45a7e5fb79a8a355dc7072ab7c76e4346"
+    },
+    {
+      "name": "key_changed",
+      "payload": "{\"a\":1}",
+      "key": "OTHER-PUBLIC-TEST-KEY",
+      "timestamp": 1700000000,
+      "authorization": "TC3-HMAC-SHA256 Credential=AKIDTEST/2023-11-14/sms/tc3_request, SignedHeaders=content-type;host, Signature=e59954b5e5c9940f753c95825df11567cc07fd2b06bff803da3fd294823fd8fa"
+    },
+    {
+      "name": "next_day",
+      "payload": "{\"a\":1}",
+      "key": "SECRETTEST",
+      "timestamp": 1700086400,
+      "authorization": "TC3-HMAC-SHA256 Credential=AKIDTEST/2023-11-15/sms/tc3_request, SignedHeaders=content-type;host, Signature=3551631980b151e79749a4eabc30c17bff4b0dcb71c30ade30f0f06c961df16e"
+    }
+  ],
+  "responses": [
+    {
+      "name": "ok",
+      "status": 200,
+      "body": {
+        "Response": {
+          "SendStatusSet": [
+            {
+              "Code": "Ok"
+            }
+          ]
+        }
+      },
+      "accepted": true,
+      "errorName": null
+    },
+    {
+      "name": "api_error",
+      "status": 200,
+      "body": {
+        "Response": {
+          "Error": {
+            "Code": "AuthFailure.SignatureFailure",
+            "Message": "upstream-private-text"
+          }
+        }
+      },
+      "accepted": false,
+      "errorName": "SmsDeliveryError"
+    },
+    {
+      "name": "number_rejected",
+      "status": 200,
+      "body": {
+        "Response": {
+          "SendStatusSet": [
+            {
+              "Code": "LimitExceeded.PhoneNumberDailyLimit",
+              "Message": "upstream-private-text"
+            }
+          ]
+        }
+      },
+      "accepted": false,
+      "errorName": "SmsDeliveryError"
+    },
+    {
+      "name": "success_word_is_not_ok",
+      "status": 200,
+      "body": {
+        "Response": {
+          "SendStatusSet": [
+            {
+              "Code": "Success"
+            }
+          ]
+        }
+      },
+      "accepted": false,
+      "errorName": "SmsDeliveryError"
+    },
+    {
+      "name": "wrong_case",
+      "status": 200,
+      "body": {
+        "Response": {
+          "SendStatusSet": [
+            {
+              "Code": "ok"
+            }
+          ]
+        }
+      },
+      "accepted": false,
+      "errorName": "SmsDeliveryError"
+    },
+    {
+      "name": "http_error",
+      "status": 503,
+      "body": {},
+      "accepted": false,
+      "errorName": "SmsDeliveryError"
+    },
+    {
+      "name": "redirect",
+      "status": 302,
+      "body": {},
+      "accepted": false,
+      "errorName": "SmsDeliveryError"
+    },
+    {
+      "name": "missing_response",
+      "status": 200,
+      "body": {},
+      "accepted": true,
+      "errorName": null
+    },
+    {
+      "name": "null_body",
+      "status": 200,
+      "body": null,
+      "accepted": true,
+      "errorName": null
+    },
+    {
+      "name": "missing_statuses",
+      "status": 200,
+      "body": {
+        "Response": {}
+      },
+      "accepted": true,
+      "errorName": null
+    },
+    {
+      "name": "empty_statuses",
+      "status": 200,
+      "body": {
+        "Response": {
+          "SendStatusSet": []
+        }
+      },
+      "accepted": true,
+      "errorName": null
+    },
+    {
+      "name": "null_status",
+      "status": 200,
+      "body": {
+        "Response": {
+          "SendStatusSet": [null]
+        }
+      },
+      "accepted": true,
+      "errorName": null
+    },
+    {
+      "name": "multiple_statuses",
+      "status": 200,
+      "body": {
+        "Response": {
+          "SendStatusSet": [
+            {
+              "Code": "Ok"
+            },
+            {
+              "Code": "Rejected"
+            }
+          ]
+        }
+      },
+      "accepted": true,
+      "errorName": null
+    },
+    {
+      "name": "missing_code",
+      "status": 200,
+      "body": {
+        "Response": {
+          "SendStatusSet": [{}]
+        }
+      },
+      "accepted": false,
+      "errorName": "SmsDeliveryError"
+    },
+    {
+      "name": "null_error_with_ok",
+      "status": 200,
+      "body": {
+        "Response": {
+          "Error": null,
+          "SendStatusSet": [
+            {
+              "Code": "Ok"
+            }
+          ]
+        }
+      },
+      "accepted": true,
+      "errorName": null
+    },
+    {
+      "name": "network",
+      "accepted": false,
+      "errorName": "TypeError"
+    },
+    {
+      "name": "cancel",
+      "accepted": false,
+      "errorName": "AbortError"
+    },
+    {
+      "name": "malformed_json",
+      "accepted": false,
+      "errorName": "SyntaxError"
+    }
+  ]
+}

@@ -29,6 +29,7 @@ from octop.infra.agents.threads.artifact import thread_artifacts_payload
 from octop.infra.agents.threads.context_breakdown import SEGMENT_KEYS, compute_context_breakdown
 from octop.infra.agents.threads.fork import fork_dashboard_thread
 from octop.infra.agents.workspace.dir import agent_facing_workspace_dir_from_config
+from octop.infra.browser.control import pause_user_browser
 from octop.infra.errors import ErrorCode, MossworkError
 from octop.infra.gateway.hitl.coordinator import pending_hitl_payload
 from octop.infra.gateway.threads import ThreadRegistry, thread_row_has_messages
@@ -274,12 +275,15 @@ async def cancel_thread(
             await asyncio.get_running_loop().run_in_executor(
                 None, local_repo.transition, state["local_task_id"], "cancel_requested"
             )
+            await pause_user_browser(user.id, server.paths.root)
             return CancelThreadResponse(thread_id=thread_id, requested=True)
     registry = server.app_runtime.agent_registry
     active = server.app_runtime.gateway.ws_hub.is_turn_active(thread_id)
     if active:
         registry.get_agent(agent_id)
         await server.app_runtime.gateway.cancel_dashboard_turn(agent_id, thread_id)
+    else:
+        await pause_user_browser(user.id, server.paths.root)
     return CancelThreadResponse(thread_id=thread_id, requested=active)
 
 
@@ -679,7 +683,8 @@ async def delete_thread(
 ) -> None:
     """Remove a conversation thread, its actual checkpoint data, and its metadata.
 
-    Checkpoint deletion runs first: if it fails (as opposed to simply
+    Retained canonical resources return 409 before checkpoint or metadata cleanup.
+    Otherwise checkpoint deletion runs first: if it fails (as opposed to simply
     finding nothing to delete — agent not running / no checkpointer),
     the row is intentionally left in place so the thread stays visible
     and the caller can retry, instead of orphaning undeleted data with

@@ -41,7 +41,7 @@ async def test_listen_state_loop_idle_without_session() -> None:
         ) as resolve,
         patch.object(stream_mod.asyncio, "sleep", new=AsyncMock()),
     ):
-        await stream_mod._listen_state_loop(probe.send_json, probe.is_connected, "default")
+        await stream_mod._listen_state_loop(probe.send_json, probe.is_connected, "user-42")
 
     assert resolve.await_count >= 1
     assert all(c.kwargs.get("create") is False for c in resolve.await_args_list)
@@ -49,7 +49,7 @@ async def test_listen_state_loop_idle_without_session() -> None:
     updates = [m for m in probe.sent if m.get("type") == "session_update"]
     assert updates
     assert updates[0]["state"] == "idle"
-    assert updates[0]["session_id"] == "default"
+    assert updates[0]["session_id"] == "user-42"
     assert updates[0]["current_url"] == ""
 
 
@@ -84,7 +84,7 @@ async def test_listen_state_loop_attaches_existing_session() -> None:
         ),
         patch.object(stream_mod.asyncio, "sleep", new=AsyncMock()),
     ):
-        await stream_mod._listen_state_loop(probe.send_json, probe.is_connected, "default")
+        await stream_mod._listen_state_loop(probe.send_json, probe.is_connected, "user-42")
 
     assert all(c.kwargs.get("create") is False for c in resolve.await_args_list)
     updates = [m for m in probe.sent if m.get("type") == "session_update"]

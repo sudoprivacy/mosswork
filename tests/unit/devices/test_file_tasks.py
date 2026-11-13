@@ -16,6 +16,7 @@ from octop.infra.devices.protocol import DeviceSelection, DirectoryGrant
 from octop.infra.devices.tasks import CONFIG_KEY, stamp_device_task
 from octop.infra.errors import MossworkError
 from octop.infra.users.model_access import ModelAccess
+from tests.support.browser_profiles import browser_paths as browser_paths
 from tests.unit.devices.test_channel import Socket, finish
 
 
@@ -419,10 +420,13 @@ async def test_real_agent_graph_reads_device_and_preserves_company_boundary(stac
         await finish(runner)
 
 
-async def test_chat_preparation_binds_authenticated_owner_and_private_expert(stack, monkeypatch):
+async def test_chat_preparation_binds_authenticated_owner_and_private_expert(
+    stack, monkeypatch, browser_paths
+):
     from octop.api.routers.chat.turn import build_dashboard_inbound, prepare_dashboard_turn
 
     server, alice, bob, _ = stack
+    server.paths = browser_paths
     svc = server.services
     svc.provider_repo.create(
         name="test",

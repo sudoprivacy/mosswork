@@ -563,6 +563,7 @@ def test_rebind_is_rejected_before_closing_old_database(archive, monkeypatch):
     from octop.infra.errors import MossworkError
 
     server = MagicMock()
+    server.canonical_configuration = None
     server.communication = None
     server.user_manager.count.return_value = 0
     server.app_runtime.history_archive = archive

@@ -54,6 +54,7 @@ class VerifiedHumanPrincipal:
     credential_id: str
     expires_at: int
     session_id: str | None = None
+    scopes: tuple[str, ...] = ()
 
 
 class CanonicalAuthorityVerifier(Protocol):
@@ -78,6 +79,33 @@ class CanonicalIdentitySnapshot:
     credential_id: str
     credential_expires_at: int
     session_id: str | None
+    scopes: tuple[str, ...] = ()
+
+
+@dataclass(frozen=True)
+class CanonicalOrganizationMembership:
+    """An existing human membership, never an organization-switch permission."""
+
+    organization_id: str
+    organization_name: str
+    member_id: str
+    role: str
+    membership_revision: int
+
+
+def has_signed_scope(scopes: tuple[str, ...], required_scope: str) -> bool:
+    """Check only the signed capability ceiling using retained Moss hasScope rules.
+
+    Exact scope, ``*`` and the first namespace's ``:*`` match. This does not
+    grant current membership, resource access, Moss use or native admission;
+    those checks remain mandatory. A role never expands this credential's
+    scopes, and an empty or mutable scope container authorizes no operation.
+    """
+    if not isinstance(scopes, tuple) or any(not isinstance(scope, str) for scope in scopes):
+        return False
+    return (
+        "*" in scopes or required_scope in scopes or f"{required_scope.split(':')[0]}:*" in scopes
+    )
 
 
 def _unauthorized() -> MossworkError:
@@ -185,6 +213,36 @@ class SqliteCanonicalSnapshotStore:
                     credential_id=principal.credential_id,
                     credential_expires_at=principal.expires_at,
                     session_id=principal.session_id,
+                    scopes=tuple(principal.scopes),
+                )
+        except (sqlite3.Error, OSError, ValueError) as exc:
+            raise _unavailable("canonical_identity_store") from exc
+
+    def _organizations(self, account_id: str) -> tuple[CanonicalOrganizationMembership, ...]:
+        try:
+            with closing(sqlite3.connect(self._uri, uri=True, timeout=1.0)) as connection:
+                connection.row_factory = sqlite3.Row
+                connection.execute("PRAGMA query_only = ON")
+                connection.execute("BEGIN")
+                rows = connection.execute(
+                    """SELECT m.org_id, o.name, u.id, u.role, u.membership_revision
+                    FROM human_account_memberships m
+                    JOIN human_accounts a ON a.id = m.account_id
+                    JOIN users u ON u.id = m.user_id AND u.org_id = m.org_id
+                    JOIN organizations o ON o.id = m.org_id
+                    WHERE a.id = ? AND a.status = 'active' AND u.status = 'active'
+                    ORDER BY m.created_at, m.org_id""",
+                    (account_id,),
+                ).fetchall()
+                return tuple(
+                    CanonicalOrganizationMembership(
+                        _text(row["org_id"]),
+                        _text(row["name"]),
+                        _text(row["id"]),
+                        _text(row["role"]),
+                        _integer(row["membership_revision"]),
+                    )
+                    for row in rows
                 )
         except (sqlite3.Error, OSError, ValueError) as exc:
             raise _unavailable("canonical_identity_store") from exc
@@ -223,6 +281,33 @@ class CanonicalSnapshotService:
         self._validate_principal(principal)
         return snapshot
 
+    async def organizations(self, access_token: str) -> tuple[CanonicalOrganizationMembership, ...]:
+        """List this verified phone account's actual current memberships.
+
+        An organization password never proves ownership of other memberships.
+        This personal-account projection has no super-admin impersonation
+        branch. A later switch must independently recheck policy and membership.
+        """
+        snapshot = await self.snapshot(access_token)
+        if snapshot.auth_app != "sudowork" or snapshot.key_id != "phone-login":
+            raise MossworkError.localized(ErrorCode.FORBIDDEN, status=403)
+        result = await asyncio.get_running_loop().run_in_executor(
+            None, self._store._organizations, snapshot.account_id
+        )
+        current = await self.snapshot(access_token)
+        if (
+            current.account_id != snapshot.account_id
+            or current.organization_id != snapshot.organization_id
+            or current.member.owner_id != snapshot.member.owner_id
+            or not any(
+                item.organization_id == current.organization_id
+                and item.member_id == current.member.owner_id
+                for item in result
+            )
+        ):
+            raise _unauthorized()
+        return result
+
     def _validate_principal(self, principal: VerifiedHumanPrincipal) -> None:
         fields = (
             principal.authority_id,
@@ -240,6 +325,8 @@ class CanonicalSnapshotService:
             or principal.key_id not in _HUMAN_CREDENTIALS.get(principal.auth_app, set())
             or type(principal.expires_at) is not int
             or principal.expires_at <= self._clock()
+            or not isinstance(principal.scopes, tuple)
+            or any(not isinstance(scope, str) for scope in principal.scopes)
             or principal.session_id is not None
             and (not isinstance(principal.session_id, str) or not principal.session_id.strip())
         ):

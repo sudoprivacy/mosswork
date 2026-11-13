@@ -24,6 +24,65 @@ on:
       - 'packages/moss-gateway/tests/channels/test_feishu.py'
       - 'pyproject.toml'
       - 'uv.lock'
+      - 'src/octop/infra/gateway/canonical_feishu.py'
+      - 'src/octop/infra/gateway/feishu_binding.py'
+      - 'src/octop/infra/gateway/feishu_delivery.py'
+      - 'src/octop/infra/db/repos/canonical_identity.py'
+      - 'src/octop/infra/db/repos/users.py'
+      - 'src/octop/infra/db/migrate.py'
+      - 'src/octop/infra/db/migrations/030_employee_knowledge*.sql'
+      - 'src/octop/api/app.py'
+      - 'src/octop/api/deps.py'
+      - 'src/octop/api/common/canonical_identity.py'
+      - 'src/octop/api/routers/canonical_*.py'
+      - 'src/octop/api/routers/knowledge_bases.py'
+      - 'src/octop/infra/agents/providers/onnx_service.py'
+      - 'src/octop/api/middleware/setup_lockdown.py'
+      - 'src/octop/infra/execution/composition.py'
+      - 'src/octop/launch.py'
+      - 'tests/unit/api/test_canonical_human_review.py'
+      - 'tests/unit/test_human_review_mount.py'
+      - 'src/octop/infra/native_host/human_review_provider.py'
+      - 'tests/unit/native_host/test_human_review_provider.py'
+      - 'src/octop/infra/native_host/human_review_audit.py'
+      - 'tests/unit/native_host/test_human_review_audit.py'
+      - 'tests/unit/native_host/test_human_review_provider_audit.py'
+      - 'tests/unit/native_host/test_human_review_pages.py'
+      - 'tests/unit/native_host/test_human_review_page_admission.py'
+      - 'tests/unit/native_host/test_human_review_page_auth.py'
+      - 'tests/unit/sudograph/test_review_read.py'
+      - 'tests/unit/test_human_review_page_mount.py'
+      - 'tests/unit/api/test_canonical_request_dependency.py'
+      - 'tests/unit/api/test_canonical_websocket_principal.py'
+      - 'tests/unit/api/test_jwt_auth_middleware.py'
+      - 'tests/unit/api/test_knowledge_bases.py'
+      - 'tests/unit/gateway/test_canonical_feishu.py'
+      - 'tests/unit/gateway/test_feishu_human_binding.py'
+      - 'tests/unit/gateway/test_feishu_delivery_business_store.py'
+      - 'tests/unit/gateway/test_feishu_current_dispatch_assertion.py'
+      - 'tests/unit/db/test_canonical_identity_projection.py'
+      - 'tests/unit/gateway/fixtures/feishu_binding*'
+      - 'tests/unit/gateway/fixtures/generate_feishu_binding.ts'
+      - 'tests/unit/gateway/fixtures/feishu_delivery_business_legacy.json'
+      - 'tests/unit/gateway/fixtures/generate_feishu_delivery_business.ts'
+      - 'dashboard/src/api/request*'
+      - 'dashboard/src/api/modules/canonicalIdentity.ts'
+      - 'dashboard/src/api/canonicalIdentity.test.ts'
+      - 'dashboard/src/api/modules/humanReview.ts'
+      - 'dashboard/src/api/humanReview.test.ts'
+      - 'dashboard/src/api/fixtures/humanReviewDocument.json'
+      - 'dashboard/src/pages/Review/**'
+      - 'dashboard/src/routes/index.tsx'
+      - 'dashboard/src/App.tsx'
+      - 'dashboard/src/hooks/useCanonicalIdentity*'
+      - 'dashboard/src/components/AuthGuard*'
+      - 'dashboard/src/pages/Login/**'
+      - 'dashboard/src/locales/**'
+      - 'dashboard/package*.json'
+      - 'tests/unit/company_runtime/test_desktop_capacity.py'
+      - 'packages/moss-harness/pyproject.toml'
+      - 'packages/moss-harness/src/moss_harness/config/__init__.py'
+      - 'tests/unit/infra/test_harness_config_imports.py'
   push:
     branches: [main]
     paths:
@@ -48,6 +107,65 @@ on:
       - 'packages/moss-gateway/tests/channels/test_feishu.py'
       - 'pyproject.toml'
       - 'uv.lock'
+      - 'src/octop/infra/gateway/canonical_feishu.py'
+      - 'src/octop/infra/gateway/feishu_binding.py'
+      - 'src/octop/infra/gateway/feishu_delivery.py'
+      - 'src/octop/infra/db/repos/canonical_identity.py'
+      - 'src/octop/infra/db/repos/users.py'
+      - 'src/octop/infra/db/migrate.py'
+      - 'src/octop/infra/db/migrations/030_employee_knowledge*.sql'
+      - 'src/octop/api/app.py'
+      - 'src/octop/api/deps.py'
+      - 'src/octop/api/common/canonical_identity.py'
+      - 'src/octop/api/routers/canonical_*.py'
+      - 'src/octop/api/routers/knowledge_bases.py'
+      - 'src/octop/infra/agents/providers/onnx_service.py'
+      - 'src/octop/api/middleware/setup_lockdown.py'
+      - 'src/octop/infra/execution/composition.py'
+      - 'src/octop/launch.py'
+      - 'tests/unit/api/test_canonical_human_review.py'
+      - 'tests/unit/test_human_review_mount.py'
+      - 'src/octop/infra/native_host/human_review_provider.py'
+      - 'tests/unit/native_host/test_human_review_provider.py'
+      - 'src/octop/infra/native_host/human_review_audit.py'
+      - 'tests/unit/native_host/test_human_review_audit.py'
+      - 'tests/unit/native_host/test_human_review_provider_audit.py'
+      - 'tests/unit/native_host/test_human_review_pages.py'
+      - 'tests/unit/native_host/test_human_review_page_admission.py'
+      - 'tests/unit/native_host/test_human_review_page_auth.py'
+      - 'tests/unit/sudograph/test_review_read.py'
+      - 'tests/unit/test_human_review_page_mount.py'
+      - 'tests/unit/api/test_canonical_request_dependency.py'
+      - 'tests/unit/api/test_canonical_websocket_principal.py'
+      - 'tests/unit/api/test_jwt_auth_middleware.py'
+      - 'tests/unit/api/test_knowledge_bases.py'
+      - 'tests/unit/gateway/test_canonical_feishu.py'
+      - 'tests/unit/gateway/test_feishu_human_binding.py'
+      - 'tests/unit/gateway/test_feishu_delivery_business_store.py'
+      - 'tests/unit/gateway/test_feishu_current_dispatch_assertion.py'
+      - 'tests/unit/db/test_canonical_identity_projection.py'
+      - 'tests/unit/gateway/fixtures/feishu_binding*'
+      - 'tests/unit/gateway/fixtures/generate_feishu_binding.ts'
+      - 'tests/unit/gateway/fixtures/feishu_delivery_business_legacy.json'
+      - 'tests/unit/gateway/fixtures/generate_feishu_delivery_business.ts'
+      - 'dashboard/src/api/request*'
+      - 'dashboard/src/api/modules/canonicalIdentity.ts'
+      - 'dashboard/src/api/canonicalIdentity.test.ts'
+      - 'dashboard/src/api/modules/humanReview.ts'
+      - 'dashboard/src/api/humanReview.test.ts'
+      - 'dashboard/src/api/fixtures/humanReviewDocument.json'
+      - 'dashboard/src/pages/Review/**'
+      - 'dashboard/src/routes/index.tsx'
+      - 'dashboard/src/App.tsx'
+      - 'dashboard/src/hooks/useCanonicalIdentity*'
+      - 'dashboard/src/components/AuthGuard*'
+      - 'dashboard/src/pages/Login/**'
+      - 'dashboard/src/locales/**'
+      - 'dashboard/package*.json'
+      - 'tests/unit/company_runtime/test_desktop_capacity.py'
+      - 'packages/moss-harness/pyproject.toml'
+      - 'packages/moss-harness/src/moss_harness/config/__init__.py'
+      - 'tests/unit/infra/test_harness_config_imports.py'
   workflow_dispatch:
 
 permissions:
@@ -124,12 +242,76 @@ jobs:
             tests/unit/agents/test_personal_moss_identity.py \
             tests/unit/agents/test_personal_moss_access.py \
             tests/unit/identity \
+            tests/unit/api/test_canonical_human_review.py \
+            tests/unit/test_human_review_mount.py \
+            tests/unit/native_host/test_human_review_provider.py \
+            tests/unit/native_host/test_human_review_audit.py \
+            tests/unit/native_host/test_human_review_provider_audit.py \
+            tests/unit/native_host/test_human_review_pages.py \
+            tests/unit/native_host/test_human_review_page_admission.py \
+            tests/unit/native_host/test_human_review_page_auth.py \
+            tests/unit/sudograph/test_review_read.py \
+            tests/unit/test_human_review_page_mount.py \
+            tests/unit/api/test_canonical_request_dependency.py \
+            tests/unit/api/test_canonical_websocket_principal.py \
+            tests/unit/api/test_jwt_auth_middleware.py \
             tests/unit/gateway/test_personal_moss_im_identity.py \
+            tests/unit/gateway/test_canonical_feishu.py \
+            tests/unit/gateway/test_feishu_human_binding.py \
+            tests/unit/gateway/test_feishu_delivery_business_store.py \
+            tests/unit/gateway/test_feishu_current_dispatch_assertion.py \
+            tests/unit/db/test_canonical_identity_projection.py \
             tests/unit/i18n \
             tests/unit/company_runtime/test_local_process.py \
+            tests/unit/infra/test_harness_config_imports.py \
+            tests/unit/company_runtime/test_desktop_capacity.py \
             -m 'not integration and not live' -q --junitxml=identity-results.xml
           uv run --frozen pytest packages/moss-gateway/tests/channels/test_feishu.py \
             -m 'not integration and not live' -q --junitxml=gateway-feishu-results.xml
+      - name: Verify knowledge adapter dependency isolation
+        run: |
+          uv run --frozen pytest tests/unit/api/test_knowledge_bases.py \
+            -m 'not integration and not live' -q --junitxml=knowledge-adapter-results.xml
+      - uses: actions/setup-node@v4
+        if: runner.os == 'Linux'
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: dashboard/package-lock.json
+      - name: Install locked dashboard dependencies
+        working-directory: dashboard
+        if: runner.os == 'Linux'
+        run: npm ci
+      - name: Verify login, company selection and credential generations
+        working-directory: dashboard
+        if: runner.os == 'Linux'
+        run: |
+          npx vitest run --maxWorkers=1 --no-cache \
+            src/api/request.authToken.test.ts \
+            src/api/request.unauthorized.test.ts \
+            src/api/request.setup.test.ts \
+            src/api/canonicalIdentity.test.ts \
+            src/api/humanReview.test.ts \
+            src/pages/Review/index.test.tsx \
+            src/pages/Review/frameReadBridge.test.ts \
+            src/hooks/useCanonicalIdentity.test.tsx \
+            src/components/AuthGuard.test.tsx \
+            src/components/AuthGuard.canonical.test.tsx \
+            src/components/AuthGuard.humanReview.test.tsx \
+            src/pages/Login/CanonicalLogin.test.tsx \
+            src/pages/Login/Login.remember.test.tsx \
+            src/pages/Login/Login.forgotPassword.test.tsx \
+            --reporter=default --reporter=junit --outputFile=canonical-frontend-results.xml
+      - name: Build the complete dashboard
+        working-directory: dashboard
+        if: runner.os == 'Linux'
+        run: npm run build
+      - uses: actions/upload-artifact@v4
+        if: always() && runner.os == 'Linux'
+        with:
+          name: canonical-frontend
+          path: dashboard/canonical-frontend-results.xml
+          if-no-files-found: ignore
       - uses: actions/upload-artifact@v4
         if: always()
         with:
@@ -137,4 +319,5 @@ jobs:
           path: |
             identity-results.xml
             gateway-feishu-results.xml
+            knowledge-adapter-results.xml
           if-no-files-found: ignore

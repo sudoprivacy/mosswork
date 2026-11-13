@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+import copy
 import hashlib
 import json
 import uuid
@@ -14,6 +15,7 @@ from langchain_core.messages import BaseMessage, messages_from_dict, messages_to
 from moss_gateway.models import InboundMessage, MessageEvent
 
 from octop.infra.db.repos.execution import ExecutionConflict
+from octop.infra.execution.admission import CurrentAdmissionRequired
 from octop.infra.execution.service import ExecutionService, current_execution, public_frames
 from octop.infra.gateway.cli.events import message_event_to_cli_chunks
 from octop.infra.gateway.hitl.coordinator import HitlStreamContext
@@ -24,6 +26,7 @@ from octop.infra.gateway.process.message_keys import (
 from octop.infra.gateway.process.stream_project import project_chunks
 from octop.infra.gateway.slash.catalog import HITL_APPROVAL_COMMANDS
 from octop.infra.gateway.slash.parser import parse_slash
+from octop.infra.identity.request_principal import CanonicalAuthenticatedRequest
 
 
 class GatewayExecution:
@@ -36,6 +39,41 @@ class GatewayExecution:
     @property
     def should_submit(self) -> bool:
         return current_execution.get() is None
+
+    async def admit_human_dashboard(
+        self,
+        principal: CanonicalAuthenticatedRequest,
+        *,
+        agent: str,
+        thread: str,
+        key: str,
+        request: dict[str, Any],
+    ) -> dict[str, Any]:
+        """Use the same queue with an opaque actor and an existing thread.
+
+        The WebSocket consumer requires current resource/action grants before
+        admission. The actual backend repeats admission after queue waits.
+        Integer target ownership is attribution, never the actor's authority.
+        """
+        admissions = self.service.human_admissions
+        if admissions is None or type(principal) is not CanonicalAuthenticatedRequest:
+            raise CurrentAdmissionRequired("current_human_admission_required")
+        payload = json.loads(json.dumps(request))
+        if payload.get("thread_id") != thread or not key:
+            raise ExecutionConflict("original_request_selection_required")
+        await principal.revalidate()
+        row = await self.service.io.run(self.server.services.thread_repo.get, thread)
+        if row is None or row.agent_id != agent:
+            raise ExecutionConflict("thread_not_owned")
+        return await admissions.submit(
+            principal,
+            user=row.user_id,
+            agent=agent,
+            thread=thread,
+            operation="chat",
+            key=key,
+            request={"mode": "harness", "request": payload, "message_indices": []},
+        )
 
     async def cron(self, command: Any) -> None:
         await self.server.employee_resources.authorize(command.user_id, command.agent_id)
@@ -68,13 +106,27 @@ class GatewayExecution:
             raise ExecutionConflict("cron_execution_incomplete")
 
     async def manager_stream(
-        self, agent: str, request: dict[str, Any], *, call: bool = False
+        self,
+        agent: str,
+        request: dict[str, Any],
+        *,
+        call: bool = False,
+        admission: CanonicalAuthenticatedRequest | None = None,
     ) -> AsyncIterator[dict[str, Any]]:
+        request = copy.deepcopy(request)
+        admissions = self.service.human_admissions
+        if admissions is not None:
+            if type(admission) is not CanonicalAuthenticatedRequest:
+                raise CurrentAdmissionRequired("current_human_admission_required")
+            await admission.revalidate()
+        elif admission is not None:
+            raise CurrentAdmissionRequired("canonical_queue_not_configured")
         thread = str(request.get("thread_id") or "")
         row = await self.service.io.run(self.server.services.thread_repo.get, thread)
         if row is None or row.agent_id != agent:
             raise ExecutionConflict("thread_not_owned")
-        await self.server.employee_resources.authorize(row.user_id, agent)
+        if admissions is None:
+            await self.server.employee_resources.authorize(row.user_id, agent)
         payload = dict(request)
         message_indices = []
         if isinstance(payload.get("messages"), list):
@@ -87,19 +139,32 @@ class GatewayExecution:
             payload["messages"] = messages
         payload = json.loads(json.dumps(payload, default=_json_value))
         key = str(payload.pop("client_request_id", None) or uuid.uuid4().hex)
-        run = await self.service.io.run(
-            self.service.repo.submit,
-            user=row.user_id,
-            agent=agent,
-            thread=thread,
-            operation="call" if call else "cron",
-            key=key,
-            request={
-                "mode": "call" if call else "harness",
-                "request": payload,
-                "message_indices": message_indices,
-            },
-        )
+        queued = {
+            "mode": "call" if call else "harness",
+            "request": payload,
+            "message_indices": message_indices,
+        }
+        if admissions is not None:
+            assert admission is not None
+            run = await admissions.submit(
+                admission,
+                user=row.user_id,
+                agent=agent,
+                thread=thread,
+                operation="call" if call else "cron",
+                key=key,
+                request=queued,
+            )
+        else:
+            run = await self.service.io.run(
+                self.service.repo.submit,
+                user=row.user_id,
+                agent=agent,
+                thread=thread,
+                operation="call" if call else "cron",
+                key=key,
+                request=queued,
+            )
         async for event in self.service.replay(run["run_id"], user=row.user_id):
             for frame in event["payload"].get("frames", []):
                 yield frame
@@ -126,6 +191,10 @@ class GatewayExecution:
 
     async def admit(self, message: InboundMessage, *, mode: str) -> dict[str, Any] | None:
         """Commit before a transport queue can delay delivery. HITL uses commands."""
+        if self.service.human_admissions is not None:
+            # This legacy adapter has only message metadata, not a sealed HTTP
+            # human or verified IM claim. Never reconstruct one from that data.
+            raise CurrentAdmissionRequired("canonical_inbound_adapter_required")
         agent, user, session, thread = await self._identity(message)
         # IM message IDs are unique within a channel, not across all providers.
         if not message.metadata.get("client_request_id"):
@@ -308,10 +377,18 @@ class GatewayExecution:
     ) -> AsyncGenerator[dict[str, Any], None]:
         registry = self.server.app_runtime.agent_registry
         try:
+            if self.service.human_admissions is not None:
+                active = current_execution.get()
+                if active is None or active.run["run_id"] != run["run_id"]:
+                    raise CurrentAdmissionRequired("current_human_admission_required")
+                await active.canonical_principal()
             if run["agent_id"] in getattr(registry, "_runtime_config_dirty", set()):
+                if self.service.human_admissions is not None:
+                    raise CurrentAdmissionRequired("canonical_reload_adapter_required")
                 await registry._reload_agent(run["agent_id"], except_run=run["run_id"])
-            await self.server.employee_resources.authorize(run["user_id"], run["agent_id"])
-            if (
+            if self.service.human_admissions is None:
+                await self.server.employee_resources.authorize(run["user_id"], run["agent_id"])
+            if getattr(registry, "uses_managed_backend", False) is not True and (
                 getattr(registry, "runtime_shards", None) is not None
                 or registry._mosswork_harness_or_none(run["agent_id"]) is None
             ):

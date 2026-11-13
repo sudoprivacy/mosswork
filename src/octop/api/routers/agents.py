@@ -605,7 +605,10 @@ async def delete_agent(
     user: Any = Depends(current_user),
     server: Any = Depends(get_server),
 ) -> None:
-    """Permanently remove an agent and its runtime. Owner or admin."""
+    """Permanently remove an agent and its runtime. Owner or admin.
+
+    Retained canonical resources return 409 without removing runtime, files or history.
+    """
     assert server.app_runtime is not None
     row = server.app_runtime.agent_registry.get_row(agent_id)
     if row is None:

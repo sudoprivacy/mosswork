@@ -25,6 +25,7 @@ import MbtiCatalogDrawer from "./MbtiCatalogDrawer";
 import ToolCatalogDrawer from "./ToolCatalogDrawer";
 import PluginCatalogDrawer from "./PluginCatalogDrawer";
 import { request } from "../../../api/request";
+import { apiErrorMessage } from "../../../utils/apiError";
 import type { MossworkAgent } from "../../../context/AgentContext";
 import { useAgent } from "../../../context/AgentContext";
 import MbtiPersonaTag from "../../../components/MbtiPersonaTag";
@@ -231,8 +232,8 @@ export const AgentCard = memo(function AgentCard({
       await request(`/agents/${agent.agent_id}`, { method: "DELETE" });
       message.success(t("experts.agentDeleted", { name: agent.name }));
       onDeleted(agent.agent_id);
-    } catch {
-      message.error(t("experts.agentDeleteFailed"));
+    } catch (error) {
+      message.error(apiErrorMessage(error, t("experts.agentDeleteFailed"), t));
     }
   }, [agent.agent_id, agent.name, t, onDeleted]);
 

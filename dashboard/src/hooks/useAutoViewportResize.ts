@@ -45,8 +45,9 @@ export function useAutoViewportResize({
       const h = containerEl.clientHeight;
       if (w === 0 || h === 0) return;
       if (isStreaming && (w !== lastSent.w || h !== lastSent.h)) {
-        lastSent = { w, h };
-        sendEvent({ type: "resize", width: w, height: h });
+        if (sendEvent({ type: "resize", width: w, height: h })) {
+          lastSent = { w, h };
+        }
       }
     };
 

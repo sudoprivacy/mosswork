@@ -1,0 +1,389 @@
+{
+  "commit": "d0b84d4c8fd5905d9ec3f7c160f2ce633f535d0d",
+  "sourceHashes": {
+    "src/server/configuration/clientPolicyRepository.ts": "09168621cd012bbafd7cc91eaf10108aae3ff6935909ebba2384420d71086c9a",
+    "src/server/api/compat/sudowork/systemConfigService.ts": "cf0d44bf40f50d7b1b3b481bd114a5d025d564f7323a8957c59dd890fdc973ef",
+    "src/server/identity/organizationIdentityService.ts": "94403c26afd8bc9bc9535ae3b497c462f1637e88292cfe013c95f2e8d29f1674"
+  },
+  "scope": "Original update/prepareUpdate/repository/inheritance helpers; SMS/CAS readiness and platform defaults are explicit fixtures, not production providers.",
+  "nowMs": 1800000000123,
+  "cases": [
+    {
+      "name": "set_0",
+      "body": {
+        "login_method": 0
+      },
+      "organization": {
+        "unrelated": {
+          "keep": [
+            false,
+            null,
+            "原始"
+          ]
+        },
+        "loginMethod": "cas"
+      },
+      "platform": {},
+      "expected": {
+        "scope_type": "organization",
+        "scope_id": "fixture-org",
+        "policy_json": {
+          "unrelated": {
+            "keep": [
+              false,
+              null,
+              "原始"
+            ]
+          },
+          "loginMethod": 0,
+          "loginMethodInherited": false
+        },
+        "updated_by": "fixture-actor",
+        "created_at": 7,
+        "updated_at": 1800000000123
+      }
+    },
+    {
+      "name": "platform_flag_0",
+      "body": {
+        "login_method": 0
+      },
+      "organization": {
+        "unrelated": {
+          "keep": [
+            false,
+            null,
+            "原始"
+          ]
+        },
+        "loginMethod": "cas"
+      },
+      "platform": {
+        "loginMethodInherited": false
+      },
+      "expected": {
+        "scope_type": "organization",
+        "scope_id": "fixture-org",
+        "policy_json": {
+          "unrelated": {
+            "keep": [
+              false,
+              null,
+              "原始"
+            ]
+          },
+          "loginMethod": 0
+        },
+        "updated_by": "fixture-actor",
+        "created_at": 7,
+        "updated_at": 1800000000123
+      }
+    },
+    {
+      "name": "set_1",
+      "body": {
+        "login_method": 1
+      },
+      "organization": {
+        "unrelated": {
+          "keep": [
+            false,
+            null,
+            "原始"
+          ]
+        },
+        "loginMethod": "cas"
+      },
+      "platform": {},
+      "expected": {
+        "scope_type": "organization",
+        "scope_id": "fixture-org",
+        "policy_json": {
+          "unrelated": {
+            "keep": [
+              false,
+              null,
+              "原始"
+            ]
+          },
+          "loginMethod": 1,
+          "loginMethodInherited": false
+        },
+        "updated_by": "fixture-actor",
+        "created_at": 7,
+        "updated_at": 1800000000123
+      }
+    },
+    {
+      "name": "platform_flag_1",
+      "body": {
+        "login_method": 1
+      },
+      "organization": {
+        "unrelated": {
+          "keep": [
+            false,
+            null,
+            "原始"
+          ]
+        },
+        "loginMethod": "cas"
+      },
+      "platform": {
+        "loginMethodInherited": false
+      },
+      "expected": {
+        "scope_type": "organization",
+        "scope_id": "fixture-org",
+        "policy_json": {
+          "unrelated": {
+            "keep": [
+              false,
+              null,
+              "原始"
+            ]
+          },
+          "loginMethod": 1
+        },
+        "updated_by": "fixture-actor",
+        "created_at": 7,
+        "updated_at": 1800000000123
+      }
+    },
+    {
+      "name": "set_2",
+      "body": {
+        "login_method": 2
+      },
+      "organization": {
+        "unrelated": {
+          "keep": [
+            false,
+            null,
+            "原始"
+          ]
+        },
+        "loginMethod": "cas"
+      },
+      "platform": {},
+      "expected": {
+        "scope_type": "organization",
+        "scope_id": "fixture-org",
+        "policy_json": {
+          "unrelated": {
+            "keep": [
+              false,
+              null,
+              "原始"
+            ]
+          },
+          "loginMethod": 2,
+          "loginMethodInherited": false
+        },
+        "updated_by": "fixture-actor",
+        "created_at": 7,
+        "updated_at": 1800000000123
+      }
+    },
+    {
+      "name": "platform_flag_2",
+      "body": {
+        "login_method": 2
+      },
+      "organization": {
+        "unrelated": {
+          "keep": [
+            false,
+            null,
+            "原始"
+          ]
+        },
+        "loginMethod": "cas"
+      },
+      "platform": {
+        "loginMethodInherited": false
+      },
+      "expected": {
+        "scope_type": "organization",
+        "scope_id": "fixture-org",
+        "policy_json": {
+          "unrelated": {
+            "keep": [
+              false,
+              null,
+              "原始"
+            ]
+          },
+          "loginMethod": 2
+        },
+        "updated_by": "fixture-actor",
+        "created_at": 7,
+        "updated_at": 1800000000123
+      }
+    },
+    {
+      "name": "inherit",
+      "body": {
+        "inherit_login_method": true
+      },
+      "organization": {
+        "unrelated": {
+          "keep": [
+            false,
+            null,
+            "原始"
+          ]
+        },
+        "loginMethod": "cas"
+      },
+      "platform": {
+        "loginMethod": 1
+      },
+      "expected": {
+        "scope_type": "organization",
+        "scope_id": "fixture-org",
+        "policy_json": {
+          "unrelated": {
+            "keep": [
+              false,
+              null,
+              "原始"
+            ]
+          },
+          "loginMethodInherited": true
+        },
+        "updated_by": "fixture-actor",
+        "created_at": 7,
+        "updated_at": 1800000000123
+      }
+    },
+    {
+      "name": "inherit_ignores_explicit_method",
+      "body": {
+        "inherit_login_method": true,
+        "login_method": 0
+      },
+      "organization": {
+        "unrelated": {
+          "keep": [
+            false,
+            null,
+            "原始"
+          ]
+        },
+        "loginMethod": "cas"
+      },
+      "platform": {},
+      "expected": {
+        "scope_type": "organization",
+        "scope_id": "fixture-org",
+        "policy_json": {
+          "unrelated": {
+            "keep": [
+              false,
+              null,
+              "原始"
+            ]
+          },
+          "loginMethodInherited": true
+        },
+        "updated_by": "fixture-actor",
+        "created_at": 7,
+        "updated_at": 1800000000123
+      }
+    },
+    {
+      "name": "missing_org",
+      "body": {
+        "login_method": 1
+      },
+      "platform": {},
+      "expected": {
+        "scope_type": "organization",
+        "scope_id": "fixture-org",
+        "policy_json": {
+          "loginMethod": 1,
+          "loginMethodInherited": false
+        },
+        "updated_by": "fixture-actor",
+        "created_at": 1800000000123,
+        "updated_at": 1800000000123
+      }
+    },
+    {
+      "name": "malformed_org",
+      "body": {
+        "login_method": 1
+      },
+      "organizationRaw": "{bad",
+      "platform": {},
+      "expected": {
+        "scope_type": "organization",
+        "scope_id": "fixture-org",
+        "policy_json": {
+          "loginMethod": 1,
+          "loginMethodInherited": false
+        },
+        "updated_by": "fixture-actor",
+        "created_at": 7,
+        "updated_at": 1800000000123
+      }
+    },
+    {
+      "name": "array_org",
+      "body": {
+        "inherit_login_method": true
+      },
+      "organization": [],
+      "platform": {},
+      "expected": {
+        "scope_type": "organization",
+        "scope_id": "fixture-org",
+        "policy_json": {
+          "loginMethodInherited": true
+        },
+        "updated_by": "fixture-actor",
+        "created_at": 7,
+        "updated_at": 1800000000123
+      }
+    },
+    {
+      "name": "scoped_super_admin",
+      "role": "super_admin",
+      "body": {
+        "login_method": 1
+      },
+      "organization": {
+        "unrelated": {
+          "keep": [
+            false,
+            null,
+            "原始"
+          ]
+        },
+        "loginMethod": "cas"
+      },
+      "platform": {
+        "loginMethod": 2
+      },
+      "expected": {
+        "scope_type": "organization",
+        "scope_id": "fixture-org",
+        "policy_json": {
+          "unrelated": {
+            "keep": [
+              false,
+              null,
+              "原始"
+            ]
+          },
+          "loginMethod": 1,
+          "loginMethodInherited": false
+        },
+        "updated_by": "fixture-actor",
+        "created_at": 7,
+        "updated_at": 1800000000123
+      }
+    }
+  ]
+}

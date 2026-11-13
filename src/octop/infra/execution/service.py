@@ -14,7 +14,9 @@ from typing import Any, cast
 
 from octop.infra.db.repos.execution import TERMINAL, ExecutionRepo
 from octop.infra.db.repos.execution import ExecutionConflict as ExecutionConflict
+from octop.infra.execution.admission import CanonicalRunAdmissions
 from octop.infra.execution.notifications import ExecutionNotifications
+from octop.infra.identity.request_principal import CanonicalAuthenticatedRequest
 from octop.infra.utils.bounded_io import BoundedIO
 from octop.infra.utils.execution_context import execution_run_id
 
@@ -68,6 +70,10 @@ class ActiveExecution:
     async def check(self) -> None:
         await self.service.io.run(self.service.repo.check, *self.fence)
 
+    async def canonical_principal(self) -> CanonicalAuthenticatedRequest | None:
+        admissions = self.service.human_admissions
+        return await admissions.current(self.run) if admissions is not None else None
+
 
 current_execution: ContextVar[ActiveExecution | None] = ContextVar(
     "mosswork_execution", default=None
@@ -85,7 +91,11 @@ class ExecutionService:
         conninfo: str | None = None,
         container_id: str = "",
         capacity: int = 2,
+        human_admissions: CanonicalRunAdmissions | None = None,
     ) -> None:
+        if human_admissions is not None and human_admissions.repo is not repo:
+            raise ValueError("Canonical admission must use this exact execution repository")
+        self.human_admissions = human_admissions
         self.repo, self.node, self.incarnation, self.role = repo, node, incarnation, role
         self.container_id, self.capacity = container_id, capacity
         # Model streams may complete together. Serialize their short database
@@ -139,7 +149,11 @@ class ExecutionService:
         while self._accepting:
             try:
                 while len(self._active) - len(self._paused) < self.capacity:
-                    run = await self.io.run(self.repo.claim, self.node, self.incarnation)
+                    run = (
+                        await self.human_admissions.claim(self.node, self.incarnation)
+                        if self.human_admissions is not None
+                        else await self.io.run(self.repo.claim, self.node, self.incarnation)
+                    )
                     if run is None:
                         break
                     task = asyncio.create_task(
@@ -181,6 +195,9 @@ class ExecutionService:
         self, active: ActiveExecution, decision: dict[str, Any] | None
     ) -> tuple[bool, str | None, list[dict[str, Any]]]:
         assert self.handler is not None
+        # This is after queue/capacity waits. The handler/provider checks again
+        # after its own locks and applies actual resource/native grants.
+        await active.canonical_principal()
         frames: list[dict[str, Any]] = []
         size = 0
         failed = False
@@ -309,6 +326,8 @@ class ExecutionService:
                 await commands
             current_execution.reset(context)
             execution_run_id.reset(usage_context)
+            if self.human_admissions is not None:
+                self.human_admissions.forget(run["run_id"])
 
     async def _wait_approval(self, active: ActiveExecution) -> dict[str, Any] | None:
         while True:
@@ -359,4 +378,6 @@ class ExecutionService:
             task.cancel()
         await asyncio.gather(*self._loops, return_exceptions=True)
         await self.notifications.close()
+        if self.human_admissions is not None:
+            self.human_admissions.clear()
         await self.io.drain()

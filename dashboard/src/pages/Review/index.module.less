@@ -1,0 +1,26 @@
+.page {
+  min-height: 100dvh;
+  min-width: 0;
+  padding: 24px 32px;
+  box-sizing: border-box;
+  background: var(--fn-bg-layout);
+
+  @media (max-width: 767px) {
+    padding: 12px;
+  }
+}
+
+.panel {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  min-width: 0;
+}
+
+.frame {
+  width: 100%;
+  min-height: 65vh;
+  border: 1px solid var(--ant-color-border-secondary, #d9d9d9);
+  border-radius: 8px;
+  background: #fff;
+}

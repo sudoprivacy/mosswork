@@ -23,7 +23,7 @@ vi.mock("./CaptchaField", () => ({
   default: () => null,
 }));
 
-import LoginPage from "./index";
+import { StandaloneLoginPage as LoginPage } from "./index";
 
 describe("Login remember-me checkbox", () => {
   it("renders checked by default", () => {

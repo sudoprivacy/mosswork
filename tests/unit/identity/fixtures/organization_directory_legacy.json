@@ -1,0 +1,932 @@
+{
+  "sourceCommit": "d0b84d4c8fd5905d9ec3f7c160f2ce633f535d0d",
+  "sourceHashes": {
+    "src/server/auth/service.ts": "4670964f241ed457d3104c6b2b92abe020dea37b6cff393e9aab797309be71fa",
+    "src/server/authCenter/db.ts": "f83b7ad772d28b54160315f96a7e3cd20648006cef4da5afd6082241c5571b0d"
+  },
+  "producer": "Exact original listDepartments/listVisibleUsers/getVisibleDepartmentIds and AuthCenterDb SQL against node:sqlite; same-org authenticated actor fixture only",
+  "cases": [
+    {
+      "name": "admin",
+      "departments": [
+        {
+          "id": "root",
+          "org_id": "4ce65010-7331-415a-abaa-4d47387d845e",
+          "parent_id": null,
+          "name": "Root",
+          "created_at": 1,
+          "updated_at": 1
+        },
+        {
+          "id": "child",
+          "org_id": "4ce65010-7331-415a-abaa-4d47387d845e",
+          "parent_id": "root",
+          "name": "Child",
+          "created_at": 2,
+          "updated_at": 2
+        },
+        {
+          "id": "grand",
+          "org_id": "4ce65010-7331-415a-abaa-4d47387d845e",
+          "parent_id": "child",
+          "name": "Grand",
+          "created_at": 3,
+          "updated_at": 3
+        },
+        {
+          "id": "sibling",
+          "org_id": "4ce65010-7331-415a-abaa-4d47387d845e",
+          "parent_id": "root",
+          "name": "Sibling",
+          "created_at": 4,
+          "updated_at": 4
+        },
+        {
+          "id": "foreign",
+          "org_id": "d3f29104-c19b-4594-859c-a92734c82dbb",
+          "parent_id": null,
+          "name": "Foreign",
+          "created_at": 5,
+          "updated_at": 5
+        }
+      ],
+      "users": [
+        {
+          "id": "c2cc8374-8cdf-4936-8967-d891fb500634",
+          "org_id": "4ce65010-7331-415a-abaa-4d47387d845e",
+          "name": "home",
+          "role": "admin",
+          "status": "active",
+          "department_id": "child",
+          "created_at": 1
+        },
+        {
+          "id": "directory-user",
+          "org_id": "4ce65010-7331-415a-abaa-4d47387d845e",
+          "name": "user",
+          "role": "user",
+          "status": "active",
+          "department_id": "child",
+          "created_at": 2
+        },
+        {
+          "id": "directory-subadmin",
+          "org_id": "4ce65010-7331-415a-abaa-4d47387d845e",
+          "name": "subadmin",
+          "role": "dept_admin",
+          "status": "active",
+          "department_id": "grand",
+          "created_at": 3
+        },
+        {
+          "id": "directory-orgadmin",
+          "org_id": "4ce65010-7331-415a-abaa-4d47387d845e",
+          "name": "orgadmin",
+          "role": "admin",
+          "status": "active",
+          "department_id": "child",
+          "created_at": 4
+        },
+        {
+          "id": "directory-super",
+          "org_id": "4ce65010-7331-415a-abaa-4d47387d845e",
+          "name": "super",
+          "role": "super_admin",
+          "status": "active",
+          "department_id": "grand",
+          "created_at": 5
+        },
+        {
+          "id": "directory-sibling",
+          "org_id": "4ce65010-7331-415a-abaa-4d47387d845e",
+          "name": "sibling",
+          "role": "user",
+          "status": "active",
+          "department_id": "sibling",
+          "created_at": 6
+        },
+        {
+          "id": "directory-unassigned",
+          "org_id": "4ce65010-7331-415a-abaa-4d47387d845e",
+          "name": "none",
+          "role": "user",
+          "status": "active",
+          "department_id": null,
+          "created_at": 7
+        },
+        {
+          "id": "directory-disabled",
+          "org_id": "4ce65010-7331-415a-abaa-4d47387d845e",
+          "name": "disabled",
+          "role": "user",
+          "status": "disabled",
+          "department_id": "grand",
+          "created_at": 8
+        },
+        {
+          "id": "directory-foreign",
+          "org_id": "d3f29104-c19b-4594-859c-a92734c82dbb",
+          "name": "foreign",
+          "role": "user",
+          "status": "active",
+          "department_id": "foreign",
+          "created_at": 9
+        }
+      ],
+      "expectedMembers": [
+        "c2cc8374-8cdf-4936-8967-d891fb500634",
+        "directory-user",
+        "directory-subadmin",
+        "directory-orgadmin",
+        "directory-super",
+        "directory-sibling",
+        "directory-unassigned",
+        "directory-disabled"
+      ],
+      "expectedDepartments": [
+        {
+          "department_id": "root",
+          "organization_id": "4ce65010-7331-415a-abaa-4d47387d845e",
+          "parent_id": null,
+          "name": "Root",
+          "created_at": 1,
+          "updated_at": 1,
+          "user_count": 0
+        },
+        {
+          "department_id": "child",
+          "organization_id": "4ce65010-7331-415a-abaa-4d47387d845e",
+          "parent_id": "root",
+          "name": "Child",
+          "created_at": 2,
+          "updated_at": 2,
+          "user_count": 3
+        },
+        {
+          "department_id": "grand",
+          "organization_id": "4ce65010-7331-415a-abaa-4d47387d845e",
+          "parent_id": "child",
+          "name": "Grand",
+          "created_at": 3,
+          "updated_at": 3,
+          "user_count": 3
+        },
+        {
+          "department_id": "sibling",
+          "organization_id": "4ce65010-7331-415a-abaa-4d47387d845e",
+          "parent_id": "root",
+          "name": "Sibling",
+          "created_at": 4,
+          "updated_at": 4,
+          "user_count": 1
+        }
+      ]
+    },
+    {
+      "name": "super_admin",
+      "departments": [
+        {
+          "id": "root",
+          "org_id": "4ce65010-7331-415a-abaa-4d47387d845e",
+          "parent_id": null,
+          "name": "Root",
+          "created_at": 1,
+          "updated_at": 1
+        },
+        {
+          "id": "child",
+          "org_id": "4ce65010-7331-415a-abaa-4d47387d845e",
+          "parent_id": "root",
+          "name": "Child",
+          "created_at": 2,
+          "updated_at": 2
+        },
+        {
+          "id": "grand",
+          "org_id": "4ce65010-7331-415a-abaa-4d47387d845e",
+          "parent_id": "child",
+          "name": "Grand",
+          "created_at": 3,
+          "updated_at": 3
+        },
+        {
+          "id": "sibling",
+          "org_id": "4ce65010-7331-415a-abaa-4d47387d845e",
+          "parent_id": "root",
+          "name": "Sibling",
+          "created_at": 4,
+          "updated_at": 4
+        },
+        {
+          "id": "foreign",
+          "org_id": "d3f29104-c19b-4594-859c-a92734c82dbb",
+          "parent_id": null,
+          "name": "Foreign",
+          "created_at": 5,
+          "updated_at": 5
+        }
+      ],
+      "users": [
+        {
+          "id": "c2cc8374-8cdf-4936-8967-d891fb500634",
+          "org_id": "4ce65010-7331-415a-abaa-4d47387d845e",
+          "name": "home",
+          "role": "super_admin",
+          "status": "active",
+          "department_id": "child",
+          "created_at": 1
+        },
+        {
+          "id": "directory-user",
+          "org_id": "4ce65010-7331-415a-abaa-4d47387d845e",
+          "name": "user",
+          "role": "user",
+          "status": "active",
+          "department_id": "child",
+          "created_at": 2
+        },
+        {
+          "id": "directory-subadmin",
+          "org_id": "4ce65010-7331-415a-abaa-4d47387d845e",
+          "name": "subadmin",
+          "role": "dept_admin",
+          "status": "active",
+          "department_id": "grand",
+          "created_at": 3
+        },
+        {
+          "id": "directory-orgadmin",
+          "org_id": "4ce65010-7331-415a-abaa-4d47387d845e",
+          "name": "orgadmin",
+          "role": "admin",
+          "status": "active",
+          "department_id": "child",
+          "created_at": 4
+        },
+        {
+          "id": "directory-super",
+          "org_id": "4ce65010-7331-415a-abaa-4d47387d845e",
+          "name": "super",
+          "role": "super_admin",
+          "status": "active",
+          "department_id": "grand",
+          "created_at": 5
+        },
+        {
+          "id": "directory-sibling",
+          "org_id": "4ce65010-7331-415a-abaa-4d47387d845e",
+          "name": "sibling",
+          "role": "user",
+          "status": "active",
+          "department_id": "sibling",
+          "created_at": 6
+        },
+        {
+          "id": "directory-unassigned",
+          "org_id": "4ce65010-7331-415a-abaa-4d47387d845e",
+          "name": "none",
+          "role": "user",
+          "status": "active",
+          "department_id": null,
+          "created_at": 7
+        },
+        {
+          "id": "directory-disabled",
+          "org_id": "4ce65010-7331-415a-abaa-4d47387d845e",
+          "name": "disabled",
+          "role": "user",
+          "status": "disabled",
+          "department_id": "grand",
+          "created_at": 8
+        },
+        {
+          "id": "directory-foreign",
+          "org_id": "d3f29104-c19b-4594-859c-a92734c82dbb",
+          "name": "foreign",
+          "role": "user",
+          "status": "active",
+          "department_id": "foreign",
+          "created_at": 9
+        }
+      ],
+      "expectedMembers": [
+        "c2cc8374-8cdf-4936-8967-d891fb500634",
+        "directory-user",
+        "directory-subadmin",
+        "directory-orgadmin",
+        "directory-super",
+        "directory-sibling",
+        "directory-unassigned",
+        "directory-disabled"
+      ],
+      "expectedDepartments": [
+        {
+          "department_id": "root",
+          "organization_id": "4ce65010-7331-415a-abaa-4d47387d845e",
+          "parent_id": null,
+          "name": "Root",
+          "created_at": 1,
+          "updated_at": 1,
+          "user_count": 0
+        },
+        {
+          "department_id": "child",
+          "organization_id": "4ce65010-7331-415a-abaa-4d47387d845e",
+          "parent_id": "root",
+          "name": "Child",
+          "created_at": 2,
+          "updated_at": 2,
+          "user_count": 3
+        },
+        {
+          "department_id": "grand",
+          "organization_id": "4ce65010-7331-415a-abaa-4d47387d845e",
+          "parent_id": "child",
+          "name": "Grand",
+          "created_at": 3,
+          "updated_at": 3,
+          "user_count": 3
+        },
+        {
+          "department_id": "sibling",
+          "organization_id": "4ce65010-7331-415a-abaa-4d47387d845e",
+          "parent_id": "root",
+          "name": "Sibling",
+          "created_at": 4,
+          "updated_at": 4,
+          "user_count": 1
+        }
+      ]
+    },
+    {
+      "name": "dept_admin",
+      "departments": [
+        {
+          "id": "root",
+          "org_id": "4ce65010-7331-415a-abaa-4d47387d845e",
+          "parent_id": null,
+          "name": "Root",
+          "created_at": 1,
+          "updated_at": 1
+        },
+        {
+          "id": "child",
+          "org_id": "4ce65010-7331-415a-abaa-4d47387d845e",
+          "parent_id": "root",
+          "name": "Child",
+          "created_at": 2,
+          "updated_at": 2
+        },
+        {
+          "id": "grand",
+          "org_id": "4ce65010-7331-415a-abaa-4d47387d845e",
+          "parent_id": "child",
+          "name": "Grand",
+          "created_at": 3,
+          "updated_at": 3
+        },
+        {
+          "id": "sibling",
+          "org_id": "4ce65010-7331-415a-abaa-4d47387d845e",
+          "parent_id": "root",
+          "name": "Sibling",
+          "created_at": 4,
+          "updated_at": 4
+        },
+        {
+          "id": "foreign",
+          "org_id": "d3f29104-c19b-4594-859c-a92734c82dbb",
+          "parent_id": null,
+          "name": "Foreign",
+          "created_at": 5,
+          "updated_at": 5
+        }
+      ],
+      "users": [
+        {
+          "id": "c2cc8374-8cdf-4936-8967-d891fb500634",
+          "org_id": "4ce65010-7331-415a-abaa-4d47387d845e",
+          "name": "home",
+          "role": "dept_admin",
+          "status": "active",
+          "department_id": "child",
+          "created_at": 1
+        },
+        {
+          "id": "directory-user",
+          "org_id": "4ce65010-7331-415a-abaa-4d47387d845e",
+          "name": "user",
+          "role": "user",
+          "status": "active",
+          "department_id": "child",
+          "created_at": 2
+        },
+        {
+          "id": "directory-subadmin",
+          "org_id": "4ce65010-7331-415a-abaa-4d47387d845e",
+          "name": "subadmin",
+          "role": "dept_admin",
+          "status": "active",
+          "department_id": "grand",
+          "created_at": 3
+        },
+        {
+          "id": "directory-orgadmin",
+          "org_id": "4ce65010-7331-415a-abaa-4d47387d845e",
+          "name": "orgadmin",
+          "role": "admin",
+          "status": "active",
+          "department_id": "child",
+          "created_at": 4
+        },
+        {
+          "id": "directory-super",
+          "org_id": "4ce65010-7331-415a-abaa-4d47387d845e",
+          "name": "super",
+          "role": "super_admin",
+          "status": "active",
+          "department_id": "grand",
+          "created_at": 5
+        },
+        {
+          "id": "directory-sibling",
+          "org_id": "4ce65010-7331-415a-abaa-4d47387d845e",
+          "name": "sibling",
+          "role": "user",
+          "status": "active",
+          "department_id": "sibling",
+          "created_at": 6
+        },
+        {
+          "id": "directory-unassigned",
+          "org_id": "4ce65010-7331-415a-abaa-4d47387d845e",
+          "name": "none",
+          "role": "user",
+          "status": "active",
+          "department_id": null,
+          "created_at": 7
+        },
+        {
+          "id": "directory-disabled",
+          "org_id": "4ce65010-7331-415a-abaa-4d47387d845e",
+          "name": "disabled",
+          "role": "user",
+          "status": "disabled",
+          "department_id": "grand",
+          "created_at": 8
+        },
+        {
+          "id": "directory-foreign",
+          "org_id": "d3f29104-c19b-4594-859c-a92734c82dbb",
+          "name": "foreign",
+          "role": "user",
+          "status": "active",
+          "department_id": "foreign",
+          "created_at": 9
+        }
+      ],
+      "expectedMembers": [
+        "c2cc8374-8cdf-4936-8967-d891fb500634",
+        "directory-user",
+        "directory-subadmin",
+        "directory-disabled"
+      ],
+      "expectedDepartments": [
+        {
+          "department_id": "child",
+          "organization_id": "4ce65010-7331-415a-abaa-4d47387d845e",
+          "parent_id": "root",
+          "name": "Child",
+          "created_at": 2,
+          "updated_at": 2,
+          "user_count": 2
+        },
+        {
+          "department_id": "grand",
+          "organization_id": "4ce65010-7331-415a-abaa-4d47387d845e",
+          "parent_id": "child",
+          "name": "Grand",
+          "created_at": 3,
+          "updated_at": 3,
+          "user_count": 2
+        }
+      ]
+    },
+    {
+      "name": "no_department",
+      "departments": [
+        {
+          "id": "root",
+          "org_id": "4ce65010-7331-415a-abaa-4d47387d845e",
+          "parent_id": null,
+          "name": "Root",
+          "created_at": 1,
+          "updated_at": 1
+        },
+        {
+          "id": "child",
+          "org_id": "4ce65010-7331-415a-abaa-4d47387d845e",
+          "parent_id": "root",
+          "name": "Child",
+          "created_at": 2,
+          "updated_at": 2
+        },
+        {
+          "id": "grand",
+          "org_id": "4ce65010-7331-415a-abaa-4d47387d845e",
+          "parent_id": "child",
+          "name": "Grand",
+          "created_at": 3,
+          "updated_at": 3
+        },
+        {
+          "id": "sibling",
+          "org_id": "4ce65010-7331-415a-abaa-4d47387d845e",
+          "parent_id": "root",
+          "name": "Sibling",
+          "created_at": 4,
+          "updated_at": 4
+        },
+        {
+          "id": "foreign",
+          "org_id": "d3f29104-c19b-4594-859c-a92734c82dbb",
+          "parent_id": null,
+          "name": "Foreign",
+          "created_at": 5,
+          "updated_at": 5
+        }
+      ],
+      "users": [
+        {
+          "id": "c2cc8374-8cdf-4936-8967-d891fb500634",
+          "org_id": "4ce65010-7331-415a-abaa-4d47387d845e",
+          "name": "home",
+          "role": "dept_admin",
+          "status": "active",
+          "department_id": null,
+          "created_at": 1
+        },
+        {
+          "id": "directory-user",
+          "org_id": "4ce65010-7331-415a-abaa-4d47387d845e",
+          "name": "user",
+          "role": "user",
+          "status": "active",
+          "department_id": "child",
+          "created_at": 2
+        },
+        {
+          "id": "directory-subadmin",
+          "org_id": "4ce65010-7331-415a-abaa-4d47387d845e",
+          "name": "subadmin",
+          "role": "dept_admin",
+          "status": "active",
+          "department_id": "grand",
+          "created_at": 3
+        },
+        {
+          "id": "directory-orgadmin",
+          "org_id": "4ce65010-7331-415a-abaa-4d47387d845e",
+          "name": "orgadmin",
+          "role": "admin",
+          "status": "active",
+          "department_id": "child",
+          "created_at": 4
+        },
+        {
+          "id": "directory-super",
+          "org_id": "4ce65010-7331-415a-abaa-4d47387d845e",
+          "name": "super",
+          "role": "super_admin",
+          "status": "active",
+          "department_id": "grand",
+          "created_at": 5
+        },
+        {
+          "id": "directory-sibling",
+          "org_id": "4ce65010-7331-415a-abaa-4d47387d845e",
+          "name": "sibling",
+          "role": "user",
+          "status": "active",
+          "department_id": "sibling",
+          "created_at": 6
+        },
+        {
+          "id": "directory-unassigned",
+          "org_id": "4ce65010-7331-415a-abaa-4d47387d845e",
+          "name": "none",
+          "role": "user",
+          "status": "active",
+          "department_id": null,
+          "created_at": 7
+        },
+        {
+          "id": "directory-disabled",
+          "org_id": "4ce65010-7331-415a-abaa-4d47387d845e",
+          "name": "disabled",
+          "role": "user",
+          "status": "disabled",
+          "department_id": "grand",
+          "created_at": 8
+        },
+        {
+          "id": "directory-foreign",
+          "org_id": "d3f29104-c19b-4594-859c-a92734c82dbb",
+          "name": "foreign",
+          "role": "user",
+          "status": "active",
+          "department_id": "foreign",
+          "created_at": 9
+        }
+      ],
+      "expectedMembers": [],
+      "expectedDepartments": []
+    },
+    {
+      "name": "cycle",
+      "departments": [
+        {
+          "id": "root",
+          "org_id": "4ce65010-7331-415a-abaa-4d47387d845e",
+          "parent_id": null,
+          "name": "Root",
+          "created_at": 1,
+          "updated_at": 1
+        },
+        {
+          "id": "child",
+          "org_id": "4ce65010-7331-415a-abaa-4d47387d845e",
+          "parent_id": "grand",
+          "name": "Child",
+          "created_at": 2,
+          "updated_at": 2
+        },
+        {
+          "id": "grand",
+          "org_id": "4ce65010-7331-415a-abaa-4d47387d845e",
+          "parent_id": "child",
+          "name": "Grand",
+          "created_at": 3,
+          "updated_at": 3
+        },
+        {
+          "id": "sibling",
+          "org_id": "4ce65010-7331-415a-abaa-4d47387d845e",
+          "parent_id": "root",
+          "name": "Sibling",
+          "created_at": 4,
+          "updated_at": 4
+        },
+        {
+          "id": "foreign",
+          "org_id": "d3f29104-c19b-4594-859c-a92734c82dbb",
+          "parent_id": null,
+          "name": "Foreign",
+          "created_at": 5,
+          "updated_at": 5
+        }
+      ],
+      "users": [
+        {
+          "id": "c2cc8374-8cdf-4936-8967-d891fb500634",
+          "org_id": "4ce65010-7331-415a-abaa-4d47387d845e",
+          "name": "home",
+          "role": "dept_admin",
+          "status": "active",
+          "department_id": "child",
+          "created_at": 1
+        },
+        {
+          "id": "directory-user",
+          "org_id": "4ce65010-7331-415a-abaa-4d47387d845e",
+          "name": "user",
+          "role": "user",
+          "status": "active",
+          "department_id": "child",
+          "created_at": 2
+        },
+        {
+          "id": "directory-subadmin",
+          "org_id": "4ce65010-7331-415a-abaa-4d47387d845e",
+          "name": "subadmin",
+          "role": "dept_admin",
+          "status": "active",
+          "department_id": "grand",
+          "created_at": 3
+        },
+        {
+          "id": "directory-orgadmin",
+          "org_id": "4ce65010-7331-415a-abaa-4d47387d845e",
+          "name": "orgadmin",
+          "role": "admin",
+          "status": "active",
+          "department_id": "child",
+          "created_at": 4
+        },
+        {
+          "id": "directory-super",
+          "org_id": "4ce65010-7331-415a-abaa-4d47387d845e",
+          "name": "super",
+          "role": "super_admin",
+          "status": "active",
+          "department_id": "grand",
+          "created_at": 5
+        },
+        {
+          "id": "directory-sibling",
+          "org_id": "4ce65010-7331-415a-abaa-4d47387d845e",
+          "name": "sibling",
+          "role": "user",
+          "status": "active",
+          "department_id": "sibling",
+          "created_at": 6
+        },
+        {
+          "id": "directory-unassigned",
+          "org_id": "4ce65010-7331-415a-abaa-4d47387d845e",
+          "name": "none",
+          "role": "user",
+          "status": "active",
+          "department_id": null,
+          "created_at": 7
+        },
+        {
+          "id": "directory-disabled",
+          "org_id": "4ce65010-7331-415a-abaa-4d47387d845e",
+          "name": "disabled",
+          "role": "user",
+          "status": "disabled",
+          "department_id": "grand",
+          "created_at": 8
+        },
+        {
+          "id": "directory-foreign",
+          "org_id": "d3f29104-c19b-4594-859c-a92734c82dbb",
+          "name": "foreign",
+          "role": "user",
+          "status": "active",
+          "department_id": "foreign",
+          "created_at": 9
+        }
+      ],
+      "expectedMembers": [
+        "c2cc8374-8cdf-4936-8967-d891fb500634",
+        "directory-user",
+        "directory-subadmin",
+        "directory-disabled"
+      ],
+      "expectedDepartments": [
+        {
+          "department_id": "child",
+          "organization_id": "4ce65010-7331-415a-abaa-4d47387d845e",
+          "parent_id": "grand",
+          "name": "Child",
+          "created_at": 2,
+          "updated_at": 2,
+          "user_count": 2
+        },
+        {
+          "department_id": "grand",
+          "organization_id": "4ce65010-7331-415a-abaa-4d47387d845e",
+          "parent_id": "child",
+          "name": "Grand",
+          "created_at": 3,
+          "updated_at": 3,
+          "user_count": 2
+        }
+      ]
+    },
+    {
+      "name": "foreign_root",
+      "departments": [
+        {
+          "id": "root",
+          "org_id": "4ce65010-7331-415a-abaa-4d47387d845e",
+          "parent_id": null,
+          "name": "Root",
+          "created_at": 1,
+          "updated_at": 1
+        },
+        {
+          "id": "child",
+          "org_id": "4ce65010-7331-415a-abaa-4d47387d845e",
+          "parent_id": "root",
+          "name": "Child",
+          "created_at": 2,
+          "updated_at": 2
+        },
+        {
+          "id": "grand",
+          "org_id": "4ce65010-7331-415a-abaa-4d47387d845e",
+          "parent_id": "child",
+          "name": "Grand",
+          "created_at": 3,
+          "updated_at": 3
+        },
+        {
+          "id": "sibling",
+          "org_id": "4ce65010-7331-415a-abaa-4d47387d845e",
+          "parent_id": "root",
+          "name": "Sibling",
+          "created_at": 4,
+          "updated_at": 4
+        },
+        {
+          "id": "foreign",
+          "org_id": "d3f29104-c19b-4594-859c-a92734c82dbb",
+          "parent_id": null,
+          "name": "Foreign",
+          "created_at": 5,
+          "updated_at": 5
+        }
+      ],
+      "users": [
+        {
+          "id": "c2cc8374-8cdf-4936-8967-d891fb500634",
+          "org_id": "4ce65010-7331-415a-abaa-4d47387d845e",
+          "name": "home",
+          "role": "dept_admin",
+          "status": "active",
+          "department_id": "foreign",
+          "created_at": 1
+        },
+        {
+          "id": "directory-user",
+          "org_id": "4ce65010-7331-415a-abaa-4d47387d845e",
+          "name": "user",
+          "role": "user",
+          "status": "active",
+          "department_id": "child",
+          "created_at": 2
+        },
+        {
+          "id": "directory-subadmin",
+          "org_id": "4ce65010-7331-415a-abaa-4d47387d845e",
+          "name": "subadmin",
+          "role": "dept_admin",
+          "status": "active",
+          "department_id": "grand",
+          "created_at": 3
+        },
+        {
+          "id": "directory-orgadmin",
+          "org_id": "4ce65010-7331-415a-abaa-4d47387d845e",
+          "name": "orgadmin",
+          "role": "admin",
+          "status": "active",
+          "department_id": "child",
+          "created_at": 4
+        },
+        {
+          "id": "directory-super",
+          "org_id": "4ce65010-7331-415a-abaa-4d47387d845e",
+          "name": "super",
+          "role": "super_admin",
+          "status": "active",
+          "department_id": "grand",
+          "created_at": 5
+        },
+        {
+          "id": "directory-sibling",
+          "org_id": "4ce65010-7331-415a-abaa-4d47387d845e",
+          "name": "sibling",
+          "role": "user",
+          "status": "active",
+          "department_id": "sibling",
+          "created_at": 6
+        },
+        {
+          "id": "directory-unassigned",
+          "org_id": "4ce65010-7331-415a-abaa-4d47387d845e",
+          "name": "none",
+          "role": "user",
+          "status": "active",
+          "department_id": null,
+          "created_at": 7
+        },
+        {
+          "id": "directory-disabled",
+          "org_id": "4ce65010-7331-415a-abaa-4d47387d845e",
+          "name": "disabled",
+          "role": "user",
+          "status": "disabled",
+          "department_id": "grand",
+          "created_at": 8
+        },
+        {
+          "id": "directory-foreign",
+          "org_id": "d3f29104-c19b-4594-859c-a92734c82dbb",
+          "name": "foreign",
+          "role": "user",
+          "status": "active",
+          "department_id": "foreign",
+          "created_at": 9
+        }
+      ],
+      "expectedMembers": [
+        "c2cc8374-8cdf-4936-8967-d891fb500634"
+      ],
+      "expectedDepartments": []
+    }
+  ]
+}

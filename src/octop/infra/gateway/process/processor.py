@@ -1490,6 +1490,13 @@ class GlobalProcessor:
             agent_id=agent_id,
         )
 
+        from octop.infra.browser.control import resume_user_browser  # noqa: PLC0415
+
+        request.setdefault("configurable", {})[
+            "mosswork_browser_epoch"
+        ] = await resume_user_browser(
+            user_id, self._agent_manager.paths.root, meta.get("_browser_control_epoch")
+        )
         if mcp_servers:
             request["mcp_servers"] = mcp_servers
         if "skills" in meta:

@@ -1,0 +1,852 @@
+{
+  "sourceCommit": "d0b84d4c8fd5905d9ec3f7c160f2ce633f535d0d",
+  "sourceHashes": {
+    "src/server/identity/identityRepository.ts": "ff4b194eb4860812079ef847d76486bb99a4441943a4d5e6c6d7014153d672ea",
+    "src/server/identity/organizationIdentityService.ts": "94403c26afd8bc9bc9535ae3b497c462f1637e88292cfe013c95f2e8d29f1674",
+    "src/server/authCenter/db.ts": "f83b7ad772d28b54160315f96a7e3cd20648006cef4da5afd6082241c5571b0d"
+  },
+  "schema": "CREATE TABLE IF NOT EXISTS invitations (\n        id TEXT PRIMARY KEY,\n        org_id TEXT NOT NULL REFERENCES organizations(id),\n        code TEXT NOT NULL UNIQUE,\n        status TEXT NOT NULL DEFAULT 'pending' CHECK (status IN ('pending', 'used', 'revoked')),\n        initial_credit_units INTEGER NOT NULL DEFAULT 0,\n        legacy_initial_quota_usd REAL,\n        used_by_user_id TEXT REFERENCES users(id),\n        created_at INTEGER NOT NULL,\n        used_at INTEGER\n      );",
+  "rows": [
+    [
+      "home-a",
+      "home",
+      "CODE-A",
+      "pending",
+      0,
+      null,
+      null,
+      20,
+      null
+    ],
+    [
+      "home-z",
+      "home",
+      "CODE-Z",
+      "used",
+      125,
+      1.25,
+      "original-member",
+      20,
+      50
+    ],
+    [
+      "home-old",
+      "home",
+      "CODE-OLD",
+      "revoked",
+      10.5,
+      0,
+      null,
+      10,
+      null
+    ],
+    [
+      "home-pending",
+      "home",
+      "CODE-PENDING",
+      "pending",
+      99,
+      null,
+      null,
+      15,
+      null
+    ],
+    [
+      "foreign-a",
+      "foreign",
+      "FOREIGN-A",
+      "pending",
+      99,
+      null,
+      null,
+      100,
+      null
+    ],
+    [
+      "foreign-z",
+      "foreign",
+      "FOREIGN-Z",
+      "used",
+      77,
+      5,
+      "foreign-member",
+      100,
+      200
+    ]
+  ],
+  "producer": "Exact original listInvitations/listInvitationsAsync/mapInvitation and organization-scoped actor predicate against node:sqlite; no issuance/redemption or live store",
+  "cases": [
+    {
+      "name": "admin_default",
+      "role": "admin",
+      "input": {},
+      "status": 200,
+      "expected": {
+        "total": 4,
+        "items": [
+          {
+            "invitation_id": "home-z",
+            "organization_id": "home",
+            "code": "CODE-Z",
+            "status": "used",
+            "initial_credit_units": 125,
+            "legacy_initial_quota_usd": 1.25,
+            "used_by_member_id": "original-member",
+            "created_at": 20,
+            "used_at": 50
+          },
+          {
+            "invitation_id": "home-a",
+            "organization_id": "home",
+            "code": "CODE-A",
+            "status": "pending",
+            "initial_credit_units": 0,
+            "legacy_initial_quota_usd": null,
+            "used_by_member_id": null,
+            "created_at": 20,
+            "used_at": null
+          },
+          {
+            "invitation_id": "home-pending",
+            "organization_id": "home",
+            "code": "CODE-PENDING",
+            "status": "pending",
+            "initial_credit_units": 99,
+            "legacy_initial_quota_usd": null,
+            "used_by_member_id": null,
+            "created_at": 15,
+            "used_at": null
+          },
+          {
+            "invitation_id": "home-old",
+            "organization_id": "home",
+            "code": "CODE-OLD",
+            "status": "revoked",
+            "initial_credit_units": 10.5,
+            "legacy_initial_quota_usd": 0,
+            "used_by_member_id": null,
+            "created_at": 10,
+            "used_at": null
+          }
+        ]
+      }
+    },
+    {
+      "name": "admin_pending",
+      "role": "admin",
+      "input": {
+        "status": "pending"
+      },
+      "status": 200,
+      "expected": {
+        "total": 2,
+        "items": [
+          {
+            "invitation_id": "home-a",
+            "organization_id": "home",
+            "code": "CODE-A",
+            "status": "pending",
+            "initial_credit_units": 0,
+            "legacy_initial_quota_usd": null,
+            "used_by_member_id": null,
+            "created_at": 20,
+            "used_at": null
+          },
+          {
+            "invitation_id": "home-pending",
+            "organization_id": "home",
+            "code": "CODE-PENDING",
+            "status": "pending",
+            "initial_credit_units": 99,
+            "legacy_initial_quota_usd": null,
+            "used_by_member_id": null,
+            "created_at": 15,
+            "used_at": null
+          }
+        ]
+      }
+    },
+    {
+      "name": "admin_used",
+      "role": "admin",
+      "input": {
+        "status": "used"
+      },
+      "status": 200,
+      "expected": {
+        "total": 1,
+        "items": [
+          {
+            "invitation_id": "home-z",
+            "organization_id": "home",
+            "code": "CODE-Z",
+            "status": "used",
+            "initial_credit_units": 125,
+            "legacy_initial_quota_usd": 1.25,
+            "used_by_member_id": "original-member",
+            "created_at": 20,
+            "used_at": 50
+          }
+        ]
+      }
+    },
+    {
+      "name": "admin_revoked",
+      "role": "admin",
+      "input": {
+        "status": "revoked"
+      },
+      "status": 200,
+      "expected": {
+        "total": 1,
+        "items": [
+          {
+            "invitation_id": "home-old",
+            "organization_id": "home",
+            "code": "CODE-OLD",
+            "status": "revoked",
+            "initial_credit_units": 10.5,
+            "legacy_initial_quota_usd": 0,
+            "used_by_member_id": null,
+            "created_at": 10,
+            "used_at": null
+          }
+        ]
+      }
+    },
+    {
+      "name": "admin_page",
+      "role": "admin",
+      "input": {
+        "limit": 1,
+        "offset": 1
+      },
+      "status": 200,
+      "expected": {
+        "total": 4,
+        "items": [
+          {
+            "invitation_id": "home-a",
+            "organization_id": "home",
+            "code": "CODE-A",
+            "status": "pending",
+            "initial_credit_units": 0,
+            "legacy_initial_quota_usd": null,
+            "used_by_member_id": null,
+            "created_at": 20,
+            "used_at": null
+          }
+        ]
+      }
+    },
+    {
+      "name": "admin_minimum",
+      "role": "admin",
+      "input": {
+        "limit": 0,
+        "offset": -3
+      },
+      "status": 200,
+      "expected": {
+        "total": 4,
+        "items": [
+          {
+            "invitation_id": "home-z",
+            "organization_id": "home",
+            "code": "CODE-Z",
+            "status": "used",
+            "initial_credit_units": 125,
+            "legacy_initial_quota_usd": 1.25,
+            "used_by_member_id": "original-member",
+            "created_at": 20,
+            "used_at": 50
+          }
+        ]
+      }
+    },
+    {
+      "name": "admin_maximum",
+      "role": "admin",
+      "input": {
+        "limit": 999
+      },
+      "status": 200,
+      "expected": {
+        "total": 4,
+        "items": [
+          {
+            "invitation_id": "home-z",
+            "organization_id": "home",
+            "code": "CODE-Z",
+            "status": "used",
+            "initial_credit_units": 125,
+            "legacy_initial_quota_usd": 1.25,
+            "used_by_member_id": "original-member",
+            "created_at": 20,
+            "used_at": 50
+          },
+          {
+            "invitation_id": "home-a",
+            "organization_id": "home",
+            "code": "CODE-A",
+            "status": "pending",
+            "initial_credit_units": 0,
+            "legacy_initial_quota_usd": null,
+            "used_by_member_id": null,
+            "created_at": 20,
+            "used_at": null
+          },
+          {
+            "invitation_id": "home-pending",
+            "organization_id": "home",
+            "code": "CODE-PENDING",
+            "status": "pending",
+            "initial_credit_units": 99,
+            "legacy_initial_quota_usd": null,
+            "used_by_member_id": null,
+            "created_at": 15,
+            "used_at": null
+          },
+          {
+            "invitation_id": "home-old",
+            "organization_id": "home",
+            "code": "CODE-OLD",
+            "status": "revoked",
+            "initial_credit_units": 10.5,
+            "legacy_initial_quota_usd": 0,
+            "used_by_member_id": null,
+            "created_at": 10,
+            "used_at": null
+          }
+        ]
+      }
+    },
+    {
+      "name": "admin_past_end",
+      "role": "admin",
+      "input": {
+        "offset": 99
+      },
+      "status": 200,
+      "expected": {
+        "total": 4,
+        "items": []
+      }
+    },
+    {
+      "name": "admin_foreign_selector",
+      "role": "admin",
+      "input": {
+        "orgId": "foreign"
+      },
+      "status": 200,
+      "expected": {
+        "total": 4,
+        "items": [
+          {
+            "invitation_id": "home-z",
+            "organization_id": "home",
+            "code": "CODE-Z",
+            "status": "used",
+            "initial_credit_units": 125,
+            "legacy_initial_quota_usd": 1.25,
+            "used_by_member_id": "original-member",
+            "created_at": 20,
+            "used_at": 50
+          },
+          {
+            "invitation_id": "home-a",
+            "organization_id": "home",
+            "code": "CODE-A",
+            "status": "pending",
+            "initial_credit_units": 0,
+            "legacy_initial_quota_usd": null,
+            "used_by_member_id": null,
+            "created_at": 20,
+            "used_at": null
+          },
+          {
+            "invitation_id": "home-pending",
+            "organization_id": "home",
+            "code": "CODE-PENDING",
+            "status": "pending",
+            "initial_credit_units": 99,
+            "legacy_initial_quota_usd": null,
+            "used_by_member_id": null,
+            "created_at": 15,
+            "used_at": null
+          },
+          {
+            "invitation_id": "home-old",
+            "organization_id": "home",
+            "code": "CODE-OLD",
+            "status": "revoked",
+            "initial_credit_units": 10.5,
+            "legacy_initial_quota_usd": 0,
+            "used_by_member_id": null,
+            "created_at": 10,
+            "used_at": null
+          }
+        ]
+      }
+    },
+    {
+      "name": "super_admin_default",
+      "role": "super_admin",
+      "input": {},
+      "status": 200,
+      "expected": {
+        "total": 4,
+        "items": [
+          {
+            "invitation_id": "home-z",
+            "organization_id": "home",
+            "code": "CODE-Z",
+            "status": "used",
+            "initial_credit_units": 125,
+            "legacy_initial_quota_usd": 1.25,
+            "used_by_member_id": "original-member",
+            "created_at": 20,
+            "used_at": 50
+          },
+          {
+            "invitation_id": "home-a",
+            "organization_id": "home",
+            "code": "CODE-A",
+            "status": "pending",
+            "initial_credit_units": 0,
+            "legacy_initial_quota_usd": null,
+            "used_by_member_id": null,
+            "created_at": 20,
+            "used_at": null
+          },
+          {
+            "invitation_id": "home-pending",
+            "organization_id": "home",
+            "code": "CODE-PENDING",
+            "status": "pending",
+            "initial_credit_units": 99,
+            "legacy_initial_quota_usd": null,
+            "used_by_member_id": null,
+            "created_at": 15,
+            "used_at": null
+          },
+          {
+            "invitation_id": "home-old",
+            "organization_id": "home",
+            "code": "CODE-OLD",
+            "status": "revoked",
+            "initial_credit_units": 10.5,
+            "legacy_initial_quota_usd": 0,
+            "used_by_member_id": null,
+            "created_at": 10,
+            "used_at": null
+          }
+        ]
+      }
+    },
+    {
+      "name": "super_admin_pending",
+      "role": "super_admin",
+      "input": {
+        "status": "pending"
+      },
+      "status": 200,
+      "expected": {
+        "total": 2,
+        "items": [
+          {
+            "invitation_id": "home-a",
+            "organization_id": "home",
+            "code": "CODE-A",
+            "status": "pending",
+            "initial_credit_units": 0,
+            "legacy_initial_quota_usd": null,
+            "used_by_member_id": null,
+            "created_at": 20,
+            "used_at": null
+          },
+          {
+            "invitation_id": "home-pending",
+            "organization_id": "home",
+            "code": "CODE-PENDING",
+            "status": "pending",
+            "initial_credit_units": 99,
+            "legacy_initial_quota_usd": null,
+            "used_by_member_id": null,
+            "created_at": 15,
+            "used_at": null
+          }
+        ]
+      }
+    },
+    {
+      "name": "super_admin_used",
+      "role": "super_admin",
+      "input": {
+        "status": "used"
+      },
+      "status": 200,
+      "expected": {
+        "total": 1,
+        "items": [
+          {
+            "invitation_id": "home-z",
+            "organization_id": "home",
+            "code": "CODE-Z",
+            "status": "used",
+            "initial_credit_units": 125,
+            "legacy_initial_quota_usd": 1.25,
+            "used_by_member_id": "original-member",
+            "created_at": 20,
+            "used_at": 50
+          }
+        ]
+      }
+    },
+    {
+      "name": "super_admin_revoked",
+      "role": "super_admin",
+      "input": {
+        "status": "revoked"
+      },
+      "status": 200,
+      "expected": {
+        "total": 1,
+        "items": [
+          {
+            "invitation_id": "home-old",
+            "organization_id": "home",
+            "code": "CODE-OLD",
+            "status": "revoked",
+            "initial_credit_units": 10.5,
+            "legacy_initial_quota_usd": 0,
+            "used_by_member_id": null,
+            "created_at": 10,
+            "used_at": null
+          }
+        ]
+      }
+    },
+    {
+      "name": "super_admin_page",
+      "role": "super_admin",
+      "input": {
+        "limit": 1,
+        "offset": 1
+      },
+      "status": 200,
+      "expected": {
+        "total": 4,
+        "items": [
+          {
+            "invitation_id": "home-a",
+            "organization_id": "home",
+            "code": "CODE-A",
+            "status": "pending",
+            "initial_credit_units": 0,
+            "legacy_initial_quota_usd": null,
+            "used_by_member_id": null,
+            "created_at": 20,
+            "used_at": null
+          }
+        ]
+      }
+    },
+    {
+      "name": "super_admin_minimum",
+      "role": "super_admin",
+      "input": {
+        "limit": 0,
+        "offset": -3
+      },
+      "status": 200,
+      "expected": {
+        "total": 4,
+        "items": [
+          {
+            "invitation_id": "home-z",
+            "organization_id": "home",
+            "code": "CODE-Z",
+            "status": "used",
+            "initial_credit_units": 125,
+            "legacy_initial_quota_usd": 1.25,
+            "used_by_member_id": "original-member",
+            "created_at": 20,
+            "used_at": 50
+          }
+        ]
+      }
+    },
+    {
+      "name": "super_admin_maximum",
+      "role": "super_admin",
+      "input": {
+        "limit": 999
+      },
+      "status": 200,
+      "expected": {
+        "total": 4,
+        "items": [
+          {
+            "invitation_id": "home-z",
+            "organization_id": "home",
+            "code": "CODE-Z",
+            "status": "used",
+            "initial_credit_units": 125,
+            "legacy_initial_quota_usd": 1.25,
+            "used_by_member_id": "original-member",
+            "created_at": 20,
+            "used_at": 50
+          },
+          {
+            "invitation_id": "home-a",
+            "organization_id": "home",
+            "code": "CODE-A",
+            "status": "pending",
+            "initial_credit_units": 0,
+            "legacy_initial_quota_usd": null,
+            "used_by_member_id": null,
+            "created_at": 20,
+            "used_at": null
+          },
+          {
+            "invitation_id": "home-pending",
+            "organization_id": "home",
+            "code": "CODE-PENDING",
+            "status": "pending",
+            "initial_credit_units": 99,
+            "legacy_initial_quota_usd": null,
+            "used_by_member_id": null,
+            "created_at": 15,
+            "used_at": null
+          },
+          {
+            "invitation_id": "home-old",
+            "organization_id": "home",
+            "code": "CODE-OLD",
+            "status": "revoked",
+            "initial_credit_units": 10.5,
+            "legacy_initial_quota_usd": 0,
+            "used_by_member_id": null,
+            "created_at": 10,
+            "used_at": null
+          }
+        ]
+      }
+    },
+    {
+      "name": "super_admin_past_end",
+      "role": "super_admin",
+      "input": {
+        "offset": 99
+      },
+      "status": 200,
+      "expected": {
+        "total": 4,
+        "items": []
+      }
+    },
+    {
+      "name": "super_admin_foreign_selector",
+      "role": "super_admin",
+      "input": {
+        "orgId": "foreign"
+      },
+      "status": 200,
+      "expected": {
+        "total": 4,
+        "items": [
+          {
+            "invitation_id": "home-z",
+            "organization_id": "home",
+            "code": "CODE-Z",
+            "status": "used",
+            "initial_credit_units": 125,
+            "legacy_initial_quota_usd": 1.25,
+            "used_by_member_id": "original-member",
+            "created_at": 20,
+            "used_at": 50
+          },
+          {
+            "invitation_id": "home-a",
+            "organization_id": "home",
+            "code": "CODE-A",
+            "status": "pending",
+            "initial_credit_units": 0,
+            "legacy_initial_quota_usd": null,
+            "used_by_member_id": null,
+            "created_at": 20,
+            "used_at": null
+          },
+          {
+            "invitation_id": "home-pending",
+            "organization_id": "home",
+            "code": "CODE-PENDING",
+            "status": "pending",
+            "initial_credit_units": 99,
+            "legacy_initial_quota_usd": null,
+            "used_by_member_id": null,
+            "created_at": 15,
+            "used_at": null
+          },
+          {
+            "invitation_id": "home-old",
+            "organization_id": "home",
+            "code": "CODE-OLD",
+            "status": "revoked",
+            "initial_credit_units": 10.5,
+            "legacy_initial_quota_usd": 0,
+            "used_by_member_id": null,
+            "created_at": 10,
+            "used_at": null
+          }
+        ]
+      }
+    },
+    {
+      "name": "dept_admin_default",
+      "role": "dept_admin",
+      "input": {},
+      "status": 403
+    },
+    {
+      "name": "dept_admin_pending",
+      "role": "dept_admin",
+      "input": {
+        "status": "pending"
+      },
+      "status": 403
+    },
+    {
+      "name": "dept_admin_used",
+      "role": "dept_admin",
+      "input": {
+        "status": "used"
+      },
+      "status": 403
+    },
+    {
+      "name": "dept_admin_revoked",
+      "role": "dept_admin",
+      "input": {
+        "status": "revoked"
+      },
+      "status": 403
+    },
+    {
+      "name": "dept_admin_page",
+      "role": "dept_admin",
+      "input": {
+        "limit": 1,
+        "offset": 1
+      },
+      "status": 403
+    },
+    {
+      "name": "dept_admin_minimum",
+      "role": "dept_admin",
+      "input": {
+        "limit": 0,
+        "offset": -3
+      },
+      "status": 403
+    },
+    {
+      "name": "dept_admin_maximum",
+      "role": "dept_admin",
+      "input": {
+        "limit": 999
+      },
+      "status": 403
+    },
+    {
+      "name": "dept_admin_past_end",
+      "role": "dept_admin",
+      "input": {
+        "offset": 99
+      },
+      "status": 403
+    },
+    {
+      "name": "dept_admin_foreign_selector",
+      "role": "dept_admin",
+      "input": {
+        "orgId": "foreign"
+      },
+      "status": 403
+    },
+    {
+      "name": "user_default",
+      "role": "user",
+      "input": {},
+      "status": 403
+    },
+    {
+      "name": "user_pending",
+      "role": "user",
+      "input": {
+        "status": "pending"
+      },
+      "status": 403
+    },
+    {
+      "name": "user_used",
+      "role": "user",
+      "input": {
+        "status": "used"
+      },
+      "status": 403
+    },
+    {
+      "name": "user_revoked",
+      "role": "user",
+      "input": {
+        "status": "revoked"
+      },
+      "status": 403
+    },
+    {
+      "name": "user_page",
+      "role": "user",
+      "input": {
+        "limit": 1,
+        "offset": 1
+      },
+      "status": 403
+    },
+    {
+      "name": "user_minimum",
+      "role": "user",
+      "input": {
+        "limit": 0,
+        "offset": -3
+      },
+      "status": 403
+    },
+    {
+      "name": "user_maximum",
+      "role": "user",
+      "input": {
+        "limit": 999
+      },
+      "status": 403
+    },
+    {
+      "name": "user_past_end",
+      "role": "user",
+      "input": {
+        "offset": 99
+      },
+      "status": 403
+    },
+    {
+      "name": "user_foreign_selector",
+      "role": "user",
+      "input": {
+        "orgId": "foreign"
+      },
+      "status": 403
+    }
+  ]
+}

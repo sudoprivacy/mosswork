@@ -37,7 +37,7 @@ function makeMessage(id: string): ChatMessage {
   return { id, role: "user", content: `message ${id}`, timestamp: Date.now() };
 }
 
-function renderActions() {
+function renderActions(deleteSession = vi.fn().mockResolvedValue(true)) {
   return renderHook(
     () =>
       useChatSessionActions({
@@ -49,7 +49,7 @@ function renderActions() {
         setSidebarOpen: vi.fn(),
         setSelectedModel: vi.fn(),
         setHasBrowserTool: vi.fn(),
-        deleteSession: vi.fn().mockResolvedValue(true),
+        deleteSession,
         clearMessages: vi.fn(),
         resetNavForAgentSwitch: vi.fn(),
         markInitialNavDone: vi.fn(),
@@ -76,5 +76,17 @@ describe("navigateToAgent", () => {
 
     expect(getSnapshot(THREAD).messages).toHaveLength(1);
     expect(getSnapshot(EMPTY_CHAT_SESSION_KEY).messages).toHaveLength(0);
+  });
+
+  it("returns a failed deletion without navigating away or clearing history", async () => {
+    appendUserMessage(THREAD, makeMessage("retained"));
+    const { result } = renderActions(vi.fn().mockResolvedValue(false));
+    let deleted: boolean | undefined;
+    await act(async () => {
+      deleted = await result.current.handleDeleteSession(THREAD);
+    });
+    expect(deleted).toBe(false);
+    expect(navigateMock).not.toHaveBeenCalled();
+    expect(getSnapshot(THREAD).messages).toHaveLength(1);
   });
 });

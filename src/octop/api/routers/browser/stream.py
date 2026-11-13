@@ -38,18 +38,24 @@ import asyncio
 import contextlib
 import json
 import logging
+import secrets
+from collections.abc import Awaitable
+from functools import partial
+from pathlib import Path
 from typing import Any
 
+from ai_dev_browser.remote.control import ControlError
 from fastapi import APIRouter, Query, WebSocket, WebSocketDisconnect
 from starlette.websockets import WebSocketState
 
 from octop.api.deps import resolve_user_from_token
 from octop.api.routers.browser.harness import (
-    control_owner_for,
     harness_list_tabs,
     harness_page_url,
+    harness_viewport,
     resolve_harness_session,
 )
+from octop.infra.browser.control import profile_control
 from octop.infra.utils.browser_media import user_browser_profile
 
 logger = logging.getLogger(__name__)
@@ -105,8 +111,15 @@ async def _send_session_snapshot(
     profile: str,
     *,
     sess: Any | None,
+    root: Path | None = None,
 ) -> None:
     """Push one session_update (+ tabs) frame for *profile*."""
+    controls = await profile_control(profile, root)
+    metadata = {
+        "control_owner": controls.owner,
+        "controlEpoch": controls.core.epoch,
+        "targetEpoch": controls.core.target_epoch,
+    }
     if sess is None:
         await send_json(
             {
@@ -115,14 +128,26 @@ async def _send_session_snapshot(
                 "conversation_id": profile,
                 "channel_source": "dashboard",
                 "state": "idle",
-                "control_owner": control_owner_for(profile),
+                **metadata,
                 "current_url": "",
             },
         )
         await send_json({"type": "tabs", "tabs": []})
         return
 
-    url = await harness_page_url(sess)
+    epoch, target = controls.core.epoch, controls.core.target_epoch
+
+    async def observe() -> tuple[str, list[dict[str, Any]]]:
+        # Tab switching replaces the underlying CDP target. Metadata reads must
+        # share the operation barrier with switching and screenshot capture.
+        return await harness_page_url(sess), await harness_list_tabs(sess)
+
+    try:
+        url, tabs = await controls.core.run("ai", epoch, target, observe, observation=True)
+    except ControlError:
+        return
+    if (epoch, target) != (controls.core.epoch, controls.core.target_epoch):
+        return
     await send_json(
         {
             "type": "session_update",
@@ -130,12 +155,26 @@ async def _send_session_snapshot(
             "conversation_id": profile,
             "channel_source": "dashboard",
             "state": "streaming" if url else "idle",
-            "control_owner": control_owner_for(profile),
+            **metadata,
             "current_url": url,
         },
     )
-    tabs = await harness_list_tabs(sess)
     await send_json({"type": "tabs", "tabs": tabs})
+
+
+async def _report_stream_failure(
+    operation: Awaitable[None], send_json: Any, is_connected: Any
+) -> None:
+    """Report background transport failure instead of leaving an inert viewer."""
+    try:
+        await operation
+    except WebSocketDisconnect:
+        return
+    except Exception as exc:
+        logger.exception("browser background stream failed")
+        if is_connected():
+            await send_json({"type": "error", "message": str(exc)})
+            await send_json({"type": "status", "status": "error"})
 
 
 async def _stream_loop(
@@ -145,17 +184,32 @@ async def _stream_loop(
     profile: str,
     *,
     listen_only: bool,
+    root: Path | None = None,
 ) -> None:
     await send_json({"type": "status", "status": "browser_started"})
     await send_json({"type": "status", "status": "streaming"})
 
     while is_connected():
-        await _send_session_snapshot(send_json, profile, sess=sess)
+        await _send_session_snapshot(send_json, profile, sess=sess, root=root)
 
         if not listen_only:
-            frame = await _capture_jpeg(sess)
-            if frame:
-                await send_json({"type": "frame", "data": frame})
+            controls = await profile_control(profile, root)
+            epoch, target = controls.core.epoch, controls.core.target_epoch
+            try:
+                frame = await controls.core.run(
+                    "ai",
+                    epoch,
+                    target,
+                    lambda: _capture_jpeg(sess),
+                    observation=True,
+                )
+            except ControlError:
+                await asyncio.sleep(_FRAME_INTERVAL_S)
+                continue
+            if frame and (epoch, target) == (controls.core.epoch, controls.core.target_epoch):
+                await send_json(
+                    {"type": "frame", "data": frame, "controlEpoch": epoch, "targetEpoch": target}
+                )
 
         await asyncio.sleep(_FRAME_INTERVAL_S)
 
@@ -164,6 +218,7 @@ async def _listen_state_loop(
     send_json: Any,
     is_connected: Any,
     profile: str,
+    root: Path | None = None,
 ) -> None:
     """Push session_update events without launching Chrome or capturing frames.
 
@@ -175,7 +230,7 @@ async def _listen_state_loop(
 
     while is_connected():
         sess = await resolve_harness_session(profile, create=False)
-        await _send_session_snapshot(send_json, profile, sess=sess)
+        await _send_session_snapshot(send_json, profile, sess=sess, root=root)
         await asyncio.sleep(_FRAME_INTERVAL_S if sess is not None else 2.0)
 
 
@@ -327,24 +382,32 @@ async def _dispatch_key(sess: Any, msg: dict[str, Any]) -> None:
         )
 
 
+async def _browser_action(operation: Awaitable[Any], action: str) -> None:
+    result = await operation
+    if getattr(result, "success", True) is False:
+        raise ControlError("browser_action_failed", details={"action": action})
+
+
 async def _handle_client_event(sess: Any, msg: dict[str, Any]) -> None:
     t = msg.get("type")
     if t == "navigate":
         url = _normalize_nav_url(str(msg.get("url") or ""))
         if url:
-            await sess.navigate(url)
+            await _browser_action(sess.navigate(url), "navigate")
     elif t == "goback":
-        await sess.go_back()
+        await _browser_action(sess.go_back(), "goback")
     elif t == "goforward":
-        await sess.go_forward()
+        await _browser_action(sess.go_forward(), "goforward")
     elif t == "reload":
-        await sess.reload()
+        await _browser_action(sess.reload(), "reload")
     elif t == "click":
-        await sess.click(x=int(msg.get("x") or 0), y=int(msg.get("y") or 0))
+        await _browser_action(
+            sess.click(x=int(msg.get("x") or 0), y=int(msg.get("y") or 0)), "click"
+        )
     elif t == "dblclick":
         x, y = int(msg.get("x") or 0), int(msg.get("y") or 0)
-        await sess.click(x=x, y=y)
-        await sess.click(x=x, y=y)
+        await _browser_action(sess.click(x=x, y=y), "dblclick")
+        await _browser_action(sess.click(x=x, y=y), "dblclick")
     elif t in ("mousedown", "mouseup", "mousemove"):
         x, y = int(msg.get("x") or 0), int(msg.get("y") or 0)
         button = _cdp_button(msg.get("button"))
@@ -400,7 +463,7 @@ async def _handle_client_event(sess: Any, msg: dict[str, Any]) -> None:
         else:
             direction = "down" if delta_y > 0 else "up"
             amount = max(int(abs(delta_y)), 50)
-            await sess.scroll(direction=direction, amount=amount)
+            await _browser_action(sess.scroll(direction=direction, amount=amount), "scroll")
     elif t == "type":
         text = str(msg.get("text") or "")
         if text:
@@ -410,13 +473,13 @@ async def _handle_client_event(sess: Any, msg: dict[str, Any]) -> None:
     elif t == "tab_switch":
         tab_id = msg.get("tab_id")
         if tab_id is not None:
-            await sess.switch_tab(str(tab_id))
+            await _browser_action(sess.switch_tab(str(tab_id)), "tab_switch")
     elif t == "tab_close":
         tab_id = msg.get("tab_id")
         if tab_id is not None:
-            await sess.close_tab(str(tab_id))
+            await _browser_action(sess.close_tab(str(tab_id)), "tab_close")
     elif t == "tab_new":
-        await sess.new_tab()
+        await _browser_action(sess.new_tab(), "tab_new")
     elif t == "resize":
         w = int(msg.get("width") or 0)
         h = int(msg.get("height") or 0)
@@ -471,6 +534,7 @@ async def browser_stream_ws(
             listen_only=bool(listen_only),
             default_width=width,
             default_height=height,
+            root=server.paths.root,
         )
     except WebSocketDisconnect:
         pass
@@ -490,6 +554,7 @@ async def run_browser_stream_session(
     default_width: int = 1280,
     default_height: int = 800,
     start_msg: dict[str, Any] | None = None,
+    root: Path | None = None,
 ) -> None:
     """Run one screencast / listen-only session over arbitrary send/receive hooks.
 
@@ -499,6 +564,8 @@ async def run_browser_stream_session(
     sess: Any | None = None
     profile = user_browser_profile(user_id)
     stream_task: asyncio.Task[None] | None = None
+    controls = await profile_control(profile, root)
+    viewer = secrets.token_urlsafe(16)
 
     try:
         if start_msg is None:
@@ -509,15 +576,42 @@ async def run_browser_stream_session(
             return
 
         if listen_only:
-            stream_task = asyncio.create_task(_listen_state_loop(send_json, is_connected, profile))
+            stream_task = asyncio.create_task(
+                _report_stream_failure(
+                    _listen_state_loop(send_json, is_connected, profile, root),
+                    send_json,
+                    is_connected,
+                )
+            )
         else:
-            sess = await resolve_harness_session(profile)
+            # Starting the first browser is a user action. Merely attaching to
+            # an AI's existing browser stays read-only until native Stop.
+            existing = await resolve_harness_session(profile, create=False)
+            if existing is None:
+                await controls.take()
+            if existing is not None:
+                sess = existing
+            elif controls.owner == "user":
+                sess = await controls.run_human(lambda: resolve_harness_session(profile))
+            else:
+                sess = await controls.core.run(
+                    "ai",
+                    controls.core.epoch,
+                    controls.core.target_epoch,
+                    lambda: resolve_harness_session(profile),
+                )
             assert sess is not None  # create=True always returns or raises
 
             start_url = _normalize_nav_url(str(start_msg.get("url") or ""))
             if start_url and start_url not in {"about:blank"}:
                 try:
-                    await sess.navigate(start_url)
+                    event = {
+                        "type": "navigate",
+                        "url": start_url,
+                        "controlEpoch": controls.core.epoch,
+                        "targetEpoch": controls.core.target_epoch,
+                    }
+                    await controls.input(viewer, event, partial(_handle_client_event, sess, event))
                 except Exception as exc:
                     logger.warning("initial navigate to %s failed: %s", start_url, exc)
                     await send_json(
@@ -529,25 +623,42 @@ async def run_browser_stream_session(
 
             vw = int(start_msg.get("width") or default_width)
             vh = int(start_msg.get("height") or default_height)
-            if vw > 0 and vh > 0:
+            if vw > 0 and vh > 0 and controls.owner == "user":
                 with contextlib.suppress(Exception):
-                    await sess._internal.client.send(  # noqa: SLF001
-                        "Emulation.setDeviceMetricsOverride",
-                        {
+                    actual_size = await controls.core.run(
+                        "ai",
+                        controls.core.epoch,
+                        controls.core.target_epoch,
+                        lambda: harness_viewport(sess),
+                        observation=True,
+                    )
+                    # Attaching another viewer at the existing size is a read.
+                    # A redundant resize used to invalidate the first viewer's
+                    # displayed frame and reject its next tab/input operation.
+                    if actual_size != (vw, vh) and (actual_size is not None or existing is None):
+                        event = {
+                            "type": "resize",
                             "width": vw,
                             "height": vh,
-                            "deviceScaleFactor": 1,
-                            "mobile": False,
-                        },
-                    )
+                            "controlEpoch": controls.core.epoch,
+                            "targetEpoch": controls.core.target_epoch,
+                        }
+                        await controls.input(
+                            viewer, event, partial(_handle_client_event, sess, event)
+                        )
 
             stream_task = asyncio.create_task(
-                _stream_loop(
+                _report_stream_failure(
+                    _stream_loop(
+                        send_json,
+                        is_connected,
+                        sess,
+                        profile,
+                        listen_only=False,
+                        root=root,
+                    ),
                     send_json,
                     is_connected,
-                    sess,
-                    profile,
-                    listen_only=False,
                 )
             )
 
@@ -565,8 +676,18 @@ async def run_browser_stream_session(
             if msg.get("type") == "stop":
                 break
             if sess is not None:
-                with contextlib.suppress(Exception):
-                    await _handle_client_event(sess, msg)
+                try:
+                    await controls.input(viewer, msg, partial(_handle_client_event, sess, msg))
+                except ControlError as error:
+                    await send_json(
+                        {
+                            "type": "error",
+                            "message": error.code,
+                            "details": error.details or {},
+                            "recoverable": True,
+                        }
+                    )
+                    await _send_session_snapshot(send_json, profile, sess=sess, root=root)
     except TimeoutError:
         await send_json({"type": "error", "message": "timed out waiting for start"})
     except WebSocketDisconnect:
@@ -577,7 +698,11 @@ async def run_browser_stream_session(
             await send_json({"type": "error", "message": str(exc)})
             await send_json({"type": "status", "status": "error"})
     finally:
-        if stream_task is not None:
-            stream_task.cancel()
-            with contextlib.suppress(asyncio.CancelledError):
-                await stream_task
+        try:
+            if sess is not None:
+                await controls.detach(viewer, lambda event: _handle_client_event(sess, event))
+        finally:
+            if stream_task is not None:
+                stream_task.cancel()
+                with contextlib.suppress(asyncio.CancelledError):
+                    await stream_task

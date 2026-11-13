@@ -8,7 +8,7 @@ import logging
 import os
 import shutil
 import time
-from contextlib import closing, suppress
+from contextlib import AsyncExitStack, closing, suppress
 from dataclasses import dataclass
 from logging.handlers import TimedRotatingFileHandler
 from pathlib import Path
@@ -34,12 +34,17 @@ from octop.infra.users.manager import UserManager
 from octop.infra.utils.paths import PathLayout
 
 if TYPE_CHECKING:
+    from octop.infra.agents.execution_backend import ManagedExecutionBackend
     from octop.infra.auth.ldap.service import LdapAuthService
     from octop.infra.auth.ldap.throttle import LdapBindThrottle
     from octop.infra.auth.sso.service import SsoService
     from octop.infra.communication.bridge import CommunicationBridge
     from octop.infra.db.services import SharedServices
     from octop.infra.devices.manager import DeviceManager
+    from octop.infra.execution.composition import (
+        CanonicalProductConfiguration,
+        CanonicalProductServices,
+    )
     from octop.infra.history.trajectory.service import TrajectoryService
 
 logger = logging.getLogger(__name__)
@@ -247,12 +252,34 @@ class AppRuntime:
 
 
 class MossworkServer:
-    def __init__(self, home: Path | None = None, *, role: str = "monolith") -> None:
+    def __init__(
+        self,
+        home: Path | None = None,
+        *,
+        role: str = "monolith",
+        managed_backend: ManagedExecutionBackend | None = None,
+        canonical_configuration: CanonicalProductConfiguration | None = None,
+    ) -> None:
         from octop.infra.utils.bounded_io import BoundedIO
 
+        if canonical_configuration is not None:
+            from octop.infra.execution.composition import CanonicalProductConfiguration
+
+            if type(canonical_configuration) is not CanonicalProductConfiguration:
+                raise TypeError("Trusted canonical Product configuration is required")
+            if role != "monolith":
+                raise ValueError("Canonical Product startup currently supports monolith only")
+            if managed_backend is not None:
+                raise ValueError(
+                    "Canonical startup constructs its backend from the same business bundle"
+                )
+        self.canonical_configuration = canonical_configuration
+        self.canonical: CanonicalProductServices | None = None
+        self._canonical_boot_cleanup = AsyncExitStack()
         self.management_io = BoundedIO()
         self.role = role
         self.execution: Any = None
+        self._managed_backend = managed_backend
         self.runtime_shards: Any = None
         self._home = home or PathLayout.from_env().root
         self.paths = PathLayout(self._home)
@@ -339,8 +366,21 @@ class MossworkServer:
     async def start(self) -> None:
         try:
             await self._start()
-        except BaseException:
-            if self.role == "worker":
+        except BaseException as failure:
+            if self.canonical_configuration is not None:
+                # Preserve the original startup rejection/cancellation. Withdrawal
+                # closes this controller's resources, never proves native joins.
+                try:
+                    await self._canonical_boot_cleanup.aclose()
+                except BaseException:
+                    failure.add_note("Canonical startup resource withdrawal also failed")
+                finally:
+                    self.services = None
+                    self.canonical = None
+                    self.execution = None
+                    self.app_runtime = None
+                    self._started = False
+            elif self.role == "worker":
                 if self.execution is not None:
                     await self.execution.close(grace=0)
                 if self.app_runtime is not None:
@@ -366,6 +406,11 @@ class MossworkServer:
         from octop.infra.backend.grep_safety import install_safe_grep_fallback  # noqa: PLC0415
 
         install_safe_grep_fallback()
+        config = load_config(self.paths.config)
+        if self.canonical_configuration is not None:
+            # SqlitePool enables WAL in its constructor: this must precede it,
+            # migrations and every Product schema initialization.
+            self.canonical_configuration.validate_storage(config, self.paths)
         config = ensure_mobile_capabilities_probed(self.paths.config)
         self.config = config
 
@@ -389,13 +434,18 @@ class MossworkServer:
 
         self._started_at = int(time.time())
 
-        if should_defer_control_plane_db(config, self.paths):
+        if self.canonical_configuration is None and should_defer_control_plane_db(
+            config, self.paths
+        ):
             self._started = True
             self._emit_wizard_password(user_count=0)
             logger.info("control-plane database deferred until setup wizard chooses a backend")
             return
 
         db = open_database(config, self.paths)
+        if self.canonical_configuration is not None:
+            self._canonical_boot_cleanup.callback(db.close)
+            self._canonical_boot_cleanup.push_async_callback(self.management_io.drain)
         if self.role == "worker":
             from octop.infra.execution.roles import require_initialized
 
@@ -403,6 +453,10 @@ class MossworkServer:
         else:
             run_migrations(db)
         self.services = build_shared_services(db=db, paths=self.paths, config=config)
+        if self.canonical_configuration is not None:
+            self.canonical = self.canonical_configuration.build(self.services)
+            self.execution = self.canonical.execution
+            self._managed_backend = self.canonical.backend
         if self.role == "monolith" and self.services.execution_repo.mode() == "distributed-v1":
             db.close()
             raise ValueError(
@@ -463,16 +517,23 @@ class MossworkServer:
             )
         from octop.infra.auth.captcha import boot_from_services  # noqa: PLC0415
 
-        boot_from_services(self.services.settings_repo, self.services.secret_repo)
-        if self.role == "worker":
-            if self.services.secret_repo.get("jwt") is None:
-                raise ValueError("JWT secret missing; run the one-time init role")
+        if self.canonical_configuration is None:
+            boot_from_services(self.services.settings_repo, self.services.secret_repo)
+            if self.role == "worker":
+                if self.services.secret_repo.get("jwt") is None:
+                    raise ValueError("JWT secret missing; run the one-time init role")
+            else:
+                self._ensure_jwt_secret()
         else:
-            self._ensure_jwt_secret()
+            assert self._managed_backend is not None
+            self._canonical_boot_cleanup.push_async_callback(self._managed_backend.aclose)
         await self._boot_runtime(config)
         self._started = True
         assert self.user_manager is not None
-        self._emit_wizard_password(user_count=self.user_manager.count())
+        if self.canonical_configuration is None:
+            self._emit_wizard_password(user_count=self.user_manager.count())
+        else:
+            self._canonical_boot_cleanup.pop_all()  # Runtime shutdown now owns these resources.
 
     async def bind_control_plane(self) -> None:
         """Open the configured control-plane DB and boot runtime (first-run wizard).
@@ -481,6 +542,8 @@ class MossworkServer:
         into ``config.json``. Does not rebind an existing live pool — use
         ``rebind_control_plane`` only when swapping while ``user_count == 0``.
         """
+        if self.canonical_configuration is not None:
+            raise ValueError("Canonical storage cannot be initialized through local setup")
         if self.database_bound:
             return
         config = load_config(self.paths.config)
@@ -519,6 +582,7 @@ class MossworkServer:
             config=config,
             expert_catalog=self.expert_catalog,
             plugin_manager=self.plugin_manager,
+            managed_backend=self._managed_backend,
         )
         registry.runtime_shards = self.runtime_shards
 
@@ -561,7 +625,9 @@ class MossworkServer:
             trajectory_service=trajectory_service,
             history_archive=history_archive,
         )
-        if self.role == "worker":
+        if self.canonical_configuration is not None:
+            self._canonical_boot_cleanup.push_async_callback(gateway.shutdown)
+        if self.role == "worker" or self.canonical_configuration is not None:
             await gateway.boot(defer_channels=True)
         else:
             await gateway.boot()
@@ -589,10 +655,12 @@ class MossworkServer:
             repos=self.services.repos,
             timezone=config.default_timezone,
         )
+        if self.canonical_configuration is not None:
+            self._canonical_boot_cleanup.push_async_callback(cron_mgr.shutdown)
         if self.runtime_shards is not None:
             cron_mgr.owns_user = self.runtime_shards.owns_user
             gateway.owns_user = self.runtime_shards.owns_user
-        if self.role == "worker":
+        if self.role == "worker" or self.canonical_configuration is not None:
             await cron_mgr.boot(paused=True)
         else:
             await cron_mgr.boot()
@@ -638,8 +706,10 @@ class MossworkServer:
         await gateway.refresh_media_backends()
 
         user_mgr = UserManager(self.services)
+        if self.canonical_configuration is not None:
+            self._canonical_boot_cleanup.push_async_callback(user_mgr.shutdown_all)
         await user_mgr.boot()
-        if self.role == "monolith":
+        if self.role == "monolith" and self.canonical_configuration is None:
             await proactive_scheduler.start_all()
 
         from octop.infra.auth.tokens import sign_token
@@ -650,6 +720,8 @@ class MossworkServer:
             raise RuntimeError("shared services not ready for bridge")
 
         def _sign_user_token(user: Any) -> str:
+            if self.canonical_configuration is not None:
+                raise ValueError("Local bridge credentials are unavailable in canonical mode")
             secret = services.secret_repo.get("jwt")
             if secret is None:
                 raise RuntimeError("jwt secret missing")
@@ -690,9 +762,10 @@ class MossworkServer:
         from octop.infra.communication.bridge import CommunicationBridge
 
         self.communication = CommunicationBridge(self.services)
-        await self.communication.start(
-            background=self.runtime_shards is None or self.runtime_shards.primary
-        )
+        if self.canonical_configuration is None:
+            await self.communication.start(
+                background=self.runtime_shards is None or self.runtime_shards.primary
+            )
         from octop.infra.users.employee_resources import EmployeeResources
 
         self.employee_resources = EmployeeResources(self)
@@ -717,13 +790,16 @@ class MossworkServer:
             self.devices = DeviceManager(self.services.device_repo, execution=self.execution)
             registry.device_manager = self.devices
 
-        if self.role == "worker":
+        if self.role == "worker" or self.canonical_configuration is not None:
             from octop.infra.execution.gateway import GatewayExecution
 
             adapter = GatewayExecution(self, self.execution)
             gateway.processor.execution = adapter
             registry.execution = adapter
+            if self.canonical_configuration is not None:
+                self._canonical_boot_cleanup.push_async_callback(self.execution.close, grace=0)
             await self.execution.start()
+        if self.role == "worker":
             await gateway.reload_channels_from_db()
             cron_mgr.resume()
             await proactive_scheduler.start_all()
@@ -734,7 +810,8 @@ class MossworkServer:
             with suppress(Exception):
                 await bridge_mgr.resume_auto_connections()
 
-        asyncio.create_task(_resume_bridges(), name="bridge-auto-resume")
+        if self.canonical_configuration is None:
+            asyncio.create_task(_resume_bridges(), name="bridge-auto-resume")
 
     def _emit_wizard_password(self, *, user_count: int) -> None:
         config = self.config
@@ -796,8 +873,10 @@ class MossworkServer:
                 if rt.history_archive is not None:
                     rt.history_archive.store.close()
             from octop.infra.backend.browse import dispose_all_browse_sessions
+            from octop.infra.browser.control import close_profile_controls
 
             dispose_all_browse_sessions()
+            await close_profile_controls(self.paths.root)
         finally:
             if self.role == "worker":
                 from octop.infra.backend.isolation import clear_execution_tracking

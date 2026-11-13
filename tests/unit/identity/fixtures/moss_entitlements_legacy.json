@@ -1,0 +1,847 @@
+{
+  "sourceCommit": "d0b84d4c8fd5905d9ec3f7c160f2ce633f535d0d",
+  "sourceHashes": {
+    "src/server/mossAgentAccess.ts": "01caf7e4605409bc22643e861bdeee1f8aef1825f0579bf48f187fde6dd8de4e",
+    "src/server/auth/token.ts": "825bc53f4037f7fdc90b8e46e1a4f1a73390e0070db1c6bd39f5691383f0bbb8",
+    "src/server/catalog/resourceError.ts": "54f2b6642ce2a6d87ac69d26a4953047bb4eab1112e7e0c4524ac339d4f49fbf"
+  },
+  "producer": "Exact retained MossAgentAccess body, hasScope and ResourceAccessError executed using real node:sqlite; only module imports removed",
+  "orgId": "4ce65010-7331-415a-abaa-4d47387d845e",
+  "actorId": "c2cc8374-8cdf-4936-8967-d891fb500634",
+  "targetId": "12345678-1234-4234-8234-123456789abc",
+  "now": 2000000000123,
+  "cases": [
+    {
+      "name": "get_admin_active_",
+      "operation": "get",
+      "targetRole": "admin",
+      "targetStatus": "active",
+      "initialGrant": null,
+      "expected": {
+        "orgId": "4ce65010-7331-415a-abaa-4d47387d845e",
+        "userId": "12345678-1234-4234-8234-123456789abc",
+        "isGranted": true,
+        "isEnabled": true,
+        "source": "role",
+        "memberStatus": "active"
+      },
+      "stored": null
+    },
+    {
+      "name": "get_admin_active_true",
+      "operation": "get",
+      "targetRole": "admin",
+      "targetStatus": "active",
+      "initialGrant": true,
+      "expected": {
+        "orgId": "4ce65010-7331-415a-abaa-4d47387d845e",
+        "userId": "12345678-1234-4234-8234-123456789abc",
+        "isGranted": true,
+        "isEnabled": true,
+        "source": "explicit",
+        "memberStatus": "active"
+      },
+      "stored": {
+        "org_id": "4ce65010-7331-415a-abaa-4d47387d845e",
+        "user_id": "12345678-1234-4234-8234-123456789abc",
+        "enabled": 1,
+        "updated_by": "c2cc8374-8cdf-4936-8967-d891fb500634",
+        "updated_at": 1
+      }
+    },
+    {
+      "name": "get_admin_active_false",
+      "operation": "get",
+      "targetRole": "admin",
+      "targetStatus": "active",
+      "initialGrant": false,
+      "expected": {
+        "orgId": "4ce65010-7331-415a-abaa-4d47387d845e",
+        "userId": "12345678-1234-4234-8234-123456789abc",
+        "isGranted": false,
+        "isEnabled": false,
+        "source": "explicit",
+        "memberStatus": "active"
+      },
+      "stored": {
+        "org_id": "4ce65010-7331-415a-abaa-4d47387d845e",
+        "user_id": "12345678-1234-4234-8234-123456789abc",
+        "enabled": 0,
+        "updated_by": "c2cc8374-8cdf-4936-8967-d891fb500634",
+        "updated_at": 1
+      }
+    },
+    {
+      "name": "set_admin_active_true",
+      "operation": "set",
+      "targetRole": "admin",
+      "targetStatus": "active",
+      "enabled": true,
+      "expected": {
+        "orgId": "4ce65010-7331-415a-abaa-4d47387d845e",
+        "userId": "12345678-1234-4234-8234-123456789abc",
+        "isGranted": true,
+        "isEnabled": true,
+        "source": "explicit",
+        "memberStatus": "active"
+      },
+      "stored": {
+        "org_id": "4ce65010-7331-415a-abaa-4d47387d845e",
+        "user_id": "12345678-1234-4234-8234-123456789abc",
+        "enabled": 1,
+        "updated_by": "c2cc8374-8cdf-4936-8967-d891fb500634",
+        "updated_at": 2000000000123
+      }
+    },
+    {
+      "name": "set_admin_active_false",
+      "operation": "set",
+      "targetRole": "admin",
+      "targetStatus": "active",
+      "enabled": false,
+      "expected": {
+        "orgId": "4ce65010-7331-415a-abaa-4d47387d845e",
+        "userId": "12345678-1234-4234-8234-123456789abc",
+        "isGranted": false,
+        "isEnabled": false,
+        "source": "explicit",
+        "memberStatus": "active"
+      },
+      "stored": {
+        "org_id": "4ce65010-7331-415a-abaa-4d47387d845e",
+        "user_id": "12345678-1234-4234-8234-123456789abc",
+        "enabled": 0,
+        "updated_by": "c2cc8374-8cdf-4936-8967-d891fb500634",
+        "updated_at": 2000000000123
+      }
+    },
+    {
+      "name": "get_admin_disabled_",
+      "operation": "get",
+      "targetRole": "admin",
+      "targetStatus": "disabled",
+      "initialGrant": null,
+      "expected": {
+        "orgId": "4ce65010-7331-415a-abaa-4d47387d845e",
+        "userId": "12345678-1234-4234-8234-123456789abc",
+        "isGranted": true,
+        "isEnabled": false,
+        "source": "role",
+        "memberStatus": "disabled"
+      },
+      "stored": null
+    },
+    {
+      "name": "get_admin_disabled_true",
+      "operation": "get",
+      "targetRole": "admin",
+      "targetStatus": "disabled",
+      "initialGrant": true,
+      "expected": {
+        "orgId": "4ce65010-7331-415a-abaa-4d47387d845e",
+        "userId": "12345678-1234-4234-8234-123456789abc",
+        "isGranted": true,
+        "isEnabled": false,
+        "source": "explicit",
+        "memberStatus": "disabled"
+      },
+      "stored": {
+        "org_id": "4ce65010-7331-415a-abaa-4d47387d845e",
+        "user_id": "12345678-1234-4234-8234-123456789abc",
+        "enabled": 1,
+        "updated_by": "c2cc8374-8cdf-4936-8967-d891fb500634",
+        "updated_at": 1
+      }
+    },
+    {
+      "name": "get_admin_disabled_false",
+      "operation": "get",
+      "targetRole": "admin",
+      "targetStatus": "disabled",
+      "initialGrant": false,
+      "expected": {
+        "orgId": "4ce65010-7331-415a-abaa-4d47387d845e",
+        "userId": "12345678-1234-4234-8234-123456789abc",
+        "isGranted": false,
+        "isEnabled": false,
+        "source": "explicit",
+        "memberStatus": "disabled"
+      },
+      "stored": {
+        "org_id": "4ce65010-7331-415a-abaa-4d47387d845e",
+        "user_id": "12345678-1234-4234-8234-123456789abc",
+        "enabled": 0,
+        "updated_by": "c2cc8374-8cdf-4936-8967-d891fb500634",
+        "updated_at": 1
+      }
+    },
+    {
+      "name": "set_admin_disabled_true",
+      "operation": "set",
+      "targetRole": "admin",
+      "targetStatus": "disabled",
+      "enabled": true,
+      "expected": {
+        "orgId": "4ce65010-7331-415a-abaa-4d47387d845e",
+        "userId": "12345678-1234-4234-8234-123456789abc",
+        "isGranted": true,
+        "isEnabled": false,
+        "source": "explicit",
+        "memberStatus": "disabled"
+      },
+      "stored": {
+        "org_id": "4ce65010-7331-415a-abaa-4d47387d845e",
+        "user_id": "12345678-1234-4234-8234-123456789abc",
+        "enabled": 1,
+        "updated_by": "c2cc8374-8cdf-4936-8967-d891fb500634",
+        "updated_at": 2000000000123
+      }
+    },
+    {
+      "name": "set_admin_disabled_false",
+      "operation": "set",
+      "targetRole": "admin",
+      "targetStatus": "disabled",
+      "enabled": false,
+      "expected": {
+        "orgId": "4ce65010-7331-415a-abaa-4d47387d845e",
+        "userId": "12345678-1234-4234-8234-123456789abc",
+        "isGranted": false,
+        "isEnabled": false,
+        "source": "explicit",
+        "memberStatus": "disabled"
+      },
+      "stored": {
+        "org_id": "4ce65010-7331-415a-abaa-4d47387d845e",
+        "user_id": "12345678-1234-4234-8234-123456789abc",
+        "enabled": 0,
+        "updated_by": "c2cc8374-8cdf-4936-8967-d891fb500634",
+        "updated_at": 2000000000123
+      }
+    },
+    {
+      "name": "get_super_admin_active_",
+      "operation": "get",
+      "targetRole": "super_admin",
+      "targetStatus": "active",
+      "initialGrant": null,
+      "expected": {
+        "orgId": "4ce65010-7331-415a-abaa-4d47387d845e",
+        "userId": "12345678-1234-4234-8234-123456789abc",
+        "isGranted": true,
+        "isEnabled": true,
+        "source": "role",
+        "memberStatus": "active"
+      },
+      "stored": null
+    },
+    {
+      "name": "get_super_admin_active_true",
+      "operation": "get",
+      "targetRole": "super_admin",
+      "targetStatus": "active",
+      "initialGrant": true,
+      "expected": {
+        "orgId": "4ce65010-7331-415a-abaa-4d47387d845e",
+        "userId": "12345678-1234-4234-8234-123456789abc",
+        "isGranted": true,
+        "isEnabled": true,
+        "source": "explicit",
+        "memberStatus": "active"
+      },
+      "stored": {
+        "org_id": "4ce65010-7331-415a-abaa-4d47387d845e",
+        "user_id": "12345678-1234-4234-8234-123456789abc",
+        "enabled": 1,
+        "updated_by": "c2cc8374-8cdf-4936-8967-d891fb500634",
+        "updated_at": 1
+      }
+    },
+    {
+      "name": "get_super_admin_active_false",
+      "operation": "get",
+      "targetRole": "super_admin",
+      "targetStatus": "active",
+      "initialGrant": false,
+      "expected": {
+        "orgId": "4ce65010-7331-415a-abaa-4d47387d845e",
+        "userId": "12345678-1234-4234-8234-123456789abc",
+        "isGranted": false,
+        "isEnabled": false,
+        "source": "explicit",
+        "memberStatus": "active"
+      },
+      "stored": {
+        "org_id": "4ce65010-7331-415a-abaa-4d47387d845e",
+        "user_id": "12345678-1234-4234-8234-123456789abc",
+        "enabled": 0,
+        "updated_by": "c2cc8374-8cdf-4936-8967-d891fb500634",
+        "updated_at": 1
+      }
+    },
+    {
+      "name": "set_super_admin_active_true",
+      "operation": "set",
+      "targetRole": "super_admin",
+      "targetStatus": "active",
+      "enabled": true,
+      "expected": {
+        "orgId": "4ce65010-7331-415a-abaa-4d47387d845e",
+        "userId": "12345678-1234-4234-8234-123456789abc",
+        "isGranted": true,
+        "isEnabled": true,
+        "source": "explicit",
+        "memberStatus": "active"
+      },
+      "stored": {
+        "org_id": "4ce65010-7331-415a-abaa-4d47387d845e",
+        "user_id": "12345678-1234-4234-8234-123456789abc",
+        "enabled": 1,
+        "updated_by": "c2cc8374-8cdf-4936-8967-d891fb500634",
+        "updated_at": 2000000000123
+      }
+    },
+    {
+      "name": "set_super_admin_active_false",
+      "operation": "set",
+      "targetRole": "super_admin",
+      "targetStatus": "active",
+      "enabled": false,
+      "expected": {
+        "orgId": "4ce65010-7331-415a-abaa-4d47387d845e",
+        "userId": "12345678-1234-4234-8234-123456789abc",
+        "isGranted": false,
+        "isEnabled": false,
+        "source": "explicit",
+        "memberStatus": "active"
+      },
+      "stored": {
+        "org_id": "4ce65010-7331-415a-abaa-4d47387d845e",
+        "user_id": "12345678-1234-4234-8234-123456789abc",
+        "enabled": 0,
+        "updated_by": "c2cc8374-8cdf-4936-8967-d891fb500634",
+        "updated_at": 2000000000123
+      }
+    },
+    {
+      "name": "get_super_admin_disabled_",
+      "operation": "get",
+      "targetRole": "super_admin",
+      "targetStatus": "disabled",
+      "initialGrant": null,
+      "expected": {
+        "orgId": "4ce65010-7331-415a-abaa-4d47387d845e",
+        "userId": "12345678-1234-4234-8234-123456789abc",
+        "isGranted": true,
+        "isEnabled": false,
+        "source": "role",
+        "memberStatus": "disabled"
+      },
+      "stored": null
+    },
+    {
+      "name": "get_super_admin_disabled_true",
+      "operation": "get",
+      "targetRole": "super_admin",
+      "targetStatus": "disabled",
+      "initialGrant": true,
+      "expected": {
+        "orgId": "4ce65010-7331-415a-abaa-4d47387d845e",
+        "userId": "12345678-1234-4234-8234-123456789abc",
+        "isGranted": true,
+        "isEnabled": false,
+        "source": "explicit",
+        "memberStatus": "disabled"
+      },
+      "stored": {
+        "org_id": "4ce65010-7331-415a-abaa-4d47387d845e",
+        "user_id": "12345678-1234-4234-8234-123456789abc",
+        "enabled": 1,
+        "updated_by": "c2cc8374-8cdf-4936-8967-d891fb500634",
+        "updated_at": 1
+      }
+    },
+    {
+      "name": "get_super_admin_disabled_false",
+      "operation": "get",
+      "targetRole": "super_admin",
+      "targetStatus": "disabled",
+      "initialGrant": false,
+      "expected": {
+        "orgId": "4ce65010-7331-415a-abaa-4d47387d845e",
+        "userId": "12345678-1234-4234-8234-123456789abc",
+        "isGranted": false,
+        "isEnabled": false,
+        "source": "explicit",
+        "memberStatus": "disabled"
+      },
+      "stored": {
+        "org_id": "4ce65010-7331-415a-abaa-4d47387d845e",
+        "user_id": "12345678-1234-4234-8234-123456789abc",
+        "enabled": 0,
+        "updated_by": "c2cc8374-8cdf-4936-8967-d891fb500634",
+        "updated_at": 1
+      }
+    },
+    {
+      "name": "set_super_admin_disabled_true",
+      "operation": "set",
+      "targetRole": "super_admin",
+      "targetStatus": "disabled",
+      "enabled": true,
+      "expected": {
+        "orgId": "4ce65010-7331-415a-abaa-4d47387d845e",
+        "userId": "12345678-1234-4234-8234-123456789abc",
+        "isGranted": true,
+        "isEnabled": false,
+        "source": "explicit",
+        "memberStatus": "disabled"
+      },
+      "stored": {
+        "org_id": "4ce65010-7331-415a-abaa-4d47387d845e",
+        "user_id": "12345678-1234-4234-8234-123456789abc",
+        "enabled": 1,
+        "updated_by": "c2cc8374-8cdf-4936-8967-d891fb500634",
+        "updated_at": 2000000000123
+      }
+    },
+    {
+      "name": "set_super_admin_disabled_false",
+      "operation": "set",
+      "targetRole": "super_admin",
+      "targetStatus": "disabled",
+      "enabled": false,
+      "expected": {
+        "orgId": "4ce65010-7331-415a-abaa-4d47387d845e",
+        "userId": "12345678-1234-4234-8234-123456789abc",
+        "isGranted": false,
+        "isEnabled": false,
+        "source": "explicit",
+        "memberStatus": "disabled"
+      },
+      "stored": {
+        "org_id": "4ce65010-7331-415a-abaa-4d47387d845e",
+        "user_id": "12345678-1234-4234-8234-123456789abc",
+        "enabled": 0,
+        "updated_by": "c2cc8374-8cdf-4936-8967-d891fb500634",
+        "updated_at": 2000000000123
+      }
+    },
+    {
+      "name": "get_dept_admin_active_",
+      "operation": "get",
+      "targetRole": "dept_admin",
+      "targetStatus": "active",
+      "initialGrant": null,
+      "expected": {
+        "orgId": "4ce65010-7331-415a-abaa-4d47387d845e",
+        "userId": "12345678-1234-4234-8234-123456789abc",
+        "isGranted": false,
+        "isEnabled": false,
+        "source": "role",
+        "memberStatus": "active"
+      },
+      "stored": null
+    },
+    {
+      "name": "get_dept_admin_active_true",
+      "operation": "get",
+      "targetRole": "dept_admin",
+      "targetStatus": "active",
+      "initialGrant": true,
+      "expected": {
+        "orgId": "4ce65010-7331-415a-abaa-4d47387d845e",
+        "userId": "12345678-1234-4234-8234-123456789abc",
+        "isGranted": true,
+        "isEnabled": true,
+        "source": "explicit",
+        "memberStatus": "active"
+      },
+      "stored": {
+        "org_id": "4ce65010-7331-415a-abaa-4d47387d845e",
+        "user_id": "12345678-1234-4234-8234-123456789abc",
+        "enabled": 1,
+        "updated_by": "c2cc8374-8cdf-4936-8967-d891fb500634",
+        "updated_at": 1
+      }
+    },
+    {
+      "name": "get_dept_admin_active_false",
+      "operation": "get",
+      "targetRole": "dept_admin",
+      "targetStatus": "active",
+      "initialGrant": false,
+      "expected": {
+        "orgId": "4ce65010-7331-415a-abaa-4d47387d845e",
+        "userId": "12345678-1234-4234-8234-123456789abc",
+        "isGranted": false,
+        "isEnabled": false,
+        "source": "explicit",
+        "memberStatus": "active"
+      },
+      "stored": {
+        "org_id": "4ce65010-7331-415a-abaa-4d47387d845e",
+        "user_id": "12345678-1234-4234-8234-123456789abc",
+        "enabled": 0,
+        "updated_by": "c2cc8374-8cdf-4936-8967-d891fb500634",
+        "updated_at": 1
+      }
+    },
+    {
+      "name": "set_dept_admin_active_true",
+      "operation": "set",
+      "targetRole": "dept_admin",
+      "targetStatus": "active",
+      "enabled": true,
+      "expected": {
+        "orgId": "4ce65010-7331-415a-abaa-4d47387d845e",
+        "userId": "12345678-1234-4234-8234-123456789abc",
+        "isGranted": true,
+        "isEnabled": true,
+        "source": "explicit",
+        "memberStatus": "active"
+      },
+      "stored": {
+        "org_id": "4ce65010-7331-415a-abaa-4d47387d845e",
+        "user_id": "12345678-1234-4234-8234-123456789abc",
+        "enabled": 1,
+        "updated_by": "c2cc8374-8cdf-4936-8967-d891fb500634",
+        "updated_at": 2000000000123
+      }
+    },
+    {
+      "name": "set_dept_admin_active_false",
+      "operation": "set",
+      "targetRole": "dept_admin",
+      "targetStatus": "active",
+      "enabled": false,
+      "expected": {
+        "orgId": "4ce65010-7331-415a-abaa-4d47387d845e",
+        "userId": "12345678-1234-4234-8234-123456789abc",
+        "isGranted": false,
+        "isEnabled": false,
+        "source": "explicit",
+        "memberStatus": "active"
+      },
+      "stored": {
+        "org_id": "4ce65010-7331-415a-abaa-4d47387d845e",
+        "user_id": "12345678-1234-4234-8234-123456789abc",
+        "enabled": 0,
+        "updated_by": "c2cc8374-8cdf-4936-8967-d891fb500634",
+        "updated_at": 2000000000123
+      }
+    },
+    {
+      "name": "get_dept_admin_disabled_",
+      "operation": "get",
+      "targetRole": "dept_admin",
+      "targetStatus": "disabled",
+      "initialGrant": null,
+      "expected": {
+        "orgId": "4ce65010-7331-415a-abaa-4d47387d845e",
+        "userId": "12345678-1234-4234-8234-123456789abc",
+        "isGranted": false,
+        "isEnabled": false,
+        "source": "role",
+        "memberStatus": "disabled"
+      },
+      "stored": null
+    },
+    {
+      "name": "get_dept_admin_disabled_true",
+      "operation": "get",
+      "targetRole": "dept_admin",
+      "targetStatus": "disabled",
+      "initialGrant": true,
+      "expected": {
+        "orgId": "4ce65010-7331-415a-abaa-4d47387d845e",
+        "userId": "12345678-1234-4234-8234-123456789abc",
+        "isGranted": true,
+        "isEnabled": false,
+        "source": "explicit",
+        "memberStatus": "disabled"
+      },
+      "stored": {
+        "org_id": "4ce65010-7331-415a-abaa-4d47387d845e",
+        "user_id": "12345678-1234-4234-8234-123456789abc",
+        "enabled": 1,
+        "updated_by": "c2cc8374-8cdf-4936-8967-d891fb500634",
+        "updated_at": 1
+      }
+    },
+    {
+      "name": "get_dept_admin_disabled_false",
+      "operation": "get",
+      "targetRole": "dept_admin",
+      "targetStatus": "disabled",
+      "initialGrant": false,
+      "expected": {
+        "orgId": "4ce65010-7331-415a-abaa-4d47387d845e",
+        "userId": "12345678-1234-4234-8234-123456789abc",
+        "isGranted": false,
+        "isEnabled": false,
+        "source": "explicit",
+        "memberStatus": "disabled"
+      },
+      "stored": {
+        "org_id": "4ce65010-7331-415a-abaa-4d47387d845e",
+        "user_id": "12345678-1234-4234-8234-123456789abc",
+        "enabled": 0,
+        "updated_by": "c2cc8374-8cdf-4936-8967-d891fb500634",
+        "updated_at": 1
+      }
+    },
+    {
+      "name": "set_dept_admin_disabled_true",
+      "operation": "set",
+      "targetRole": "dept_admin",
+      "targetStatus": "disabled",
+      "enabled": true,
+      "expected": {
+        "orgId": "4ce65010-7331-415a-abaa-4d47387d845e",
+        "userId": "12345678-1234-4234-8234-123456789abc",
+        "isGranted": true,
+        "isEnabled": false,
+        "source": "explicit",
+        "memberStatus": "disabled"
+      },
+      "stored": {
+        "org_id": "4ce65010-7331-415a-abaa-4d47387d845e",
+        "user_id": "12345678-1234-4234-8234-123456789abc",
+        "enabled": 1,
+        "updated_by": "c2cc8374-8cdf-4936-8967-d891fb500634",
+        "updated_at": 2000000000123
+      }
+    },
+    {
+      "name": "set_dept_admin_disabled_false",
+      "operation": "set",
+      "targetRole": "dept_admin",
+      "targetStatus": "disabled",
+      "enabled": false,
+      "expected": {
+        "orgId": "4ce65010-7331-415a-abaa-4d47387d845e",
+        "userId": "12345678-1234-4234-8234-123456789abc",
+        "isGranted": false,
+        "isEnabled": false,
+        "source": "explicit",
+        "memberStatus": "disabled"
+      },
+      "stored": {
+        "org_id": "4ce65010-7331-415a-abaa-4d47387d845e",
+        "user_id": "12345678-1234-4234-8234-123456789abc",
+        "enabled": 0,
+        "updated_by": "c2cc8374-8cdf-4936-8967-d891fb500634",
+        "updated_at": 2000000000123
+      }
+    },
+    {
+      "name": "get_user_active_",
+      "operation": "get",
+      "targetRole": "user",
+      "targetStatus": "active",
+      "initialGrant": null,
+      "expected": {
+        "orgId": "4ce65010-7331-415a-abaa-4d47387d845e",
+        "userId": "12345678-1234-4234-8234-123456789abc",
+        "isGranted": false,
+        "isEnabled": false,
+        "source": "role",
+        "memberStatus": "active"
+      },
+      "stored": null
+    },
+    {
+      "name": "get_user_active_true",
+      "operation": "get",
+      "targetRole": "user",
+      "targetStatus": "active",
+      "initialGrant": true,
+      "expected": {
+        "orgId": "4ce65010-7331-415a-abaa-4d47387d845e",
+        "userId": "12345678-1234-4234-8234-123456789abc",
+        "isGranted": true,
+        "isEnabled": true,
+        "source": "explicit",
+        "memberStatus": "active"
+      },
+      "stored": {
+        "org_id": "4ce65010-7331-415a-abaa-4d47387d845e",
+        "user_id": "12345678-1234-4234-8234-123456789abc",
+        "enabled": 1,
+        "updated_by": "c2cc8374-8cdf-4936-8967-d891fb500634",
+        "updated_at": 1
+      }
+    },
+    {
+      "name": "get_user_active_false",
+      "operation": "get",
+      "targetRole": "user",
+      "targetStatus": "active",
+      "initialGrant": false,
+      "expected": {
+        "orgId": "4ce65010-7331-415a-abaa-4d47387d845e",
+        "userId": "12345678-1234-4234-8234-123456789abc",
+        "isGranted": false,
+        "isEnabled": false,
+        "source": "explicit",
+        "memberStatus": "active"
+      },
+      "stored": {
+        "org_id": "4ce65010-7331-415a-abaa-4d47387d845e",
+        "user_id": "12345678-1234-4234-8234-123456789abc",
+        "enabled": 0,
+        "updated_by": "c2cc8374-8cdf-4936-8967-d891fb500634",
+        "updated_at": 1
+      }
+    },
+    {
+      "name": "set_user_active_true",
+      "operation": "set",
+      "targetRole": "user",
+      "targetStatus": "active",
+      "enabled": true,
+      "expected": {
+        "orgId": "4ce65010-7331-415a-abaa-4d47387d845e",
+        "userId": "12345678-1234-4234-8234-123456789abc",
+        "isGranted": true,
+        "isEnabled": true,
+        "source": "explicit",
+        "memberStatus": "active"
+      },
+      "stored": {
+        "org_id": "4ce65010-7331-415a-abaa-4d47387d845e",
+        "user_id": "12345678-1234-4234-8234-123456789abc",
+        "enabled": 1,
+        "updated_by": "c2cc8374-8cdf-4936-8967-d891fb500634",
+        "updated_at": 2000000000123
+      }
+    },
+    {
+      "name": "set_user_active_false",
+      "operation": "set",
+      "targetRole": "user",
+      "targetStatus": "active",
+      "enabled": false,
+      "expected": {
+        "orgId": "4ce65010-7331-415a-abaa-4d47387d845e",
+        "userId": "12345678-1234-4234-8234-123456789abc",
+        "isGranted": false,
+        "isEnabled": false,
+        "source": "explicit",
+        "memberStatus": "active"
+      },
+      "stored": {
+        "org_id": "4ce65010-7331-415a-abaa-4d47387d845e",
+        "user_id": "12345678-1234-4234-8234-123456789abc",
+        "enabled": 0,
+        "updated_by": "c2cc8374-8cdf-4936-8967-d891fb500634",
+        "updated_at": 2000000000123
+      }
+    },
+    {
+      "name": "get_user_disabled_",
+      "operation": "get",
+      "targetRole": "user",
+      "targetStatus": "disabled",
+      "initialGrant": null,
+      "expected": {
+        "orgId": "4ce65010-7331-415a-abaa-4d47387d845e",
+        "userId": "12345678-1234-4234-8234-123456789abc",
+        "isGranted": false,
+        "isEnabled": false,
+        "source": "role",
+        "memberStatus": "disabled"
+      },
+      "stored": null
+    },
+    {
+      "name": "get_user_disabled_true",
+      "operation": "get",
+      "targetRole": "user",
+      "targetStatus": "disabled",
+      "initialGrant": true,
+      "expected": {
+        "orgId": "4ce65010-7331-415a-abaa-4d47387d845e",
+        "userId": "12345678-1234-4234-8234-123456789abc",
+        "isGranted": true,
+        "isEnabled": false,
+        "source": "explicit",
+        "memberStatus": "disabled"
+      },
+      "stored": {
+        "org_id": "4ce65010-7331-415a-abaa-4d47387d845e",
+        "user_id": "12345678-1234-4234-8234-123456789abc",
+        "enabled": 1,
+        "updated_by": "c2cc8374-8cdf-4936-8967-d891fb500634",
+        "updated_at": 1
+      }
+    },
+    {
+      "name": "get_user_disabled_false",
+      "operation": "get",
+      "targetRole": "user",
+      "targetStatus": "disabled",
+      "initialGrant": false,
+      "expected": {
+        "orgId": "4ce65010-7331-415a-abaa-4d47387d845e",
+        "userId": "12345678-1234-4234-8234-123456789abc",
+        "isGranted": false,
+        "isEnabled": false,
+        "source": "explicit",
+        "memberStatus": "disabled"
+      },
+      "stored": {
+        "org_id": "4ce65010-7331-415a-abaa-4d47387d845e",
+        "user_id": "12345678-1234-4234-8234-123456789abc",
+        "enabled": 0,
+        "updated_by": "c2cc8374-8cdf-4936-8967-d891fb500634",
+        "updated_at": 1
+      }
+    },
+    {
+      "name": "set_user_disabled_true",
+      "operation": "set",
+      "targetRole": "user",
+      "targetStatus": "disabled",
+      "enabled": true,
+      "expected": {
+        "orgId": "4ce65010-7331-415a-abaa-4d47387d845e",
+        "userId": "12345678-1234-4234-8234-123456789abc",
+        "isGranted": true,
+        "isEnabled": false,
+        "source": "explicit",
+        "memberStatus": "disabled"
+      },
+      "stored": {
+        "org_id": "4ce65010-7331-415a-abaa-4d47387d845e",
+        "user_id": "12345678-1234-4234-8234-123456789abc",
+        "enabled": 1,
+        "updated_by": "c2cc8374-8cdf-4936-8967-d891fb500634",
+        "updated_at": 2000000000123
+      }
+    },
+    {
+      "name": "set_user_disabled_false",
+      "operation": "set",
+      "targetRole": "user",
+      "targetStatus": "disabled",
+      "enabled": false,
+      "expected": {
+        "orgId": "4ce65010-7331-415a-abaa-4d47387d845e",
+        "userId": "12345678-1234-4234-8234-123456789abc",
+        "isGranted": false,
+        "isEnabled": false,
+        "source": "explicit",
+        "memberStatus": "disabled"
+      },
+      "stored": {
+        "org_id": "4ce65010-7331-415a-abaa-4d47387d845e",
+        "user_id": "12345678-1234-4234-8234-123456789abc",
+        "enabled": 0,
+        "updated_by": "c2cc8374-8cdf-4936-8967-d891fb500634",
+        "updated_at": 2000000000123
+      }
+    }
+  ]
+}
