@@ -355,3 +355,35 @@ def test_missing_or_corrupt_actual_proof_runs_fresh_checks(npm_repository, kind)
     third = frontend(root)
     assert third.returncode == 0, (third.stdout, third.stderr)
     assert trace(root) == ["test", "build", "test", "build"]
+
+
+def test_frontend_dispatcher_plan_works_without_site_packages(repository):
+    change(repository, "dashboard/src/Example.tsx")
+    before = git(repository, "ls-files", "--stage")
+    result = subprocess.run(
+        [sys.executable, "-S", str(repository / "tools/precommit.py"), "--plan"],
+        cwd=repository,
+        env=dict(os.environ, PYTHONDONTWRITEBYTECODE="1"),
+        capture_output=True,
+        text=True,
+        encoding="utf-8",
+        timeout=30,
+    )
+    assert result.returncode == 0, (result.stdout, result.stderr)
+    assert json.loads(result.stdout)["profile"] == "frontend"
+    assert git(repository, "ls-files", "--stage") == before
+
+
+def test_actual_frontend_entry_loads_without_site_packages(npm_repository):
+    root = npm_repository
+    result = subprocess.run(
+        [sys.executable, "-S", str(root / "tools/frontend_gate.py")],
+        cwd=root,
+        env=dict(os.environ, PYTHONDONTWRITEBYTECODE="1"),
+        capture_output=True,
+        text=True,
+        encoding="utf-8",
+        timeout=30,
+    )
+    assert result.returncode == 0, (result.stdout, result.stderr)
+    assert trace(root) == ["test", "build"]

@@ -18,8 +18,6 @@ from contextlib import contextmanager
 from pathlib import Path
 from typing import Any
 
-import pytest
-
 GIT_CONTEXT = {"GIT_DIR", "GIT_WORK_TREE", "GIT_INDEX_FILE", "GIT_COMMON_DIR", "GIT_PREFIX"}
 CACHE_NAMES = {"__pycache__", ".pytest_cache", ".mypy_cache", ".ruff_cache"}
 VOLATILE_ENV = GIT_CONTEXT | {
@@ -725,118 +723,121 @@ def main() -> int:
         return 1
 
 
-def pytest_addoption(parser: Any) -> None:
-    parser.addoption("--gate-datafile", default=None, help="Internal worktree-private graph")
-    parser.addoption(
-        "--gate-report", default=None, help="Internal source-bound gate session receipt"
-    )
-    parser.addoption("--gate-nonce", default=None, help="Internal gate attempt identity")
+# Frontend/scoped dispatchers load these standard-library helpers under private
+# module names. Only the supported pytest plugin entry registers pytest hooks.
+if __name__ == "tools.test_gate":
+    import pytest
 
-
-class _GateInterrupt:
-    def __init__(self, config: Any) -> None:
-        self.config = config
-
-    def pytest_keyboard_interrupt(self, excinfo: Any) -> None:
-        self.config._test_gate_interrupted = True
-        error = excinfo.value
-        stop = re.fullmatch(r"stopping after ([1-9][0-9]*) failures", str(error))
-        maxfail = self.config.option.maxfail
-        self.config._test_gate_maxfail_stop = bool(
-            type(error).__module__ == "xdist.dsession"
-            and type(error).__name__ == "Interrupted"
-            and stop is not None
-            and maxfail > 0
-            and int(stop.group(1)) >= maxfail
+    def pytest_addoption(parser: Any) -> None:
+        parser.addoption("--gate-datafile", default=None, help="Internal worktree-private graph")
+        parser.addoption(
+            "--gate-report", default=None, help="Internal source-bound gate session receipt"
         )
+        parser.addoption("--gate-nonce", default=None, help="Internal gate attempt identity")
 
+    class _GateInterrupt:
+        def __init__(self, config: Any) -> None:
+            self.config = config
 
-@pytest.hookimpl(tryfirst=True)
-def pytest_configure(config: Any) -> None:
-    graph = config.getoption("--gate-datafile")
-    if graph is None:
-        return
-    config.pluginmanager.register(_GateInterrupt(config), "mosswork-gate-interrupt")
-    storage = (
-        Path(git(Path(config.rootpath), "rev-parse", "--absolute-git-dir").decode().strip())
-        / "mosswork-test-gate"
-    )
-    path = Path(graph).resolve()
-    if (
-        path.parent != storage.resolve()
-        or re.fullmatch(r"graph-[a-f0-9]{32}\.sqlite3", path.name) is None
-    ):
-        raise ValueError("Invalid private graph; use the supported Make entry")
-    config._test_gate_previous_datafile = os.environ.get("TESTMON_DATAFILE")
-    # Testmon opens its controller/worker database in pytest_configure. Scope its
-    # supported environment option to startup; test subprocesses must not inherit it.
-    os.environ["TESTMON_DATAFILE"] = str(path)
+        def pytest_keyboard_interrupt(self, excinfo: Any) -> None:
+            self.config._test_gate_interrupted = True
+            error = excinfo.value
+            stop = re.fullmatch(r"stopping after ([1-9][0-9]*) failures", str(error))
+            maxfail = self.config.option.maxfail
+            self.config._test_gate_maxfail_stop = bool(
+                type(error).__module__ == "xdist.dsession"
+                and type(error).__name__ == "Interrupted"
+                and stop is not None
+                and maxfail > 0
+                and int(stop.group(1)) >= maxfail
+            )
 
-
-@pytest.hookimpl(tryfirst=True)
-def pytest_sessionstart(session: Any) -> None:
-    if not session.config.getoption("--gate-datafile"):
-        return
-    previous = session.config._test_gate_previous_datafile
-    if previous is None:
-        os.environ.pop("TESTMON_DATAFILE", None)
-    else:
-        os.environ["TESTMON_DATAFILE"] = previous
-
-
-@pytest.hookimpl(optionalhook=True)
-def pytest_testnodedown(node: Any, error: Any) -> None:
-    if error is not None:
-        node.config._test_gate_worker_crashed = True
-
-
-@pytest.hookimpl(wrapper=True, tryfirst=True)
-def pytest_sessionfinish(session: Any, exitstatus: Any) -> Iterator[None]:
-    # Testmon converts its legitimate empty selection from exit 5 to exit 0.
-    # Observe the completed hook chain, matching the process's final status.
-    yield
-    if hasattr(session.config, "workerinput"):
-        return
-    destination = session.config.getoption("--gate-report")
-    if destination is None:
-        return
-    nonce = session.config.getoption("--gate-nonce")
-    root = Path(session.config.rootpath).resolve()
-    allowed = (
-        Path(git(root, "rev-parse", "--absolute-git-dir").decode().strip()) / "mosswork-test-gate"
-    )
-    target = Path(destination).resolve()
-    if (
-        not isinstance(nonce, str)
-        or re.fullmatch(r"[a-f0-9]{32}", nonce) is None
-        or target.parent != allowed.resolve()
-        or not target.name.endswith("-" + nonce + ".session.json")
-    ):
-        raise ValueError("Invalid gate session output; use the supported Make entry")
-    reporter = session.config.pluginmanager.get_plugin("terminalreporter")
-    stats = reporter.stats if reporter is not None else {}
-    target.write_text(
-        json.dumps(
-            {
-                "nonce": nonce,
-                "root": str(root),
-                "exit_code": int(session.exitstatus),
-                "collect_only": bool(session.config.option.collectonly),
-                "collected": session.testscollected,
-                "passed": len(stats.get("passed", [])),
-                "skipped": len(stats.get("skipped", [])),
-                "failed": len(stats.get("failed", [])),
-                "errors": len(stats.get("error", [])),
-                "worker_crashed": bool(getattr(session.config, "_test_gate_worker_crashed", False)),
-                "interrupted": bool(getattr(session.config, "_test_gate_interrupted", False)),
-                "maxfail_stop": bool(getattr(session.config, "_test_gate_maxfail_stop", False)),
-                "deselected": len(stats.get("deselected", [])),
-            },
-            indent=2,
+    @pytest.hookimpl(tryfirst=True)
+    def pytest_configure(config: Any) -> None:
+        graph = config.getoption("--gate-datafile")
+        if graph is None:
+            return
+        config.pluginmanager.register(_GateInterrupt(config), "mosswork-gate-interrupt")
+        storage = (
+            Path(git(Path(config.rootpath), "rev-parse", "--absolute-git-dir").decode().strip())
+            / "mosswork-test-gate"
         )
-        + "\n",
-        encoding="utf-8",
-    )
+        path = Path(graph).resolve()
+        if (
+            path.parent != storage.resolve()
+            or re.fullmatch(r"graph-[a-f0-9]{32}\.sqlite3", path.name) is None
+        ):
+            raise ValueError("Invalid private graph; use the supported Make entry")
+        config._test_gate_previous_datafile = os.environ.get("TESTMON_DATAFILE")
+        # Testmon opens its controller/worker database in pytest_configure. Scope its
+        # supported environment option to startup; test subprocesses must not inherit it.
+        os.environ["TESTMON_DATAFILE"] = str(path)
+
+    @pytest.hookimpl(tryfirst=True)
+    def pytest_sessionstart(session: Any) -> None:
+        if not session.config.getoption("--gate-datafile"):
+            return
+        previous = session.config._test_gate_previous_datafile
+        if previous is None:
+            os.environ.pop("TESTMON_DATAFILE", None)
+        else:
+            os.environ["TESTMON_DATAFILE"] = previous
+
+    @pytest.hookimpl(optionalhook=True)
+    def pytest_testnodedown(node: Any, error: Any) -> None:
+        if error is not None:
+            node.config._test_gate_worker_crashed = True
+
+    @pytest.hookimpl(wrapper=True, tryfirst=True)
+    def pytest_sessionfinish(session: Any, exitstatus: Any) -> Iterator[None]:
+        # Testmon converts its legitimate empty selection from exit 5 to exit 0.
+        # Observe the completed hook chain, matching the process's final status.
+        yield
+        if hasattr(session.config, "workerinput"):
+            return
+        destination = session.config.getoption("--gate-report")
+        if destination is None:
+            return
+        nonce = session.config.getoption("--gate-nonce")
+        root = Path(session.config.rootpath).resolve()
+        allowed = (
+            Path(git(root, "rev-parse", "--absolute-git-dir").decode().strip())
+            / "mosswork-test-gate"
+        )
+        target = Path(destination).resolve()
+        if (
+            not isinstance(nonce, str)
+            or re.fullmatch(r"[a-f0-9]{32}", nonce) is None
+            or target.parent != allowed.resolve()
+            or not target.name.endswith("-" + nonce + ".session.json")
+        ):
+            raise ValueError("Invalid gate session output; use the supported Make entry")
+        reporter = session.config.pluginmanager.get_plugin("terminalreporter")
+        stats = reporter.stats if reporter is not None else {}
+        target.write_text(
+            json.dumps(
+                {
+                    "nonce": nonce,
+                    "root": str(root),
+                    "exit_code": int(session.exitstatus),
+                    "collect_only": bool(session.config.option.collectonly),
+                    "collected": session.testscollected,
+                    "passed": len(stats.get("passed", [])),
+                    "skipped": len(stats.get("skipped", [])),
+                    "failed": len(stats.get("failed", [])),
+                    "errors": len(stats.get("error", [])),
+                    "worker_crashed": bool(
+                        getattr(session.config, "_test_gate_worker_crashed", False)
+                    ),
+                    "interrupted": bool(getattr(session.config, "_test_gate_interrupted", False)),
+                    "maxfail_stop": bool(getattr(session.config, "_test_gate_maxfail_stop", False)),
+                    "deselected": len(stats.get("deselected", [])),
+                },
+                indent=2,
+            )
+            + "\n",
+            encoding="utf-8",
+        )
 
 
 if __name__ == "__main__":
