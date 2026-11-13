@@ -60,11 +60,11 @@ RELEASE_ONLY_INPUTS = ROOT_DOCS | {
     "tests/unit/deployment/test_make_format_gate.py",
     "tests/unit/deployment/test_make_testmon.py",
 }
-DUAL_PLATFORM_VALIDATION_INPUTS = frozenset(
-    {"tools/precommit.py", "tools/frontend_gate.py", "tests/unit/deployment/test_frontend_gate.py"}
-)
 WINDOWS_VALIDATION_INPUTS = frozenset(
     {
+        "tools/precommit.py",
+        "tools/frontend_gate.py",
+        "tests/unit/deployment/test_frontend_gate.py",
         "tools/check_public_source.py",
         "tools/export_public_source.py",
         "tests/unit/deployment/test_precommit.py",
@@ -73,9 +73,8 @@ WINDOWS_VALIDATION_INPUTS = frozenset(
         "tests/unit/deployment/test_ci_identity_reuse.py",
     }
 )
-WINDOWS_VALIDATION_INPUTS |= DUAL_PLATFORM_VALIDATION_INPUTS
 WINDOWS_VALIDATION_RECIPE_SHA256 = (
-    "4e9b4d873f22dca8a37db549f6d3537977ee89068774d7863106632dfbda0832"
+    "919add92dfc04faa9f64d80dbf3c7947c81e1f7848a4eaaf0b7a4bd58cc51df8"
 )
 
 
@@ -90,7 +89,6 @@ def paths(data: bytes) -> list[str]:
 class CiPlan(TypedDict):
     runtime_matrix: bool
     windows_validation: bool
-    linux_validation: bool
     validator_regressions: bool
     paths: list[str]
     reason: str
@@ -157,7 +155,6 @@ def ci_plan(root: Path, base: str, head: str) -> CiPlan:
     plan: CiPlan = {
         "runtime_matrix": True,
         "windows_validation": False,
-        "linux_validation": False,
         "validator_regressions": True,
         "paths": [],
         "reason": "No PR diff; run both runtime matrices",
@@ -218,11 +215,8 @@ def ci_plan(root: Path, base: str, head: str) -> CiPlan:
         return plan
     plan["runtime_matrix"] = False
     plan["windows_validation"] = needs_windows
-    plan["linux_validation"] = bool(set(changed) & DUAL_PLATFORM_VALIDATION_INPUTS)
     plan["reason"] = (
-        "Independent validation tools; full Linux and Windows validator checks remain required"
-        if plan["linux_validation"]
-        else "Independent validation tools; Linux release and Windows tool checks remain required"
+        "Independent validation tools; run existing Linux and Windows validators and complete-source exports"
         if plan["windows_validation"]
         else "Validation-only inputs; release checks remain required"
     )
@@ -719,8 +713,6 @@ def main() -> int:
                         + str(ci_selection["windows_validation"]).lower()
                         + "\nvalidator_regressions="
                         + str(ci_selection["validator_regressions"]).lower()
-                        + "\nlinux_validation="
-                        + str(ci_selection["linux_validation"]).lower()
                         + "\n"
                     )
             return 0

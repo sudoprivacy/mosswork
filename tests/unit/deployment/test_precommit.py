@@ -601,7 +601,6 @@ def test_ci_scope_cli_uses_commits_without_inheriting_or_mutating_an_index(
     assert plan["runtime_matrix"] is False and plan["paths"] == ["Makefile"]
     assert output.read_text(encoding="utf-8") == (
         "runtime_matrix=false\nwindows_validation=false\nvalidator_regressions=true\n"
-        "linux_validation=false\n"
     )
     assert (repo / ".git/index").read_bytes() == index_before
     assert git(repo, "rev-parse", "HEAD") == head
@@ -631,7 +630,6 @@ def test_committed_validation_tools_keep_windows_checks_without_runtime_jobs(
     plan = gate.ci_plan(repo, base, git(repo, "rev-parse", "HEAD"))
     assert plan["runtime_matrix"] is False
     assert plan["windows_validation"] is True
-    assert plan["linux_validation"] is (path in gate.DUAL_PLATFORM_VALIDATION_INPUTS)
     assert set(plan["paths"]) == {path, "CONTRIBUTING.md"}
 
 
@@ -644,7 +642,7 @@ def test_committed_validation_tools_keep_windows_checks_without_runtime_jobs(
         "planner-changed",
         "linux-command",
         "linux-selection",
-        "linux-tool-condition",
+        "linux-tool-selection",
     ],
 )
 def test_windows_tool_scope_keeps_runtime_jobs_for_unqualified_workflow(
@@ -664,9 +662,9 @@ def test_windows_tool_scope_keeps_runtime_jobs_for_unqualified_workflow(
                 "      - name: Check independent validation tools and the complete current source",
                 "      - name: Removed independent tool check",
             ),
-            "linux-tool-condition": (
-                " || needs.ci-scope.outputs.linux_validation == 'true'",
-                "",
+            "linux-tool-selection": (
+                "        if: needs.ci-scope.outputs.windows_validation == 'true'\n",
+                "        if: false\n",
             ),
             "linux-selection": (
                 "  release-checks:\n    needs: ci-scope",
