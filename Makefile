@@ -14,6 +14,17 @@
 SHELL := /bin/bash
 .DEFAULT_GOAL := help
 
+# Git's Windows shell launchers can otherwise supply different default contexts.
+# Preserve explicit caller values; fill only the missing installed-Git default.
+ifeq ($(OS),Windows_NT)
+ifeq ($(strip $(EXEPATH)),)
+MOSSWORK_GIT_SHELL_BIN := $(shell git_bin="$$(git --exec-path)/../../../bin"; if [ -f "$$git_bin/git.exe" ]; then cygpath -aw "$$git_bin"; fi)
+ifneq ($(MOSSWORK_GIT_SHELL_BIN),)
+export EXEPATH := $(MOSSWORK_GIT_SHELL_BIN)
+endif
+endif
+endif
+
 REPO_ROOT     := $(shell pwd)
 DASHBOARD_DIR := $(REPO_ROOT)/dashboard
 DASHBOARD_DEST := $(REPO_ROOT)/src/octop/dashboard
@@ -28,8 +39,8 @@ UV   := $(shell command -v uv 2>/dev/null)
 RUN  := $(if $(UV),uv run,)
 PYTHON := $(if $(UV),uv run python,python3)
 PIP  := $(if $(UV),uv pip,python3 -m pip)
-# Parallel workers for make test / make test-fast (override: make test PYTEST_JOBS=4)
-PYTEST_JOBS ?= auto
+# Keep foreground interaction responsive; explicit worker overrides remain available.
+PYTEST_JOBS ?= 2
 TEST_PYTHON := $(if $(UV),uv run --frozen python,python3)
 # The shared pytest defaults also cover direct CI invocations.
 PYTEST_FAILURE_MESSAGE := previous failures/new files first; all cases retained. Stop after first failure; in-flight tests finish. For all failures: PYTEST_ADDOPTS=--maxfail=0
@@ -217,7 +228,7 @@ typecheck:
 
 .PHONY: test
 test:
-	@echo "[test] full non-live suite; recording dependencies for the commit hook (-n $(PYTEST_JOBS))..."
+	@echo "[test] explicit full non-live suite (-n $(PYTEST_JOBS)); make all/test-current shares its verified history with the commit hook."
 	@echo "[test] $(PYTEST_FAILURE_MESSAGE)"
 	$(RUN) pytest --testmon-noselect -n $(PYTEST_JOBS) -m "not live"
 
@@ -248,22 +259,18 @@ precommit:
 	$(MAKE) typecheck
 	$(MAKE) test-affected
 
-# NOTE: do NOT pass `-m` here — pytest-testmon deactivates its affected-test
-# selection whenever a marker expression is present, which would fall back to
-# the full suite. Live tests under tests/live/ auto-skip when credentials are
-# absent, so running them unscoped is cheap and safe; the CI `make all` gate
-# keeps `-m "not live"` for the authoritative full run.
-#
-# NOTE: testmon detects changes via `git ls-files -m` (worktree vs index), which
-# is empty once changes are staged — exactly the pre-commit state — so it would
-# silently run zero tests. The patch in conftest.py / tests/support/
-# testmon_staged_changes.py redirects detection to `git diff HEAD` (staged +
-# unstaged) so the gate actually fires on a commit's changes.
+# The hook uses the same private graph as make all, including source/environment
+# guards. Live tests remain eligible here; a non-live baseline cannot skip a live
+# case that it never executed. Archives lacking the helper keep the legacy command.
 .PHONY: test-affected
 test-affected:
 	@echo "[test] pytest (testmon: only tests affected by changes)..."
 	@echo "[test] $(PYTEST_FAILURE_MESSAGE)"
-	$(RUN) pytest --testmon
+	@if [ -f tools/test_gate.py ]; then \
+		$(TEST_PYTHON) tools/test_gate.py --workers $(PYTEST_JOBS) --include-live; \
+	else \
+		$(RUN) pytest --testmon; \
+	fi
 
 # ─── Quality (frontend) ──────────────────────────────────────────────────────
 

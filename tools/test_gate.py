@@ -1,4 +1,4 @@
-"""Select full or affected non-live tests using this worktree's real testmon history."""
+"""Share source-bound testmon history between full validation and the commit hook."""
 
 from __future__ import annotations
 
@@ -36,6 +36,135 @@ VOLATILE_ENV = GIT_CONTEXT | {
     "CODEX_TOOL_CALL_ID",
     "MOSSWORK_TEST_REQUIRE_REUSE",
 }
+
+
+def git_launch_context(root: Path, arguments: list[str], options: dict[str, Any]) -> int | None:
+    """Use the same Git shell for Make and commits, preserving Git policy inputs."""
+    hook = root / ".githooks/test-gate"
+    if not hook.is_file():
+        return None
+    root = root.resolve()
+    try:
+        top = Path(git(root, "rev-parse", "--show-toplevel").decode().strip()).resolve()
+        if top != root:
+            return None
+        before = inputs(root)
+        storage = (
+            Path(git(root, "rev-parse", "--absolute-git-dir").decode().strip())
+            / "mosswork-test-gate"
+        )
+        storage.mkdir(exist_ok=True)
+    except (OSError, ValueError, subprocess.CalledProcessError):
+        # Source archives and unrecordable inputs retain the original full fallback.
+        return None
+    environment = {key: value for key, value in os.environ.items() if key not in GIT_CONTEXT}
+    # Commit metadata belongs to the parent Git operation, not product tests.
+    for name in ("GIT_AUTHOR_DATE", "GIT_AUTHOR_EMAIL", "GIT_AUTHOR_NAME", "GIT_EDITOR"):
+        environment.pop(name, None)
+    current = subprocess.run(
+        ["git", "config", "--path", "--get", "core.hooksPath"],
+        cwd=root,
+        env=environment,
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    argv = ["git"]
+    if (root / current.stdout.strip()).resolve() != hook.parent.resolve():
+        argv += ["-c", "core.hooksPath=.githooks"]
+    help_result = subprocess.run(
+        ["git", "hook", "run", "-h"],
+        cwd=root,
+        env=environment,
+        capture_output=True,
+        check=False,
+    )
+    argv += ["hook", "run"]
+    # New Git versions require explicit opt-in for repository-specific hook names.
+    if b"--allow-unknown-hook-name" in help_result.stdout + help_result.stderr:
+        argv += ["--allow-unknown-hook-name"]
+    argv += [
+        "test-gate",
+        "--",
+        sys.executable,
+        str(root / "tools/test_gate.py"),
+        "--git-context",
+        "--launch-id",
+        (launch_id := uuid.uuid4().hex),
+        *arguments,
+    ]
+    marker = storage / ("launch-" + launch_id + ".json")
+    try:
+        result = subprocess.run(argv, cwd=root, env=environment, check=False)
+        if result.returncode:
+            return result.returncode
+        try:
+            completion = (
+                json.loads(marker.read_text(encoding="utf-8")) if not marker.is_symlink() else {}
+            )
+        except (OSError, ValueError):
+            completion = {}
+        if completion != {"launch_id": launch_id, "root": str(root), "options": options}:
+            raise ValueError(
+                "Git shell did not complete the requested actual test gate. "
+                "Restore .githooks/test-gate and rerun make all; a zero shell exit cannot replace validation."
+            )
+        if inputs(root) != before:
+            raise ValueError(
+                "Source changed across the Git shell; preserve the output and rerun the frozen gate"
+            )
+        return 0
+    finally:
+        marker.unlink(missing_ok=True)
+
+
+def normalize_launch_environment() -> None:
+    """Make transport variables and repeated Git PATH prefixes are not test inputs."""
+    for name in ("RUN", "TEST_PYTHON", "PYTEST_JOBS"):
+        os.environ.pop(name, None)
+    # This one per-call routing option starts the shell above. Do not propagate
+    # it into private Git fixtures or confuse it with an application policy input.
+    parameters = os.environ.get("GIT_CONFIG_PARAMETERS")
+    if parameters is not None:
+        try:
+            values = shlex.split(parameters)
+            if values and all(value == "core.hooksPath=.githooks" for value in values):
+                os.environ.pop("GIT_CONFIG_PARAMETERS")
+        except ValueError:
+            pass  # Preserve malformed/other Git policy inputs and their refusal.
+    if sys.platform != "win32":
+        # Each native Git invocation prepends its exec directory. A commit hook
+        # enters Git once more than Make; remove only that repeated leading path.
+        prefix = os.environ.get("GIT_EXEC_PATH")
+        entries = os.environ.get("PATH", "").split(os.pathsep)
+        if prefix and Path(prefix).is_dir():
+            while len(entries) > 1 and entries[:2] == [prefix, prefix]:
+                entries.pop(0)
+            os.environ["PATH"] = os.pathsep.join(entries)
+        return
+    # Git for Windows prepends its own directories again in nested hooks. Keep
+    # one consistent order for that installation and retain every other PATH entry.
+    executable_path = Path(os.environ.get("GIT_EXEC_PATH", ""))
+    if len(executable_path.parents) < 3:
+        return
+    git_root = executable_path.parents[2]
+    directories = [
+        executable_path,
+        executable_path.parents[1] / "bin",
+        git_root / "usr/bin",
+        git_root / "bin",
+    ]
+    if not all(path.is_dir() for path in directories) or not (git_root / "bin/git.exe").is_file():
+        return
+    prefix = [os.path.normcase(os.path.normpath(str(path))) for path in directories]
+    result = list(prefix)
+    seen = set(prefix)
+    for part in os.environ.get("PATH", "").split(os.pathsep):
+        normalized = os.path.normcase(os.path.normpath(part)) if part else ""
+        if normalized not in seen:
+            result.append(normalized)
+            seen.add(normalized)
+    os.environ["PATH"] = os.pathsep.join(result)
 
 
 def digest(value: Any) -> str:
@@ -233,7 +362,13 @@ def python_only(previous: dict[str, str], current: dict[str, str]) -> bool:
     return True
 
 
-def run(root: Path, workers: str, force_full: bool, require_reuse: bool = False) -> int:
+def run(
+    root: Path,
+    workers: str,
+    force_full: bool,
+    require_reuse: bool = False,
+    include_live: bool = False,
+) -> int:
     root = root.resolve()
     runner = [sys.executable, "-m"]
     child_environment = {k: v for k, v in os.environ.items() if k not in GIT_CONTEXT}
@@ -247,9 +382,11 @@ def run(root: Path, workers: str, force_full: bool, require_reuse: bool = False)
                 + reason
                 + ". No tests ran; run make all without the reuse-only guard (--require-reuse or MOSSWORK_TEST_REQUIRE_REUSE=1) for required full validation."
             )
-        print("TEST_GATE: full non-live suite; no reusable baseline: " + reason, flush=True)
+        scope = "complete" if include_live else "non-live"
+        print("TEST_GATE: full " + scope + " suite; no reusable baseline: " + reason, flush=True)
+        scope_arguments = [] if include_live else ["-m", "not live"]
         return subprocess.run(
-            [*runner, "pytest", "--testmon-noselect", "-m", "not live", "-n", workers],
+            [*runner, "pytest", "--testmon-noselect", *scope_arguments, "-n", workers],
             cwd=root,
             env=child_environment,
             check=False,
@@ -272,7 +409,14 @@ def run(root: Path, workers: str, force_full: bool, require_reuse: bool = False)
         return full_without_record(str(error))
     with gate_lock(storage):
         return run_locked(
-            root, storage, workers, force_full, runner, child_environment, require_reuse
+            root,
+            storage,
+            workers,
+            force_full,
+            runner,
+            child_environment,
+            require_reuse,
+            include_live,
         )
 
 
@@ -284,6 +428,7 @@ def run_locked(
     runner: list[str],
     child_environment: dict[str, str],
     require_reuse: bool,
+    include_live: bool = False,
 ) -> int:
     before, env = inputs(root), environment(workers)
     variables = environment_variables()
@@ -365,8 +510,17 @@ def run_locked(
     # Private output paths live in the main checkout's Git directory for linked
     # worktrees. Pin config/root before pytest interprets those option values.
     argv = [*runner, "pytest", "--rootdir", str(root), "-c", str(root / "pyproject.toml")]
-    argv += ["--testmon" if reusable else "--testmon-noselect"]
-    argv += ["--gate-nonlive"] if reusable else ["-m", "not live"]
+    argv += [
+        "--testmon-forceselect"
+        if reusable and not include_live
+        else "--testmon"
+        if reusable
+        else "--testmon-noselect"
+    ]
+    if not include_live:
+        # Supported marker intersection keeps live cases unexecuted, rather than
+        # caching an artificial skip that the later commit hook might reuse.
+        argv += ["-m", "not live"]
     argv += ["-n", workers]
     # Before conftest registers these options, pytest treats separated existing
     # paths as potential collection roots. Keep private outputs inside each option.
@@ -378,6 +532,7 @@ def run_locked(
         "root": str(root),
         "passed": False,
         "mode": mode,
+        "scope": "including-live" if include_live else "non-live",
         "reason": reason,
         "inputs": before,
         "environment": env,
@@ -393,6 +548,8 @@ def run_locked(
         + json.dumps(
             {
                 "mode": mode,
+                "scope": attempt["scope"],
+                "workers": workers,
                 "reason": reason,
                 "prior_history": attempt["prior_history"],
                 "prior_passed": attempt["prior_passed"],
@@ -406,7 +563,13 @@ def run_locked(
     print(
         "TEST_GATE: This run is "
         + mode
-        + " validation. Original assertions, deadlines and non-live scope remain required. To request every case explicitly: make test.",
+        + " validation. Original assertions and deadlines remain required. "
+        + (
+            "Hook selection includes live cases. "
+            if include_live
+            else "Make selection is non-live. "
+        )
+        + "To request every case explicitly: make test.",
         flush=True,
     )
     started = time.monotonic()
@@ -483,21 +646,56 @@ def run_locked(
 
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--workers", default="auto")
+    parser.add_argument("--workers", default="2")
     parser.add_argument("--full", action="store_true")
+    parser.add_argument(
+        "--include-live", action="store_true", help="Preserve the commit hook's live-test selection"
+    )
+    parser.add_argument("--git-context", action="store_true", help=argparse.SUPPRESS)
+    parser.add_argument("--launch-id", default=None, help=argparse.SUPPRESS)
     parser.add_argument(
         "--require-reuse",
         action="store_true",
         help="Refuse before pytest if a reuse measurement would fall back to full",
     )
     args = parser.parse_args()
+    options = {
+        "workers": args.workers,
+        "full": args.full,
+        "include_live": args.include_live,
+        "require_reuse": args.require_reuse or os.environ.get("MOSSWORK_TEST_REQUIRE_REUSE") == "1",
+    }
     try:
-        return run(
+        if args.launch_id is not None and (
+            not args.git_context or re.fullmatch(r"[a-f0-9]{32}", args.launch_id) is None
+        ):
+            raise ValueError("Invalid internal Git launch identity; use the supported Make entry")
+        if not args.git_context:
+            status = git_launch_context(Path.cwd(), sys.argv[1:], options)
+            if status is not None:
+                return status
+        else:
+            normalize_launch_environment()
+        status = run(
             Path.cwd(),
             args.workers,
             args.full,
             args.require_reuse or os.environ.get("MOSSWORK_TEST_REQUIRE_REUSE") == "1",
+            args.include_live,
         )
+        if status == 0 and args.launch_id is not None:
+            root = Path.cwd().resolve()
+            storage = (
+                Path(git(root, "rev-parse", "--absolute-git-dir").decode().strip())
+                / "mosswork-test-gate"
+            )
+            with (storage / ("launch-" + args.launch_id + ".json")).open(
+                "x", encoding="utf-8"
+            ) as marker:
+                json.dump(
+                    {"launch_id": args.launch_id, "root": str(root), "options": options}, marker
+                )
+        return status
     except (OSError, ValueError, subprocess.SubprocessError) as error:
         print("TEST_GATE_REFUSED: " + str(error), file=sys.stderr, flush=True)
         return 1
@@ -509,11 +707,6 @@ def pytest_addoption(parser: Any) -> None:
         "--gate-report", default=None, help="Internal source-bound gate session receipt"
     )
     parser.addoption("--gate-nonce", default=None, help="Internal gate attempt identity")
-    parser.addoption(
-        "--gate-nonlive",
-        action="store_true",
-        help="Keep the non-live acceptance scope while testmon selects affected tests",
-    )
 
 
 class _GateInterrupt:
@@ -567,25 +760,17 @@ def pytest_sessionstart(session: Any) -> None:
         os.environ["TESTMON_DATAFILE"] = previous
 
 
-def pytest_collection_modifyitems(config: Any, items: list[Any]) -> None:
-    if not config.getoption("--gate-nonlive"):
-        return
-    for item in items:
-        if item.get_closest_marker("live") is not None:
-            item.add_marker(
-                pytest.mark.skip(
-                    reason="non-live acceptance; live credentials do not enable this case"
-                )
-            )
-
-
 @pytest.hookimpl(optionalhook=True)
 def pytest_testnodedown(node: Any, error: Any) -> None:
     if error is not None:
         node.config._test_gate_worker_crashed = True
 
 
-def pytest_sessionfinish(session: Any, exitstatus: Any) -> None:
+@pytest.hookimpl(wrapper=True, tryfirst=True)
+def pytest_sessionfinish(session: Any, exitstatus: Any) -> Iterator[None]:
+    # Testmon converts its legitimate empty selection from exit 5 to exit 0.
+    # Observe the completed hook chain, matching the process's final status.
+    yield
     if hasattr(session.config, "workerinput"):
         return
     destination = session.config.getoption("--gate-report")
@@ -611,7 +796,7 @@ def pytest_sessionfinish(session: Any, exitstatus: Any) -> None:
             {
                 "nonce": nonce,
                 "root": str(root),
-                "exit_code": int(exitstatus),
+                "exit_code": int(session.exitstatus),
                 "collect_only": bool(session.config.option.collectonly),
                 "collected": session.testscollected,
                 "passed": len(stats.get("passed", [])),
