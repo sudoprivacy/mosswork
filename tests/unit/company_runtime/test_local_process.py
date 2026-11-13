@@ -13,10 +13,11 @@ from PIL import Image
 from octop.infra.company_runtime.local import ProjectBackend, windows_python_command
 
 
-def test_windows_image_inspection_keeps_python_code_and_paths_intact():
+@pytest.mark.parametrize("python_options", ["", "-u "])
+def test_windows_image_inspection_keeps_python_code_and_paths_intact(python_options):
     executable = r"C:\Users\HooToo\.mosswork\company-runtime\tools\hash\runtime\python.exe"
     code = "from PIL import Image; im=Image.open(r'D:\\work\\mosswork\\generated\\cat_test.png'); print(im.size, im.format)"
-    assert windows_python_command(f'"{executable}" -c "{code}"') == [
+    assert windows_python_command(f'"{executable}" {python_options}-c "{code}"') == [
         executable,
         "-X",
         "utf8",
@@ -25,7 +26,10 @@ def test_windows_image_inspection_keeps_python_code_and_paths_intact():
         code,
     ]
     spaced = r"C:\Program Files\工作目录\python.exe"
-    assert windows_python_command(f'"{spaced}" -c "print(\'中文 📝\')"')[-1] == "print('中文 📝')"
+    assert (
+        windows_python_command(f'"{spaced}" {python_options}-c "print(\'中文 📝\')"')[-1]
+        == "print('中文 📝')"
+    )
 
 
 @pytest.mark.parametrize(
@@ -157,7 +161,7 @@ async def test_timeout_returns_even_when_an_orphan_retains_output_pipe(tmp_path,
 
 @pytest.mark.asyncio
 async def test_cancel_during_log_setup_stops_the_already_started_process(tmp_path, monkeypatch):
-    import octop.infra.company_runtime.local as local
+    import octop.infra.company_runtime.processes as local
 
     original = local.offload
     entered = asyncio.Event()
