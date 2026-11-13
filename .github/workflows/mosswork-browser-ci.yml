@@ -112,7 +112,13 @@ jobs:
         run: uv run --locked pytest tests/unit/deployment/test_export_public_source.py tests/unit/deployment/test_browser_fixture_intake.py -q
       - name: Exercise the published browser worker through the host transport
         run: |
-          uv run --locked python tools/accept_browser_worker.py --chrome "${{ steps.browser.outputs.executable }}" --output "$RUNNER_TEMP/browser-worker"
+          chrome_args=()
+          # Match Playwright's sandbox mode in this disposable hosted Linux job.
+          # The Worker starts Chrome directly; production launch defaults stay intact.
+          if [ "$RUNNER_OS" = Linux ]; then
+            chrome_args+=(--chrome-arg=--no-sandbox)
+          fi
+          uv run --locked python tools/accept_browser_worker.py --chrome "${{ steps.browser.outputs.executable }}" --output "$RUNNER_TEMP/browser-worker" "${chrome_args[@]}"
       - name: Intake the published domain fixture for this platform
         id: fixture
         env:
@@ -136,6 +142,7 @@ jobs:
             ${{ runner.temp }}/browser-worker/receipt.json
             ${{ runner.temp }}/browser-worker/checks.json
             ${{ runner.temp }}/browser-worker/incomplete.json
+            ${{ runner.temp }}/browser-worker/worker-profile/launch-failure.json
             ${{ runner.temp }}/browser-worker/worker-page.jpg
             ${{ runner.temp }}/browser-viewer/receipt.json
             ${{ runner.temp }}/browser-viewer/dashboard-content-manifest.json

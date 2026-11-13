@@ -56,7 +56,7 @@ async def refused(
     raise AssertionError("Expected one fixture refusal without retry")
 
 
-async def accept(chrome: Path, output: Path, *, headful: bool) -> None:
+async def accept(chrome: Path, output: Path, *, headful: bool, chrome_args: list[str]) -> None:
     from ai_dev_browser.remote.worker import Worker, application  # noqa: PLC0415
 
     source = Path(__file__).resolve().parents[1]
@@ -93,6 +93,7 @@ async def accept(chrome: Path, output: Path, *, headful: bool) -> None:
         ai_token,
         chrome_path=str(chrome),
         display_mode="native",
+        chrome_args=chrome_args,
     )
     worker_runner, worker_origin = await serve(application(worker))
     binding = WorkerBinding("fixture-org", "fixture-owner", "fixture-native-session")
@@ -259,6 +260,7 @@ async def accept(chrome: Path, output: Path, *, headful: bool) -> None:
         "checks": checks,
         "sdkVersion": version("ai-dev-browser"),
         "headful": headful,
+        "chromeArgs": chrome_args,
         "inputSha256": hashes,
         "scope": __doc__,
         "production": False,
@@ -271,10 +273,13 @@ def main() -> None:
     parser.add_argument("--chrome", type=Path, required=True)
     parser.add_argument("--output", type=Path, required=True)
     parser.add_argument("--headful", action="store_true")
+    parser.add_argument("--chrome-arg", action="append", default=[])
     args = parser.parse_args()
     args.output.mkdir(parents=True, exist_ok=False)
     try:
-        asyncio.run(accept(args.chrome, args.output, headful=args.headful))
+        asyncio.run(
+            accept(args.chrome, args.output, headful=args.headful, chrome_args=args.chrome_arg)
+        )
     except BaseException as error:
         (args.output / "incomplete.json").write_text(
             json.dumps({"passed": False, "errorType": type(error).__name__, "error": str(error)}),
