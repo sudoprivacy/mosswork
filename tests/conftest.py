@@ -44,6 +44,35 @@ def repo_root() -> Path:
     return _REPO_ROOT
 
 
+@pytest.fixture
+def full_skillhub_snapshot() -> None:
+    """Opt in to the complete optional market catalog for catalog acceptance."""
+
+
+@pytest.fixture(scope="session")
+def _empty_skillhub_snapshot(tmp_path_factory: pytest.TempPathFactory) -> Path:
+    return tmp_path_factory.mktemp("empty-skillhub-snapshot")
+
+
+@pytest.fixture(autouse=True)
+def _isolate_optional_market_catalog(
+    request: pytest.FixtureRequest,
+    monkeypatch: pytest.MonkeyPatch,
+    _empty_skillhub_snapshot: Path,
+) -> None:
+    """Keep unrelated server tests independent of the optional bundled dataset.
+
+    Full catalog parsing and server seeding opt in via full_skillhub_snapshot.
+    The normal production seeder still runs, using its supported absent-snapshot
+    path. Each server retains its own database and object directory.
+    """
+    if "full_skillhub_snapshot" in request.fixturenames:
+        return
+    from octop.infra.market import skillhub_defaults
+
+    monkeypatch.setattr(skillhub_defaults, "SNAPSHOT_ROOT", _empty_skillhub_snapshot)
+
+
 # Creating an agent now starts a multi-hour asyncio.sleep (proactive care
 # defaults to on). pytest-asyncio waits for leftover tasks before fixture
 # teardown, so any test that boots MossworkServer without going through

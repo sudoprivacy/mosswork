@@ -2,7 +2,11 @@ from __future__ import annotations
 
 from collections import Counter
 
+import pytest
+
 from octop.infra.market.skillhub_defaults import build_skillhub_releases
+
+pytestmark = pytest.mark.usefixtures("full_skillhub_snapshot")
 
 
 def test_skillhub_snapshot_contains_only_valid_offline_releases() -> None:

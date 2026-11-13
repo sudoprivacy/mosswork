@@ -33,7 +33,11 @@ def rewrite(payload, *, version=None, updates=None, files=None):
     buffer = io.BytesIO()
     with zipfile.ZipFile(buffer, "w") as archive:
         for name, data in content.items():
-            archive.writestr(name, data)
+            entry = zipfile.ZipInfo(name)
+            # Keep deliberately invalid archive names intact on Windows.
+            entry.filename = name
+            entry.orig_filename = name
+            archive.writestr(entry, data)
     return buffer.getvalue()
 
 
@@ -286,7 +290,7 @@ def test_concurrent_review_creates_one_release_and_audit(market_env):
     assert len(services.audit_repo.query(action="market.published")) == 1
 
 
-def test_existing_v30_database_gets_market_schema_idempotently(market_env):
+def test_existing_database_gets_market_schema_idempotently(market_env):
     services, _ = market_env
     with services.db.transaction() as conn:
         conn.execute("DROP TABLE market_versions")
@@ -295,7 +299,7 @@ def test_existing_v30_database_gets_market_schema_idempotently(market_env):
     run_migrations(services.db)
     run_migrations(services.db)
     with services.db.connect() as conn:
-        assert conn.execute("SELECT version FROM _schema_version").fetchone()[0] == 30
+        assert conn.execute("SELECT version FROM _schema_version").fetchone()[0] == 31
         assert conn.execute("SELECT COUNT(*) FROM market_resources").fetchone()[0] == 0
     assert "resource_market" not in BASELINE_PERMISSIONS
 
