@@ -87,13 +87,13 @@ it("lets a consumer without publishing access inspect and install a fixed releas
   await userEvent.click(
     screen.getByRole("button", { name: "localSkillMarket.install" }),
   );
-  await waitFor(() =>
+  await waitFor(() => {
     expect(localSkillMarketApi.install).toHaveBeenCalledWith(
       "v1",
       "My offline skills",
-    ),
-  );
-  expect(onInstalled).toHaveBeenCalledWith("package-v1");
+    );
+    expect(onInstalled).toHaveBeenCalledWith("package-v1");
+  });
 });
 
 it("installs the explicitly selected historical version", async () => {
@@ -146,7 +146,9 @@ it("reports catalog failures and supports refresh", async () => {
   );
   show();
   expect(await screen.findByText("Unavailable")).toBeInTheDocument();
-  await userEvent.click(screen.getByRole("button", { name: "common.refresh" }));
+  await userEvent.click(
+    await screen.findByRole("button", { name: "common.refresh" }),
+  );
   expect(await screen.findByText("Offline inspection")).toBeInTheDocument();
 });
 
