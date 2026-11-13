@@ -68,9 +68,6 @@ async def test_built_desktop_chat_reconnect_and_cancel(
     assert (assets / "index.html").is_file(), "Build the dashboard before this acceptance"
     started = await client.post(f"/api/agents/{agent_id}/start", headers=auth)
     assert started.status_code == 204, started.text
-    created = await client.post(f"/api/agents/{agent_id}/threads", headers=auth, json={})
-    assert created.is_success, created.text
-    thread_id = created.json()["thread_id"]
     user_id = server.user_manager.get("admin").id
     credential = "mosswork-device.browser-acceptance"
     now = int(time.time())
@@ -86,9 +83,18 @@ async def test_built_desktop_chat_reconnect_and_cancel(
         2,
         now,
     )
+    created = await client.post(
+        "/api/company-runtime/threads",
+        headers={"X-Mosswork-Device-Credential": credential},
+        json={"agent_id": agent_id, "execution_mode": "local"},
+    )
+    assert created.is_success, created.text
+    assert created.json()["execution_mode"] == "local"
+    thread_id = created.json()["thread_id"]
     company = CompanyClient(company_origin, credential)
     events = []
     runtime = native_runtime(company, tmp_path, events)
+    project_binding = {"project_id": "browser-fixture-project", "binding_revision": 1}
     phase = {"mode": "complete"}
     generating, release_generation, syncing, release_sync = (asyncio.Event() for _ in range(4))
 
@@ -221,7 +227,13 @@ async def test_built_desktop_chat_reconnect_and_cancel(
             if method == "status":
                 return runtime.status()
             if method == "start":
-                return await runtime.start(params)
+                # The native port owns the already-authorized fixture workspace.
+                assert (
+                    params.get("project_id", project_binding["project_id"])
+                    == project_binding["project_id"]
+                )
+                assert params.get("binding_revision", 1) == 1
+                return await runtime.start({**project_binding, **params})
             if method == "cancel":
                 return await runtime.cancel(params)
             if method == "hitl_resume":
@@ -272,7 +284,7 @@ async def test_built_desktop_chat_reconnect_and_cancel(
             async with asyncio.timeout(20):
                 while runtime.work:
                     await asyncio.sleep(0.02)
-            target = runtime.workspace / thread_id / "report.txt"
+            target = runtime.workspace / project_binding["project_id"] / "report.txt"
             assert target.read_text() == "browser report 42"
             first_task = runtime.tasks[thread_id]["task_id"]
             phase["mode"] = "reload"

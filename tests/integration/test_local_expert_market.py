@@ -4,12 +4,14 @@ from __future__ import annotations
 
 import asyncio
 import json
+import zipfile
 from unittest.mock import patch
 
 import pytest
 
 from octop.infra.agents.experts.catalog import WORKSPACE_MANIFEST_PATH
 from octop.infra.market.service import ResourceMarket, example_package
+from octop.infra.market.skillhub_defaults import SNAPSHOT_ROOT
 from octop.infra.users.identity import User
 from tests.support.auth import create_user
 from tests.unit.market.test_resource_market import release, rewrite
@@ -97,8 +99,27 @@ async def test_published_expert_is_visible_and_installs_exact_dependencies(env):
     assert server.services.resource_market_repo.installation(agent_id) is None
 
 
-async def test_skillhub_snapshot_expert_is_local_and_serves_its_icon(env):
+async def test_skillhub_snapshot_expert_is_local_and_serves_its_icon(env, full_skillhub_snapshot):
     client, _server, auth = env
+    index = json.loads((SNAPSHOT_ROOT / "index.json").read_text(encoding="utf-8"))
+    expected = {}
+    for kind, records in (("skill", index["skills"]), ("expert", index["skillsets"])):
+        for record in records:
+            if record.get("status") == "downloaded":
+                # The existing seeder preserves the first resource for a slug.
+                expected.setdefault(
+                    record["local_slug"], f"skillhub-{kind}-{record['source_slug']}"
+                )
+    with _server.services.db.connect() as conn:
+        resources = {
+            row["slug"]: row["resource_id"]
+            for row in conn.execute("SELECT slug,resource_id FROM market_resources")
+        }
+        versions = {
+            row["resource_id"] for row in conn.execute("SELECT resource_id FROM market_versions")
+        }
+    assert resources == expected
+    assert versions == set(expected.values())
     response = await client.get("/api/experts/market", headers=auth)
     assert response.status_code == 200, response.text
     item = next(
@@ -107,9 +128,16 @@ async def test_skillhub_snapshot_expert_is_local_and_serves_its_icon(env):
         if item["resource_id"] == "skillhub-expert-tech-test-automation"
     )
     assert item["icon_url"]
-    icon = await client.get(item["icon_url"], headers=auth)
+    assert item["icon_url"] == f"/experts/market/{item['version_id']}/icon"
+    icon = await client.get("/api" + item["icon_url"], headers=auth)
     assert icon.status_code == 200, icon.text
     assert icon.content
+    record = next(
+        item for item in index["skillsets"] if item["source_slug"] == "tech-test-automation"
+    )
+    with zipfile.ZipFile(SNAPSHOT_ROOT / record["archive"]) as archive:
+        manifest = json.loads(archive.read("market.json"))
+        assert icon.content == archive.read(manifest["icon_path"])
 
 
 async def test_install_rejects_missing_skills_corruption_and_mutating_composer(env):
@@ -127,6 +155,8 @@ async def test_install_rejects_missing_skills_corruption_and_mutating_composer(e
     response = await client.post(route, headers=auth, json={"name": "missing skill"})
     assert response.status_code == 409, response.text
     market.listing(skill["resource_id"], True)
+    # Deliberately corrupt this private fixture, including Windows read-only files.
+    (market.objects / version["object_sha256"]).chmod(0o600)
     (market.objects / version["object_sha256"]).unlink()
     (market.objects / version["object_sha256"]).write_bytes(b"changed content")
     response = await client.post(route, headers=auth, json={"name": "corrupt"})
