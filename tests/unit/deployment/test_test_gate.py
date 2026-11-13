@@ -333,7 +333,7 @@ def test_fresh_make_and_real_commit_share_history_without_losing_live_or_policy_
     hook, observed = invoke(
         "git", "-c", "core.hooksPath=.githooks", "commit", "--allow-empty", "-qm", "checked"
     )
-    assert hook["mode"] == "affected" and observed == ["live"]
+    assert hook["mode"] == "affected" and observed == ["live"], hook["reason"]
     assert hook["graph"] == graph and hook["scope"] == "including-live"
     assert not (root / ".testmondata").exists()
     unchanged, observed = invoke(
@@ -700,3 +700,54 @@ def test_reuse_measurement_refuses_before_an_unplanned_full_run(
     assert refused.returncode != 0 and not plan and calls == []
     assert "No tests ran" in refused.stderr and "make all" in refused.stderr
     assert not (root / ".git/mosswork-test-gate/incomplete.json").exists()
+
+
+@pytest.mark.parametrize("repetitions", [1, 2, 3])
+def test_posix_git_launch_preserves_other_path_entries(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, repetitions: int
+) -> None:
+    from tools import test_gate
+
+    git_exec = str(tmp_path / "git-exec")
+    Path(git_exec).mkdir()
+    original = [git_exec] * repetitions + ["/custom/tools", git_exec, "/usr/bin", "/custom/tools"]
+    monkeypatch.setattr(test_gate.sys, "platform", "linux")
+    monkeypatch.setenv("GIT_EXEC_PATH", git_exec)
+    monkeypatch.setenv("PATH", os.pathsep.join(original))
+    monkeypatch.setenv("GIT_CONFIG_PARAMETERS", "'core.hooksPath=.githooks' 'fixture.policy=keep'")
+    test_gate.normalize_launch_environment()
+    assert os.environ["PATH"].split(os.pathsep) == [
+        git_exec,
+        "/custom/tools",
+        git_exec,
+        "/usr/bin",
+        "/custom/tools",
+    ]
+    assert os.environ["GIT_CONFIG_PARAMETERS"] == "'core.hooksPath=.githooks' 'fixture.policy=keep'"
+
+
+@pytest.mark.parametrize("runtime", ["mingw64", "ucrt64"])
+def test_windows_git_launch_uses_the_actual_runtime_directory(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, runtime: str
+) -> None:
+    from tools import test_gate
+
+    root = tmp_path / "installed Git"
+    directories = [
+        root / runtime / "libexec/git-core",
+        root / runtime / "bin",
+        root / "usr/bin",
+        root / "bin",
+    ]
+    for directory in directories:
+        directory.mkdir(parents=True, exist_ok=True)
+    (root / "bin/git.exe").touch()
+    monkeypatch.setattr(test_gate.sys, "platform", "win32")
+    monkeypatch.setenv("GIT_EXEC_PATH", str(directories[0]))
+    monkeypatch.setenv(
+        "PATH", os.pathsep.join(str(p) for p in [*directories, *directories, root / "custom"])
+    )
+    test_gate.normalize_launch_environment()
+    assert os.environ["PATH"].split(os.pathsep) == [
+        os.path.normcase(os.path.normpath(str(p))) for p in [*directories, root / "custom"]
+    ]
