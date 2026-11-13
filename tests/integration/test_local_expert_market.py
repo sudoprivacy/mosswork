@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import asyncio
 import json
+import zipfile
 from unittest.mock import patch
 
 import pytest
@@ -127,9 +128,16 @@ async def test_skillhub_snapshot_expert_is_local_and_serves_its_icon(env, full_s
         if item["resource_id"] == "skillhub-expert-tech-test-automation"
     )
     assert item["icon_url"]
-    icon = await client.get(item["icon_url"], headers=auth)
+    assert item["icon_url"] == f"/experts/market/{item['version_id']}/icon"
+    icon = await client.get("/api" + item["icon_url"], headers=auth)
     assert icon.status_code == 200, icon.text
     assert icon.content
+    record = next(
+        item for item in index["skillsets"] if item["source_slug"] == "tech-test-automation"
+    )
+    with zipfile.ZipFile(SNAPSHOT_ROOT / record["archive"]) as archive:
+        manifest = json.loads(archive.read("market.json"))
+        assert icon.content == archive.read(manifest["icon_path"])
 
 
 async def test_install_rejects_missing_skills_corruption_and_mutating_composer(env):

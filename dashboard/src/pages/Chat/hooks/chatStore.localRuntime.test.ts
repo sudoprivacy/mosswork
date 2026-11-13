@@ -5,6 +5,7 @@ let listener: ((event: RuntimeEvent) => void) | undefined;
 let bridge: DesktopRuntimeBridge;
 let websocket: ReturnType<typeof vi.fn>;
 beforeEach(() => {
+  store.setThreadExecutionMode("local-thread", "local");
   websocket = vi.fn();
   vi.stubGlobal("WebSocket", websocket);
   bridge = {
@@ -24,6 +25,7 @@ beforeEach(() => {
 });
 afterEach(() => {
   store.removeSession("local-thread");
+  store.setThreadExecutionMode("local-thread", "server");
   delete window.__mossworkRuntime;
   vi.unstubAllGlobals();
   vi.restoreAllMocks();
