@@ -305,6 +305,9 @@ jobs:
       CI_VALIDATOR_REGRESSIONS: ${{ needs.ci-scope.outputs.validator_regressions }}
     steps:
       - uses: actions/checkout@v4
+        with:
+          # The tool route verifies both PR inputs against this merge checkout.
+          fetch-depth: 2
       - uses: actions/setup-node@v4
         with:
           node-version: '20'
