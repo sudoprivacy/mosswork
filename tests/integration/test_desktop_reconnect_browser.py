@@ -94,6 +94,7 @@ async def test_built_desktop_chat_reconnect_and_cancel(
     company = CompanyClient(company_origin, credential)
     events = []
     runtime = native_runtime(company, tmp_path, events)
+    initial_metadata_seen, release_initial_metadata = asyncio.Event(), asyncio.Event()
     project_binding = {"project_id": "browser-fixture-project", "binding_revision": 1}
     phase = {"mode": "complete"}
     generating, release_generation, syncing, release_sync = (asyncio.Event() for _ in range(4))
@@ -192,6 +193,12 @@ async def test_built_desktop_chat_reconnect_and_cancel(
                 "Acceptance must not access production or external APIs"
             )
             if url.path.startswith("/api/"):
+                if request.method == "GET" and url.path in {
+                    f"/api/agents/{agent_id}/threads",
+                    f"/api/agents/{agent_id}/threads/{thread_id}/history",
+                }:
+                    initial_metadata_seen.set()
+                    await release_initial_metadata.wait()
                 response = await client.request(
                     request.method,
                     url.path + ("?" + url.query if url.query else ""),
@@ -276,6 +283,10 @@ async def test_built_desktop_chat_reconnect_and_cancel(
             await page.goto(f"http://testserver/chat/{agent_id}/{thread_id}")
             editor = page.locator("textarea").first
             await expect(editor).to_be_visible(timeout=30000)
+            await asyncio.wait_for(initial_metadata_seen.wait(), 30)
+            await expect(editor).to_be_disabled()
+            release_initial_metadata.set()
+            await expect(editor).to_be_enabled()
             await editor.fill("Create the browser acceptance report")
             await editor.press("Enter")
             await expect(
@@ -399,6 +410,7 @@ async def test_built_desktop_chat_reconnect_and_cancel(
                 + "\n"
             )
         finally:
+            release_initial_metadata.set()
             await page.screenshot(path=str(evidence / "final-state.png"))
             release_generation.set()
             release_sync.set()

@@ -80,8 +80,19 @@ jobs:
               subprocess.run([npx, "prettier", "--check", *formatted], cwd="dashboard", check=True)
           PY
       - name: Run dashboard regressions
+        # Keep the complete unit suite on Linux. Both platforms still build and
+        # exercise the actual browser; Windows retains source/asset path checks.
+        if: runner.os == 'Linux'
         working-directory: dashboard
         run: npm test -- --maxWorkers=2 --bail=1
+      - name: Check Windows dashboard source and asset paths
+        if: runner.os == 'Windows'
+        working-directory: dashboard
+        run: >-
+          npm test -- --maxWorkers=2 --bail=1
+          src/browserCompatibility.test.ts src/styles/bootTheme.test.ts
+          src/utils/branding.test.ts src/utils/desktopChrome.test.ts
+          src/utils/reloadOnStaleChunk.test.ts
       - name: Build the actual desktop dashboard and check TypeScript
         working-directory: dashboard
         env:

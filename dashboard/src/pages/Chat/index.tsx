@@ -1905,6 +1905,7 @@ function ChatPageInner() {
               isTeam={isTeamChat}
               disabled={
                 companyHistoryReadOnly ||
+                Boolean(activeThreadId && !historyHydrated) ||
                 !agentChatReady ||
                 noAgents ||
                 memoryMaintBlocking ||
