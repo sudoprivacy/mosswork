@@ -147,6 +147,16 @@ class ChatTurnBody(BaseModel):
         )
 
 
+class CreateThreadBody(BaseModel):
+    """Execution contract selected when a dashboard thread is created."""
+
+    execution_mode: Literal["server", "local"] = Field(
+        default="server",
+        description="Web can create server threads only; Desktop uses the company-runtime endpoint for local threads.",
+    )
+    continuation_of_thread_id: str | None = Field(default=None, min_length=1, max_length=128)
+
+
 class UserTurnWsFrame(BaseModel):
     """Inbound WebSocket frame from the dashboard."""
 

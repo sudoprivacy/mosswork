@@ -47,6 +47,8 @@ class ThreadRow:
     conversation_mode: str | None = None
     pending_plan_path: str | None = None
     hitl_policy: str | None = None
+    execution_mode: str = "server"
+    continuation_of_thread_id: str | None = None
 
     @classmethod
     def from_row(cls, r: DbRow) -> ThreadRow:
@@ -66,6 +68,14 @@ class ThreadRow:
             hitl_policy = r["hitl_policy"]
         except (KeyError, IndexError):
             hitl_policy = None
+        try:
+            execution_mode = r["execution_mode"] or "server"
+        except (KeyError, IndexError):
+            execution_mode = "server"
+        try:
+            continuation_of_thread_id = r["continuation_of_thread_id"]
+        except (KeyError, IndexError):
+            continuation_of_thread_id = None
         return cls(
             id=r["id"],
             thread_id=r["thread_id"],
@@ -84,6 +94,10 @@ class ThreadRow:
             conversation_mode=str(conversation_mode) if conversation_mode else None,
             pending_plan_path=str(pending_plan_path) if pending_plan_path else None,
             hitl_policy=str(hitl_policy) if hitl_policy else None,
+            execution_mode=str(execution_mode),
+            continuation_of_thread_id=(
+                str(continuation_of_thread_id) if continuation_of_thread_id else None
+            ),
         )
 
 
@@ -161,13 +175,17 @@ class ThreadRepo:
         session_key: str,
         title: str | None = None,
         last_active: int | None = None,
+        execution_mode: str = "server",
+        continuation_of_thread_id: str | None = None,
     ) -> None:
+        if execution_mode not in {"server", "local"}:
+            raise ValueError("execution_mode must be server or local")
         ts = now_ts()
         with self._db.transaction() as conn:
             conn.execute(
                 "INSERT INTO threads(thread_id, agent_id, user_id, channel_type, "
-                "session_key, title, last_active, created_at) "
-                "VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+                "session_key, title, last_active, created_at, execution_mode, "
+                "continuation_of_thread_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
                 (
                     thread_id,
                     agent_id,
@@ -177,6 +195,8 @@ class ThreadRepo:
                     clip_thread_title(title) if title else None,
                     ts if last_active is None else last_active,
                     ts,
+                    execution_mode,
+                    continuation_of_thread_id,
                 ),
             )
             conn.execute(
@@ -334,10 +354,13 @@ class ThreadRepo:
             conn.execute(
                 "UPDATE threads SET last_active=last_active WHERE thread_id=?", (thread_id,)
             )
-            local = conn.execute(
+            thread = conn.execute(
+                "SELECT execution_mode FROM threads WHERE thread_id=?", (thread_id,)
+            ).fetchone()
+            local_binding = conn.execute(
                 "SELECT 1 FROM company_runtime_threads WHERE thread_id=?", (thread_id,)
             ).fetchone()
-            if local:
+            if (thread and (thread["execution_mode"] or "server") == "local") or local_binding:
                 raise ValueError("company_local_thread_read_only_on_server")
             conn.execute(
                 "UPDATE threads SET last_active=? WHERE thread_id=?", (now_ts(), thread_id)

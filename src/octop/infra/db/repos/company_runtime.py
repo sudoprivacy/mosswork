@@ -30,6 +30,15 @@ class CompanyRuntimeRepo:
             ).fetchone()
         return dict(row) if row else None
 
+    def project_binding(self, thread_id: str) -> dict[str, Any] | None:
+        with self.db.connect() as conn:
+            row = conn.execute(
+                "SELECT thread_id,project_id,display_name,state,binding_revision,device_id,grant_id,grant_version "
+                "FROM thread_project_bindings WHERE thread_id=?",
+                (thread_id,),
+            ).fetchone()
+        return dict(row) if row else None
+
     def task(self, task_id: str) -> dict[str, Any] | None:
         with self.db.connect() as conn:
             row = conn.execute(
@@ -81,6 +90,10 @@ class CompanyRuntimeRepo:
         installation_hash: str,
         recovery_hash: str,
         edit: dict[str, Any] | None = None,
+        project_id: str | None = None,
+        binding_revision: int | None = None,
+        grant_id: str | None = None,
+        grant_version: int | None = None,
     ) -> dict[str, Any]:
         now = int(time.time())
         with self.db.transaction() as conn:
@@ -96,6 +109,18 @@ class CompanyRuntimeRepo:
             ).fetchone()
             if not thread or thread["user_id"] != owner or thread["agent_id"] != agent_id:
                 raise RuntimeConflict("thread_not_owned")
+            mode = str(thread["execution_mode"] or "server")
+            if mode == "server":
+                # Threads created by pre-mode clients have no dashboard session
+                # row. Keep their legacy local path working, while every new
+                # explicitly-created server thread is fail-closed.
+                has_session = conn.execute(
+                    "SELECT 1 FROM sessions WHERE thread_id=?", (thread_id,)
+                ).fetchone()
+                if has_session:
+                    raise RuntimeConflict("execution_mode_server")
+            elif mode != "local":
+                raise RuntimeConflict("execution_mode_invalid")
             existing = conn.execute(
                 "SELECT * FROM company_runtime_tasks WHERE task_id=?", (task_id,)
             ).fetchone()
@@ -122,10 +147,45 @@ class CompanyRuntimeRepo:
                 ).fetchone()
                 if thread["last_active"] or has_history:
                     raise RuntimeConflict("legacy_thread_read_only")
+                if mode == "local" and not project_id:
+                    raise RuntimeConflict("project_binding_required")
+                if project_id:
+                    revision = binding_revision or 1
+                    conn.execute(
+                        "INSERT INTO thread_project_bindings "
+                        "(thread_id,owner_user_id,agent_id,project_id,display_name,binding_revision,state,device_id,grant_id,grant_version,installation_hash,created_at,updated_at) "
+                        "VALUES(?,?,?,?,? ,?,'bound',?,?,?,?,?,?)",
+                        (
+                            thread_id,
+                            owner,
+                            agent_id,
+                            project_id,
+                            project_id,
+                            revision,
+                            device_id,
+                            grant_id,
+                            grant_version,
+                            installation_hash,
+                            now,
+                            now,
+                        ),
+                    )
                 conn.execute(
                     "INSERT INTO company_runtime_threads VALUES(?,?,?,?,?,?,?)",
                     (thread_id, owner, agent_id, device_id, thread_id, installation_hash, now),
                 )
+            elif project_id:
+                project = conn.execute(
+                    "SELECT project_id,binding_revision,device_id,grant_id,grant_version "
+                    "FROM thread_project_bindings WHERE thread_id=?",
+                    (thread_id,),
+                ).fetchone()
+                if project is None or project["project_id"] != project_id:
+                    raise RuntimeConflict("project_binding_conflict")
+                if binding_revision is not None and project["binding_revision"] != binding_revision:
+                    raise RuntimeConflict("project_revision_stale")
+                if project["device_id"] and project["device_id"] != device_id:
+                    raise RuntimeConflict("project_on_another_device")
             active = conn.execute(
                 "SELECT task_id FROM company_runtime_tasks WHERE thread_id=? AND status IN ('running','cancel_requested','unknown')",
                 (thread_id,),

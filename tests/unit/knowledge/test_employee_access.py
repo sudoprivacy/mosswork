@@ -116,5 +116,5 @@ def test_existing_v29_database_is_upgraded_without_losing_knowledge(company):
     run_migrations(pool)
     assert {row.id for row in services.knowledge_repo.list_all()} == {base.id, shared.id}
     with pool.connect() as conn:
-        assert conn.execute("SELECT version FROM _schema_version").fetchone()[0] == 30
+        assert conn.execute("SELECT version FROM _schema_version").fetchone()[0] == 31
         assert conn.execute("SELECT COUNT(*) FROM employee_knowledge_bases").fetchone()[0] == 0

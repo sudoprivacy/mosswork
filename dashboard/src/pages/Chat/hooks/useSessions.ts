@@ -6,7 +6,11 @@ import {
 } from "../../../api/modules/mossworkThreads";
 import type { HitlSessionPolicy } from "../../../api/types/hitl";
 import * as chatStore from "./chatStore";
-import { onSessionEvent } from "./chatStore";
+import {
+  onSessionEvent,
+  setThreadExecutionMode,
+  setThreadProjectBinding,
+} from "./chatStore";
 import { formatThreadTitle } from "../utils/threadTitle";
 import { parseHitlSessionPolicy } from "../utils/hitlSessionPolicy";
 
@@ -20,6 +24,16 @@ export interface Session {
   hasActivity?: boolean;
   hasMessages?: boolean;
   executionLocation?: "desktop" | "server";
+  executionMode?: "server" | "local";
+  projectBinding?: {
+    project_id: string;
+    display_name?: string;
+    state: string;
+    binding_revision: number;
+    device_id?: string | null;
+    grant_id?: string | null;
+    grant_version?: number | null;
+  } | null;
   localDeviceId?: string | null;
   localTaskStatus?: string | null;
   pinned?: boolean;
@@ -46,6 +60,8 @@ export function toSession(row: {
   is_active?: boolean;
   has_messages?: boolean;
   execution_location?: "desktop" | "server";
+  execution_mode?: "server" | "local";
+  project_binding?: Session["projectBinding"];
   local_device_id?: string | null;
   local_task_status?: string | null;
   pinned?: boolean;
@@ -70,6 +86,8 @@ export function toSession(row: {
       : typeof row.created_at === "number" && row.created_at > 0
       ? row.created_at
       : 0;
+  setThreadExecutionMode(row.thread_id, row.execution_mode);
+  setThreadProjectBinding(row.thread_id, row.project_binding);
   return {
     id: row.thread_id,
     name: formatThreadTitle(row.title) || "New Chat",
@@ -80,6 +98,8 @@ export function toSession(row: {
     hasActivity,
     hasMessages: row.has_messages,
     executionLocation: row.execution_location,
+    executionMode: row.execution_mode,
+    projectBinding: row.project_binding ?? null,
     localDeviceId: row.local_device_id,
     localTaskStatus: row.local_task_status,
     pinned: Boolean(row.pinned),

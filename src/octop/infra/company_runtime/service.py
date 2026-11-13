@@ -121,6 +121,88 @@ class CompanyRuntimeService:
                 raise denied("thread_not_owned", 403)
         return row
 
+    async def authorize_for_project(self, thread_id: str) -> Any:
+        thread = await offload(self.services.thread_repo.get, thread_id)
+        if thread is None or thread.user_id != self.owner:
+            raise denied("thread_not_owned", 403)
+        return await self.authorize(thread.agent_id, thread_id, execution=False)
+
+    async def project_binding(self, thread_id: str) -> dict[str, Any] | None:
+        await self.authorize_for_project(thread_id)
+        with self.services.db.connect() as conn:
+            row = conn.execute(
+                "SELECT thread_id,project_id,display_name,state,binding_revision,device_id,grant_id,grant_version,installation_hash "
+                "FROM thread_project_bindings WHERE thread_id=?",
+                (thread_id,),
+            ).fetchone()
+        return dict(row) if row else {"thread_id": thread_id, "state": "unbound"}
+
+    async def bind_project(self, thread_id: str, body: dict[str, Any]) -> dict[str, Any]:
+        thread = await self.authorize_for_project(thread_id)
+        if thread.execution_mode != "local":
+            raise denied("project_binding_requires_local_thread")
+        now = int(time.time())
+        with self.services.db.transaction() as conn:
+            current = conn.execute(
+                "SELECT * FROM thread_project_bindings WHERE thread_id=?", (thread_id,)
+            ).fetchone()
+            expected = body.get("expected_revision")
+            if current and expected is not None and int(current["binding_revision"]) != expected:
+                raise denied("project_revision_stale")
+            revision = int(current["binding_revision"]) + 1 if current else 1
+            values = (
+                thread_id,
+                self.owner,
+                thread.agent_id,
+                body["project_id"],
+                body["display_name"],
+                revision,
+                "bound",
+                self.identity["device_id"],
+                body.get("grant_id"),
+                body.get("grant_version"),
+                body.get("installation_hash"),
+                now,
+                now,
+            )
+            if current:
+                conn.execute(
+                    "UPDATE thread_project_bindings SET project_id=?,display_name=?,binding_revision=?,state=?,device_id=?,grant_id=?,grant_version=?,installation_hash=?,updated_at=? WHERE thread_id=?",
+                    (
+                        values[3],
+                        values[4],
+                        values[5],
+                        values[6],
+                        values[7],
+                        values[8],
+                        values[9],
+                        values[10],
+                        now,
+                        thread_id,
+                    ),
+                )
+            else:
+                conn.execute(
+                    "INSERT INTO thread_project_bindings(thread_id,owner_user_id,agent_id,project_id,display_name,binding_revision,state,device_id,grant_id,grant_version,installation_hash,created_at,updated_at) VALUES(?,?,?,?,?,?, ?,?,?,?,?,?,?)",
+                    values,
+                )
+            row = conn.execute(
+                "SELECT thread_id,project_id,display_name,state,binding_revision,device_id,grant_id,grant_version,installation_hash FROM thread_project_bindings WHERE thread_id=?",
+                (thread_id,),
+            ).fetchone()
+        return dict(row)
+
+    async def clear_project(self, thread_id: str) -> None:
+        await self.authorize_for_project(thread_id)
+        with self.services.db.transaction() as conn:
+            active = conn.execute(
+                "SELECT 1 FROM company_runtime_tasks WHERE thread_id=? AND status IN ('running','cancel_requested','unknown')",
+                (thread_id,),
+            ).fetchone()
+            if active:
+                raise denied("thread_already_running")
+            conn.execute("DELETE FROM thread_project_bindings WHERE thread_id=?", (thread_id,))
+
     async def task(self, task_id: str, *, active: bool = False) -> dict[str, Any]:
         task = await offload(self.repo.task, task_id)
         if not task:
@@ -342,6 +424,10 @@ class CompanyRuntimeService:
                 installation_hash=hashlib.sha256(body["installation_token"].encode()).hexdigest(),
                 recovery_hash=hashlib.sha256(body["recovery_token"].encode()).hexdigest(),
                 edit=edit,
+                project_id=body.get("project_id"),
+                binding_revision=body.get("binding_revision"),
+                grant_id=body.get("grant_id"),
+                grant_version=body.get("grant_version"),
             )
         except RuntimeConflict as exc:
             raise denied(str(exc)) from exc
@@ -349,7 +435,7 @@ class CompanyRuntimeService:
             "task_id": task["task_id"],
             "status": task["status"],
             "expert": json.loads(task["expert_json"]),
-            "project_name": body["thread_id"],
+            "project_name": body.get("project_id") or body["thread_id"],
         }
 
     async def event(self, task_id: str, body: dict[str, Any]) -> dict[str, Any]:
