@@ -26,6 +26,7 @@ on:
       - "packages/moss-browser/**"
       - "packages/moss-harness/**"
       - "tools/accept_browser_*.py"
+      - "tests/unit/deployment/test_browser_worker_acceptance.py"
       - "tools/accept_browser_fixture.json"
       - "tools/accept_cohost_acp.py"
       - "tools/export_public_source.py"
@@ -57,7 +58,72 @@ permissions:
   actions: read
 
 jobs:
+  native-host-regressions:
+    name: Native host regressions (${{ matrix.os }}, ${{ matrix.suite }})
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-24.04, windows-2022]
+        suite: [transport, review, pages, product, startup]
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 20
+    defaults:
+      run:
+        shell: bash
+    env:
+      PYTHONUTF8: "1"
+      PYTHONIOENCODING: utf-8
+      NODE_OPTIONS: --max-old-space-size=2048
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v6
+        with:
+          python-version: "3.12"
+          enable-cache: true
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+      - name: Install the locked workspace
+        run: uv sync --locked
+      - name: Check strict native context and product admission
+        env:
+          NATIVE_SUITE: ${{ matrix.suite }}
+        run: |
+          extra=()
+          case "$NATIVE_SUITE" in
+            transport)
+              paths=(tests/unit/native_host tests/unit/infra/native_host tests/unit/db/test_retained_cohost.py tests/unit/db/test_retained_ontology.py tests/unit/db/test_retained_model_audit.py)
+              extra+=(--ignore-glob=tests/unit/native_host/test_human_review*.py)
+              ;;
+            review)
+              paths=()
+              for path in tests/unit/native_host/test_human_review*.py; do
+                if [[ "$path" != tests/unit/native_host/test_human_review_page*.py ]]; then
+                  paths+=("$path")
+                fi
+              done
+              ;;
+            pages)
+              paths=(tests/unit/native_host/test_human_review_page*.py)
+              ;;
+            product)
+              paths=(tests/unit/agents/test_managed_execution_backend.py tests/unit/agents/test_managed_lifecycle_admission.py tests/unit/test_canonical_execution_admission.py tests/unit/test_canonical_execution_reauthentication_http.py tests/unit/test_canonical_business_product_composition.py tests/unit/test_canonical_business_supplements_consumer.py tests/unit/test_execution_gateway.py)
+              ;;
+            startup)
+              paths=(tests/unit/test_canonical_product_startup.py)
+              ;;
+            *) exit 2 ;;
+          esac
+          uv run --locked pytest "${paths[@]}" "${extra[@]}" -q --junitxml="$RUNNER_TEMP/native-host-$NATIVE_SUITE.xml"
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: native-host-${{ runner.os }}-${{ matrix.suite }}
+          path: ${{ runner.temp }}/native-host-${{ matrix.suite }}.xml
+          if-no-files-found: error
+
   browser:
+    needs: native-host-regressions
     strategy:
       fail-fast: false
       matrix:
@@ -106,10 +172,8 @@ jobs:
       - name: Check canonical account and standalone login regressions
         run: |
           npm --prefix dashboard test -- --maxWorkers=1 --reporter=default --reporter=junit --outputFile.junit="$RUNNER_TEMP/canonical-account.xml" src/api/canonicalIdentity.test.ts src/hooks/useCanonicalIdentity.test.tsx src/components/AuthGuard.canonical.test.tsx src/pages/Login/CanonicalLogin.test.tsx src/pages/Login/CanonicalMemberLogin.test.tsx src/components/AuthGuard.test.tsx src/pages/Login/Login.remember.test.tsx src/pages/Login/Login.forgotPassword.test.tsx src/api/request.authToken.test.ts src/api/request.setup.test.ts src/api/request.unauthorized.test.ts src/api/canonicalProfile.test.ts src/hooks/useCanonicalProfile.test.tsx src/pages/Login/CanonicalLogin.routes.test.tsx src/pages/Login/CanonicalProfilePanel.test.tsx src/api/canonicalOrganization.test.ts src/hooks/useCanonicalOrganization.test.tsx src/pages/Login/CanonicalOrganizationPanel.test.tsx
-      - name: Check strict ACP attachment and execution-time context
-        run: uv run --locked pytest tests/unit/native_host tests/unit/infra/native_host tests/unit/agents/test_managed_execution_backend.py tests/unit/agents/test_managed_lifecycle_admission.py tests/unit/test_canonical_execution_admission.py tests/unit/test_canonical_execution_reauthentication_http.py tests/unit/test_canonical_business_product_composition.py tests/unit/test_canonical_business_supplements_consumer.py tests/unit/test_canonical_product_startup.py tests/unit/test_execution_gateway.py tests/unit/db/test_retained_cohost.py tests/unit/db/test_retained_ontology.py tests/unit/db/test_retained_model_audit.py -q
       - name: Preserve browser regression CI in the public source export
-        run: uv run --locked pytest tests/unit/deployment/test_export_public_source.py tests/unit/deployment/test_browser_fixture_intake.py -q
+        run: uv run --locked pytest tests/unit/deployment/test_export_public_source.py tests/unit/deployment/test_browser_fixture_intake.py tests/unit/deployment/test_browser_worker_acceptance.py -q
       - name: Exercise the published browser worker through the host transport
         run: |
           chrome_args=()
@@ -142,7 +206,7 @@ jobs:
             ${{ runner.temp }}/browser-worker/receipt.json
             ${{ runner.temp }}/browser-worker/checks.json
             ${{ runner.temp }}/browser-worker/incomplete.json
-            ${{ runner.temp }}/browser-worker/worker-profile/launch-failure.json
+            ${{ runner.temp }}/browser-worker/worker-launch-diagnostic.json
             ${{ runner.temp }}/browser-worker/worker-page.jpg
             ${{ runner.temp }}/browser-viewer/receipt.json
             ${{ runner.temp }}/browser-viewer/dashboard-content-manifest.json

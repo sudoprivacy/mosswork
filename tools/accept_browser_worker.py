@@ -260,12 +260,47 @@ async def accept(chrome: Path, output: Path, *, headful: bool, chrome_args: list
         "checks": checks,
         "sdkVersion": version("ai-dev-browser"),
         "headful": headful,
-        "chromeArgs": chrome_args,
+        "chromeLaunch": launch_profile(chrome_args),
         "inputSha256": hashes,
         "scope": __doc__,
         "production": False,
     }
     (output / "receipt.json").write_text(json.dumps(receipt, indent=2), encoding="utf-8")
+
+
+def launch_profile(chrome_args: list[str]) -> dict[str, bool | int]:
+    """Keep explicit launch facts without recording private argument values."""
+    return {
+        "sandboxDisabled": "--no-sandbox" in chrome_args,
+        "additionalArgumentCount": len(chrome_args),
+    }
+
+
+def write_launch_diagnostic(output: Path) -> None:
+    """Publish bounded launch facts without private ownership IDs or raw errors."""
+    private = output / "worker-profile/launch-failure.json"
+    try:
+        value = json.loads(private.read_text(encoding="utf-8"))
+    except OSError:
+        return
+    except (ValueError, UnicodeError):
+        value = None
+    summary: dict[str, Any] = {"valid": isinstance(value, dict)}
+    if isinstance(value, dict):
+        code = value.get("error_code")
+        summary.update(
+            error_code=code
+            if isinstance(code, str)
+            and code
+            in {"not_found", "validation", "unsupported", "conflict", "transient", "timeout"}
+            else "unrecognized",
+            started=value.get("started") is True,
+            processIdentityPresent=type(value.get("pid")) is int,
+            privateLaunchIdentityPresent=bool(value.get("launch_token")),
+        )
+    (output / "worker-launch-diagnostic.json").write_text(
+        json.dumps(summary, indent=2), encoding="utf-8"
+    )
 
 
 def main() -> None:
@@ -281,6 +316,7 @@ def main() -> None:
             accept(args.chrome, args.output, headful=args.headful, chrome_args=args.chrome_arg)
         )
     except BaseException as error:
+        write_launch_diagnostic(args.output)
         (args.output / "incomplete.json").write_text(
             json.dumps({"passed": False, "errorType": type(error).__name__, "error": str(error)}),
             encoding="utf-8",

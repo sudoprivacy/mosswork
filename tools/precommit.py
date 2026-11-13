@@ -1,4 +1,4 @@
-"""Run independent documentation/tool checks, or request the legacy full gate.
+"""Run scoped documentation/tool/frontend checks, or request the application gate.
 
 Exit 3 means the caller must execute its existing application checks.
 Validation failures always exit 1 and must never select that fallback.
@@ -33,11 +33,13 @@ ROOT_DOCS = frozenset(
 )
 TOOL_FILES = (
     "tools/precommit.py",
+    "tools/frontend_gate.py",
     "tools/check_public_source.py",
     "tools/export_public_source.py",
     "tools/accept_sudograph_worker.py",
     "tools/ci_identity_reuse.py",
     "tests/unit/deployment/test_precommit.py",
+    "tests/unit/deployment/test_frontend_gate.py",
     "tests/unit/deployment/test_export_public_source.py",
     "tests/unit/deployment/test_ci_identity_reuse.py",
     "tests/unit/deployment/test_make_format_gate.py",
@@ -46,6 +48,7 @@ TOOL_FILES = (
 TOOL_SCOPE = frozenset(TOOL_FILES) | {
     ".githooks/pre-commit",
     ".github/workflows/mosswork-ci.yml",
+    ".github/workflows/mosswork-dashboard-ci.yml",
     "AGENTS.md",
     "Makefile",
 }
@@ -68,7 +71,7 @@ WINDOWS_VALIDATION_INPUTS = frozenset(
     }
 )
 WINDOWS_VALIDATION_RECIPE_SHA256 = (
-    "187fa9c597f427ff3daf44084769343d54429a786a0ae95afdec5922f086c251"
+    "3eb1d071a8a5881dae6d1c730364ff7fa343659181cf10470dfaa17ff8973192"
 )
 
 
@@ -260,14 +263,144 @@ def worktree_paths(root: Path) -> tuple[list[str], str | None, str]:
     return changed, base, "Complete branch and working-tree diff against the accepted-main ancestor"
 
 
-def worktree_inputs(root: Path) -> dict[str, str]:
-    """Use the existing gate's complete raw-source snapshot, including untracked files."""
+def worktree_helper() -> Any:
+    """Load the existing stdlib-only input and graph helpers."""
     source = Path(__file__).with_name("test_gate.py")
     spec = importlib.util.spec_from_file_location("mosswork_worktree_inputs", source)
     assert spec is not None and spec.loader is not None
     helper = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(helper)
-    return dict(helper.inputs(root))
+    return helper
+
+
+def worktree_inputs(root: Path) -> dict[str, str]:
+    """Use the existing gate's complete raw-source snapshot, including untracked files."""
+    return dict(worktree_helper().inputs(root))
+
+
+def unchanged_worker_pool_mismatch(root: Path) -> tuple[str, str, str] | None:
+    """Diagnose identical validated input before an unintended full pool change.
+
+    This only refuses duplicate work. It never selects tests or accepts a graph;
+    the original test gate still performs every reuse and execution check.
+    """
+    try:
+        requested = os.environ.get("PYTEST_JOBS", "2")
+        if not requested.isdecimal() or int(requested) < 1:
+            return None
+        makefile = root / "Makefile"
+        if makefile.is_symlink() or not re.search(
+            r"(?m)^PYTEST_JOBS \?= 2$", makefile.read_text(encoding="utf-8")
+        ):
+            return None
+        storage = Path(git(root, "rev-parse", "--absolute-git-dir").decode().strip()) / (
+            "mosswork-test-gate"
+        )
+        history = storage / "history.json"
+        if storage.is_symlink() or history.is_symlink() or (storage / "incomplete.json").exists():
+            return None
+        previous = json.loads(history.read_text(encoding="utf-8"))
+        if (
+            not isinstance(previous, dict)
+            or previous.get("schema") != 2
+            or previous.get("passed") is not True
+            or previous.get("root") != str(root.resolve())
+        ):
+            return None
+        argv = previous["argv"]
+        if not isinstance(argv, list) or argv.count("-n") != 1:
+            return None
+        recorded = argv[argv.index("-n") + 1]
+        if (
+            not isinstance(recorded, str)
+            or not recorded.isdecimal()
+            or int(recorded) < 1
+            or recorded == requested
+        ):
+            return None
+        original = Path(previous["attempt"])
+        if original.is_symlink() or original.parent.resolve() != storage.resolve():
+            return None
+        proof = json.loads(original.read_text(encoding="utf-8"))
+        if not isinstance(proof, dict):
+            return None
+        # The producer adds elapsed seconds after writing its history pointer.
+        pointer = dict(previous)
+        proof.pop("seconds", None)
+        pointer.pop("seconds", None)
+        if proof != pointer:
+            return None
+        helper = worktree_helper()
+        graph = storage / previous["graph"]
+        if graph.parent.resolve() != storage.resolve():
+            return None
+        actual_cache = helper.cache_digest(graph)
+        if (
+            actual_cache is None
+            or actual_cache != previous.get("cache_digest")
+            or helper.inputs(root) != previous.get("inputs")
+        ):
+            return None
+        environment = {key: value for key, value in os.environ.items() if key not in GIT_CONTEXT}
+        inner = """import importlib.util, json, sys
+from pathlib import Path
+spec = importlib.util.spec_from_file_location('mosswork_pool_probe', Path('tools/test_gate.py'))
+helper = importlib.util.module_from_spec(spec)
+spec.loader.exec_module(helper)
+helper.normalize_launch_environment()
+print('MOSSWORK_POOL_ENVIRONMENT: ' + json.dumps(dict(environment=helper.environment(sys.argv[1]), variables=helper.environment_variables())))
+"""
+        # Metadata must cross the same Git shell as the actual test gate. Merely
+        # normalizing PATH in a native Python process misses MSYS variables.
+        probe = (
+            "import json,os,subprocess,sys\n"
+            "from pathlib import Path\n"
+            f"code={inner!r}\n"
+            "if not Path('.githooks/test-gate').is_file(): raise SystemExit(1)\n"
+            "for name in ('GIT_AUTHOR_DATE','GIT_AUTHOR_EMAIL','GIT_AUTHOR_NAME','GIT_EDITOR'):\n"
+            "    os.environ.pop(name,None)\n"
+            "help_result=subprocess.run(['git','hook','run','-h'],capture_output=True)\n"
+            "argv=['git','-c','core.hooksPath=.githooks','hook','run']\n"
+            "if b'--allow-unknown-hook-name' in help_result.stdout+help_result.stderr:\n"
+            "    argv.append('--allow-unknown-hook-name')\n"
+            "argv+=['test-gate','--',sys.executable,'-c',code,sys.argv[1]]\n"
+            "result=subprocess.run(argv,capture_output=True,text=True,encoding='utf-8')\n"
+            "prefix='MOSSWORK_POOL_ENVIRONMENT: '\n"
+            "records=[line[len(prefix):] for line in (result.stdout+result.stderr).splitlines() "
+            "if line.startswith(prefix)]\n"
+            "if result.returncode or len(records)!=1: raise SystemExit(1)\n"
+            "print(records[0])\n"
+        )
+        result = subprocess.run(
+            ["uv", "run", "--frozen", "python", "-c", probe, recorded],
+            cwd=root,
+            env=environment,
+            capture_output=True,
+            text=True,
+            encoding="utf-8",
+            timeout=30,
+            check=False,
+        )
+        if result.returncode:
+            return None
+        current = json.loads(result.stdout)
+        if current["environment"] == previous.get("environment"):
+            return recorded, requested, str(original)
+        previous_variables = previous.get("environment_variables", {})
+        changed = sorted(
+            name
+            for name in current["variables"].keys() | previous_variables.keys()
+            if current["variables"].get(name) != previous_variables.get(name)
+        )
+        print(
+            "[pre-commit] Pool history also has a different environment: "
+            + (", ".join(changed) if changed else "Python or installed packages")
+            + "; original validation remains required.",
+            flush=True,
+        )
+    except (OSError, ValueError, KeyError, TypeError, IndexError, subprocess.SubprocessError):
+        pass  # Unproven metadata retains the original full validation route.
+    return None
 
 
 def documentation(path: str) -> bool:
@@ -275,6 +408,27 @@ def documentation(path: str) -> bool:
     return path in ROOT_DOCS or (
         p.parts[0] == "docs" and p.suffix.lower() in {".md", ".png", ".jpg", ".jpeg", ".svg"}
     )
+
+
+def frontend_only(root: Path, changed: list[str]) -> bool:
+    """Only regular authored frontend files can select the frontend gate."""
+    source = root / "tools/frontend_gate.py"
+    if not source.is_file() or source.is_symlink() or not changed:
+        return False
+    spec = importlib.util.spec_from_file_location("mosswork_frontend_paths", source)
+    assert spec is not None and spec.loader is not None
+    helper = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(helper)
+    accepts_path = getattr(helper, "frontend_path", None)
+    if not callable(accepts_path):
+        return False
+    for name in changed:
+        path = root / name
+        if not accepts_path(name) or path.is_symlink() or not path.is_file():
+            return False
+        if not path.resolve().is_relative_to(root.resolve()):
+            return False
+    return True
 
 
 def profile(root: Path, changed: list[str]) -> str:
@@ -302,6 +456,8 @@ def profile(root: Path, changed: list[str]) -> str:
         (root / path).is_file() for path in TOOL_FILES
     ):
         return "tools"
+    if frontend_only(root, changed):
+        return "frontend"
     return "full"
 
 
@@ -323,6 +479,8 @@ def assert_staged_content(root: Path, changed: list[str]) -> None:
 
 
 def commands(selected: str, changed: list[str] | None = None) -> list[list[str]]:
+    if selected == "frontend":
+        return [["uv", "run", "--frozen", "python", "tools/frontend_gate.py"]]
     if selected != "tools":
         return []
     tests = [
@@ -330,6 +488,14 @@ def commands(selected: str, changed: list[str] | None = None) -> list[list[str]]
         "tests/unit/deployment/test_export_public_source.py",
         "tests/unit/deployment/test_ci_identity_reuse.py",
     ]
+    if changed is None or set(changed) & {
+        "tools/frontend_gate.py",
+        "tools/precommit.py",
+        "tests/unit/deployment/test_frontend_gate.py",
+        ".github/workflows/mosswork-dashboard-ci.yml",
+        "Makefile",
+    }:
+        tests.append("tests/unit/deployment/test_frontend_gate.py")
     if changed is None or set(changed) & {
         "Makefile",
         "tools/precommit.py",
@@ -562,6 +728,14 @@ def main() -> int:
     else:
         changed = staged_paths(root)
     selected = profile(root, changed)
+    if selected == "frontend":
+        complete, frontend_base, frontend_reason = worktree_paths(root)
+        if frontend_base is None or not frontend_only(root, complete):
+            selected = "full"
+        else:
+            changed = complete
+            baseline, reason = frontend_base, frontend_reason
+            snapshot = worktree_inputs(root)
     if args.worktree:
         if baseline is None or not changed:
             selected = "full"
@@ -590,6 +764,16 @@ def main() -> int:
         }
         if args.worktree:
             plan["delegated_commands"] = [{"cwd": ".", "argv": ["make", "validate-application"]}]
+    if selected == "frontend":
+        plan.update(
+            baseline=baseline,
+            scope="complete-branch-and-worktree",
+            reason=reason,
+            test_selection={
+                "mode": "full-frontend",
+                "scope": "All frontend tests and build; backend tests are outside this frontend-only profile",
+            },
+        )
     if args.plan:
         print(json.dumps(plan, ensure_ascii=True))
         return 0
@@ -601,9 +785,25 @@ def main() -> int:
     try:
         if not args.worktree:
             assert_staged_content(root, changed)
+            if selected == "frontend" and paths(
+                git(root, "ls-files", "--others", "--exclude-standard", "-z")
+            ):
+                raise ValueError(
+                    "Stage every intended frontend input before committing; untracked source cannot qualify the indexed candidate"
+                )
         else:
             print("WORKTREE_VALIDATION: " + json.dumps(plan, ensure_ascii=True), flush=True)
         if selected == "full":
+            if mismatch := unchanged_worker_pool_mismatch(root):
+                recorded, requested, original = mismatch
+                raise ValueError(
+                    f"No tests ran: unchanged source and verified history at {original} "
+                    f"used {recorded} worker(s), but this command requests {requested}. "
+                    f"Keep PYTEST_JOBS={recorded} process-locally through Make and the commit "
+                    "to reuse the original checked history. If the pool change is intentional, "
+                    f"run make test-current PYTEST_JOBS={requested} to execute and record the "
+                    "required full suite with that pool, then retry. No graph was copied or accepted."
+                )
             if args.worktree:
                 print(
                     "[all] Full application validation is required: original lint, frontend formatting, "
@@ -633,6 +833,19 @@ def main() -> int:
         if changed:
             result["checks"].append({"name": "documentation and expert references", "passed": True})
         run_commands(root, commands(selected, changed), result["checks"])
+        if selected == "frontend":
+            after = worktree_inputs(root)
+
+            def authored(values):
+                return {
+                    name: value
+                    for name, value in values.items()
+                    if not name.startswith("src/octop/dashboard/")
+                }
+
+            if authored(after) != authored(snapshot):
+                raise ValueError("Authored source changed during frontend validation")
+            snapshot = after
         if args.worktree:
             if worktree_inputs(root) != snapshot:
                 raise ValueError(

@@ -9,6 +9,7 @@ import shutil
 import subprocess
 import sys
 import time
+import xml.etree.ElementTree as ET
 from pathlib import Path
 
 import pytest
@@ -94,6 +95,154 @@ def test_partial_staging_is_refused_without_modifying_index(repo: Path) -> None:
         gate.assert_staged_content(repo, gate.staged_paths(repo))
     assert gate.candidate(repo) == before
     assert git(repo, "show", ":README.md") == "# Staged"
+
+
+@pytest.fixture
+def pool_hint_repo(tmp_path):
+    from tests.unit.deployment.test_test_gate import gate_repo
+
+    def execute(root, environment, label, *args):
+        # Match the production uv interpreter selection before its Git launch.
+        program = (
+            "import json,os,sys\nfrom pathlib import Path\n"
+            f"sys.path.insert(0,{str(SOURCE)!r})\n"
+            "from tests.unit.deployment.test_test_gate import execute\n"
+            "result,_,observed=execute(Path.cwd(),dict(os.environ),sys.argv[1],*sys.argv[2:])\n"
+            "print(json.dumps(dict(returncode=result.returncode,stdout=result.stdout,"
+            "stderr=result.stderr,observed=observed)))\n"
+        )
+        child = subprocess.run(
+            ["uv", "run", "--frozen", "python", "-c", program, label, *args],
+            cwd=root,
+            env=environment,
+            capture_output=True,
+            text=True,
+            encoding="utf-8",
+            check=True,
+        )
+        actual = json.loads(child.stdout)
+        result = subprocess.CompletedProcess(
+            child.args, actual["returncode"], actual["stdout"], actual["stderr"]
+        )
+        history = root / ".git/mosswork-test-gate/history.json"
+        # Git routes hook output to stderr; use the actual completed receipt.
+        plan = json.loads(history.read_text(encoding="utf-8")) if result.returncode == 0 else {}
+        return result, plan, actual["observed"]
+
+    root, environment = gate_repo.__wrapped__(tmp_path)
+    install_dispatcher(root)
+    shutil.copyfile(SOURCE / ".githooks/test-gate", root / ".githooks/test-gate")
+    (root / ".githooks/test-gate").chmod(0o755)
+    environment.update(
+        UV_NO_SYNC="1",
+        UV_PROJECT_ENVIRONMENT=sys.prefix,
+        UV_PYTHON=sys.executable,
+        VIRTUAL_ENV=sys.prefix,
+        PYTHONDONTWRITEBYTECODE="1",
+    )
+    environment.pop("PYTEST_JOBS", None)
+    (root / "tests/test_live.py").write_text(
+        "import pytest\nfrom pathlib import Path\n\n@pytest.mark.live\ndef test_live():\n"
+        "    with Path('output/observed').open('a') as f: f.write('live\\n')\n"
+        "    raise AssertionError('live remains required')\n",
+        encoding="utf-8",
+    )
+    subprocess.run(["git", "add", "."], cwd=root, env=environment, check=True)
+    subprocess.run(
+        [
+            "git",
+            "-c",
+            "core.hooksPath=" + str(root / "empty-hooks"),
+            "commit",
+            "-qm",
+            "hint fixture",
+        ],
+        cwd=root,
+        env=environment,
+        capture_output=True,
+        check=True,
+    )
+    source = root / "src/first.py"
+    source.write_text(source.read_text() + "\n# Pending candidate\n", encoding="utf-8")
+    result, plan, observed = execute(root, environment, "actual-baseline")
+    assert result.returncode == 0 and plan.get("mode") == "full", result.stdout + result.stderr
+    assert sorted(observed) == ["first", "second"]
+    subprocess.run(["git", "add", "src/first.py"], cwd=root, env=environment, check=True)
+    return root, environment, execute
+
+
+def test_pool_mismatch_refuses_before_duplicate_tests_and_keeps_original_graph(pool_hint_repo):
+    root, environment, execute = pool_hint_repo
+    storage = root / ".git/mosswork-test-gate"
+    original = {path.name: path.read_bytes() for path in storage.iterdir() if path.is_file()}
+    marker = (root / "output/observed").read_bytes()
+    index = git(root, "ls-files", "--stage")
+    result = subprocess.run(
+        [sys.executable, "tools/precommit.py"],
+        cwd=root,
+        env=environment,
+        capture_output=True,
+        text=True,
+        encoding="utf-8",
+        timeout=30,
+    )
+    assert result.returncode == 1, result.stdout + result.stderr
+    assert "No tests ran" in result.stderr and "PYTEST_JOBS=1" in result.stderr
+    assert "make test-current PYTEST_JOBS=2" in result.stderr
+    assert (root / "output/observed").read_bytes() == marker
+    assert {
+        path.name: path.read_bytes() for path in storage.iterdir() if path.is_file()
+    } == original
+    assert git(root, "ls-files", "--stage") == index
+    receipt = json.loads((root / ".git/mosswork-precommit.json").read_text())
+    assert receipt["passed"] is False and receipt["checks"] == []
+    same, same_plan, observed = execute(root, environment, "recorded-pool-retry")
+    assert same.returncode == 0 and same_plan["mode"] == "affected" and observed == []
+    live, _, observed = execute(root, environment, "live-still-required", "--include-live")
+    assert live.returncode != 0 and observed == ["live"]
+    assert "live remains required" in live.stdout + live.stderr
+    changed, changed_plan, _ = execute(
+        root, environment, "intentional-new-pool", "--workers", "2", "--full"
+    )
+    assert changed.returncode == 0 and changed_plan["mode"] == "full"
+    # Concurrent Windows appenders can overwrite the private trace; require
+    # both original test bodies to pass in the actual worker-produced report.
+    cases = list(ET.parse(root / "output/intentional-new-pool.xml").iter("testcase"))
+    assert sorted(case.get("name") for case in cases) == ["test_first", "test_second"]
+    assert all(len(case) == 0 for case in cases)
+
+
+@pytest.mark.parametrize("kind", ["source", "environment", "incomplete", "proof", "graph"])
+def test_unproven_pool_history_retains_original_full_route(pool_hint_repo, kind):
+    root, environment, _ = pool_hint_repo
+    storage = root / ".git/mosswork-test-gate"
+    if kind == "source":
+        source = root / "src/first.py"
+        source.write_text(source.read_text() + "# Changed after validation\n", encoding="utf-8")
+        subprocess.run(["git", "add", "src/first.py"], cwd=root, env=environment, check=True)
+    elif kind == "environment":
+        environment["MOSSWORK_REAL_TEST_INPUT"] = "changed"
+    elif kind == "incomplete":
+        (storage / "incomplete.json").write_text("{}", encoding="utf-8")
+    elif kind == "proof":
+        previous = json.loads((storage / "history.json").read_text())
+        Path(previous["attempt"]).write_text("{}", encoding="utf-8")
+    else:
+        previous = json.loads((storage / "history.json").read_text())
+        (storage / previous["graph"]).write_bytes(b"broken private negative fixture")
+    marker = (root / "output/observed").read_bytes()
+    result = subprocess.run(
+        [sys.executable, "tools/precommit.py"],
+        cwd=root,
+        env=environment,
+        capture_output=True,
+        text=True,
+        encoding="utf-8",
+        timeout=30,
+    )
+    assert result.returncode == gate.FULL_CHECKS, result.stdout + result.stderr
+    assert "Application gate: make precommit" in result.stdout
+    assert (root / "output/observed").read_bytes() == marker
 
 
 def install_dispatcher(root: Path) -> None:
