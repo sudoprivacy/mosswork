@@ -122,7 +122,8 @@ jobs:
     strategy:
       fail-fast: true
       matrix:
-        os: [ubuntu-24.04, windows-2022, macos-15]
+        # ACP macOS coverage uses the standard Intel pool. ARM64 is outside this CI leg.
+        os: [ubuntu-24.04, windows-2022, macos-15-intel]
     runs-on: ${{ matrix.os }}
     timeout-minutes: 20
     steps:
@@ -338,7 +339,7 @@ jobs:
           bash -n tools/publish-release-to-cos.sh
           sh -n .githooks/test-gate
           shellcheck scripts/install-moss-server.sh tools/publish-release-to-cos.sh docker/deploy/*.sh docker/enterprise/{prepare.sh,deploy.sh,start.sh,stop.sh}
-          go run github.com/rhysd/actionlint/cmd/actionlint@v1.7.7 .github/workflows/mosswork-ci.yml .github/workflows/mosswork-release.yml .github/workflows/mosswork-cos-publish.yml .github/workflows/mosswork-desktop-update.yml
+          go run github.com/rhysd/actionlint/cmd/actionlint@v1.7.12 .github/workflows/mosswork-ci.yml .github/workflows/mosswork-release.yml .github/workflows/mosswork-cos-publish.yml .github/workflows/mosswork-desktop-update.yml
       - name: Validate public source export
         if: needs.ci-scope.outputs.windows_validation != 'true'
         run: |

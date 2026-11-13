@@ -14,7 +14,11 @@ SOURCE = Path(__file__).resolve().parents[3]
 
 
 def git(root, *args):
-    return subprocess.check_output(["git", *args], cwd=root).decode().strip()
+    return (
+        subprocess.check_output(["git", "-c", "core.hooksPath=.git/fixture-hooks", *args], cwd=root)
+        .decode()
+        .strip()
+    )
 
 
 @pytest.fixture
@@ -203,6 +207,19 @@ def trace(root):
     return (root / ".git/command-trace").read_text(encoding="utf-8").splitlines()
 
 
+def test_private_git_fixture_overrides_the_outer_commit_hook(repository, monkeypatch):
+    private_hook = repository / ".git/fixture-hooks/pre-commit"
+    private_hook.parent.mkdir()
+    private_hook.write_text("#!/bin/sh\nprintf called > .git/fixture-called\n", encoding="utf-8")
+    private_hook.chmod(0o755)
+    outer_hook = repository / ".githooks/pre-commit"
+    outer_hook.write_text("#!/bin/sh\nexit 91\n", encoding="utf-8")
+    outer_hook.chmod(0o755)
+    monkeypatch.setenv("GIT_CONFIG_PARAMETERS", "'core.hooksPath'='.githooks'")
+    git(repository, "commit", "--allow-empty", "-qm", "private fixture hook")
+    assert (repository / ".git/fixture-called").read_text(encoding="utf-8") == "called"
+
+
 def test_actual_npm_build_output_and_same_source_reuse(npm_repository):
     root = npm_repository
     first = frontend(root)
@@ -271,6 +288,8 @@ def test_actual_make_then_git_hook_reuses_one_frontend_result(npm_repository):
     hook.write_text("#!/bin/sh\nexec " + python + " tools/frontend_gate.py\n", encoding="utf-8")
     hook.chmod(0o755)
     environment = dict(os.environ, PYTHONDONTWRITEBYTECODE="1")
+    # Route both launches identically, overriding only the outer Git hook route.
+    environment["GIT_CONFIG_PARAMETERS"] = "'core.hooksPath'='.git/fixture-hooks'"
     environment["PATH"] = str(make.parent) + os.pathsep + environment["PATH"]
     first = subprocess.run(
         [str(make), "all"],
