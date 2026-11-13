@@ -62,6 +62,9 @@ RELEASE_ONLY_INPUTS = ROOT_DOCS | {
 }
 WINDOWS_VALIDATION_INPUTS = frozenset(
     {
+        "tools/precommit.py",
+        "tools/frontend_gate.py",
+        "tests/unit/deployment/test_frontend_gate.py",
         "tools/check_public_source.py",
         "tools/export_public_source.py",
         "tests/unit/deployment/test_precommit.py",
@@ -71,7 +74,7 @@ WINDOWS_VALIDATION_INPUTS = frozenset(
     }
 )
 WINDOWS_VALIDATION_RECIPE_SHA256 = (
-    "3eb1d071a8a5881dae6d1c730364ff7fa343659181cf10470dfaa17ff8973192"
+    "919add92dfc04faa9f64d80dbf3c7947c81e1f7848a4eaaf0b7a4bd58cc51df8"
 )
 
 
@@ -213,7 +216,7 @@ def ci_plan(root: Path, base: str, head: str) -> CiPlan:
     plan["runtime_matrix"] = False
     plan["windows_validation"] = needs_windows
     plan["reason"] = (
-        "Independent validation tools; Linux release and Windows tool checks remain required"
+        "Independent validation tools; run existing Linux and Windows validators and complete-source exports"
         if plan["windows_validation"]
         else "Validation-only inputs; release checks remain required"
     )

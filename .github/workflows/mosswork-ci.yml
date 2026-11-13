@@ -312,6 +312,7 @@ jobs:
         with:
           python-version: '3.12'
           enable-cache: true
+      # Both platform tool jobs run the same validators and complete-source checks.
       - name: Check independent validation tools and the complete current source
         if: needs.ci-scope.outputs.windows_validation == 'true'
         env:

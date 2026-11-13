@@ -507,7 +507,9 @@ def seed_windows_validation_workflow(repo: Path) -> None:
         ("packages/moss-harness/src/moss_harness/config.py", True),
         ("pyproject.toml", True),
         ("uv.lock", True),
-        ("tools/precommit.py", True),
+        ("tools/precommit.py", False),
+        ("tools/frontend_gate.py", False),
+        ("tests/unit/deployment/test_frontend_gate.py", False),
         (".github/workflows/mosswork-ci.yml", True),
         (".github/workflows/mosswork-identity-ci.yml", True),
         ("tests/conftest.py", True),
@@ -640,6 +642,7 @@ def test_committed_validation_tools_keep_windows_checks_without_runtime_jobs(
         "planner-changed",
         "linux-command",
         "linux-selection",
+        "linux-tool-selection",
     ],
 )
 def test_windows_tool_scope_keeps_runtime_jobs_for_unqualified_workflow(
@@ -659,6 +662,10 @@ def test_windows_tool_scope_keeps_runtime_jobs_for_unqualified_workflow(
                 "      - name: Check independent validation tools and the complete current source",
                 "      - name: Removed independent tool check",
             ),
+            "linux-tool-selection": (
+                "        if: needs.ci-scope.outputs.windows_validation == 'true'\n",
+                "        if: false\n",
+            ),
             "linux-selection": (
                 "  release-checks:\n    needs: ci-scope",
                 "  release-checks:\n    needs: other-selector",
@@ -676,7 +683,7 @@ def test_windows_tool_scope_keeps_runtime_jobs_for_unqualified_workflow(
     assert "recipe" in plan["reason"]
 
 
-@pytest.mark.parametrize("operation", ["delete", "rename", "runtime", "dispatcher", "worker"])
+@pytest.mark.parametrize("operation", ["delete", "rename", "runtime", "execution-helper", "worker"])
 def test_windows_tool_scope_refuses_missing_or_mixed_runtime_inputs(
     repo: Path, operation: str
 ) -> None:
@@ -692,7 +699,7 @@ def test_windows_tool_scope_refuses_missing_or_mixed_runtime_inputs(
         stage(repo, path, "# Changed tool\n")
         extra = {
             "runtime": "src/octop/config.py",
-            "dispatcher": "tools/precommit.py",
+            "execution-helper": "tools/test_gate.py",
             "worker": "tools/accept_sudograph_worker.py",
         }[operation]
         stage(repo, extra)
