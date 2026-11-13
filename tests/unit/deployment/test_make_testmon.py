@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 import os
 import shlex
 import shutil
@@ -13,6 +14,62 @@ from pathlib import Path
 import pytest
 
 SOURCE = Path(__file__).resolve().parents[3]
+
+
+def test_make_and_commit_share_the_default_windows_git_shell_context(tmp_path: Path) -> None:
+    make = shutil.which("make") or shutil.which("mingw32-make")
+    if make is None and os.name == "nt":
+        pytest.skip("GNU Make is required; the Windows publication route supplies it")
+    assert make is not None
+    root = tmp_path / "real default shell context"
+    for folder in ("output", ".githooks", "empty-hooks"):
+        (root / folder).mkdir(parents=True, exist_ok=True)
+    shutil.copyfile(SOURCE / "Makefile", root / "Makefile")
+    (root / ".gitignore").write_text("output/\n", encoding="utf-8")
+    (root / "capture.py").write_text(
+        "import json, os, sys\nfrom pathlib import Path\n"
+        "Path('output/'+sys.argv[1]+'.json').write_text(json.dumps(os.environ.get('EXEPATH')))\n",
+        encoding="utf-8",
+    )
+    interpreter = shlex.quote(Path(sys.executable).as_posix())
+    (root / "context.mk").write_text(
+        "capture:\n\t@if [ -f capture.py ]; then "
+        + interpreter
+        + ' capture.py "$(CONTEXT_LABEL)"; fi\n'
+        + "context-all:\n\t@if true; then $(MAKE) -f Makefile -f context.mk capture CONTEXT_LABEL=outside; fi\n"
+        + "context-commit:\n\t$(MAKE) -f Makefile -f context.mk capture CONTEXT_LABEL=inside\n",
+        encoding="utf-8",
+    )
+    (root / ".githooks/pre-commit").write_text(
+        "#!/bin/sh\nexec "
+        + shlex.join([make, "-f", "Makefile", "-f", "context.mk", "context-commit"])
+        + "\n",
+        encoding="utf-8",
+    )
+    (root / ".githooks/pre-commit").chmod(0o755)
+    environment = {
+        key: value
+        for key, value in os.environ.items()
+        if not key.startswith("GIT_")
+        and key not in {"EXEPATH", "MAKEFLAGS", "MFLAGS", "PYTEST_CURRENT_TEST"}
+    }
+    for argv in (
+        ["git", "init", "-q"],
+        ["git", "config", "user.name", "Shell Context Test"],
+        ["git", "config", "user.email", "test@example.com"],
+        ["git", "config", "core.hooksPath", str(root / "empty-hooks")],
+        ["git", "add", "."],
+        ["git", "commit", "-qm", "fixture"],
+        [make, "-f", "Makefile", "-f", "context.mk", "context-all"],
+        ["git", "-c", "core.hooksPath=.githooks", "commit", "--allow-empty", "-qm", "actual hook"],
+    ):
+        result = subprocess.run(argv, cwd=root, env=environment, capture_output=True, check=False)
+        assert result.returncode == 0, (argv, result.stdout, result.stderr)
+    outside = json.loads((root / "output/outside.json").read_text())
+    inside = json.loads((root / "output/inside.json").read_text())
+    assert outside == inside
+    if os.name == "nt":
+        assert outside and (Path(outside) / "git.exe").is_file()
 
 
 def test_full_make_records_real_baseline_and_preserves_failure(tmp_path: Path) -> None:

@@ -14,6 +14,17 @@
 SHELL := /bin/bash
 .DEFAULT_GOAL := help
 
+# Git's Windows shell launchers can otherwise supply different default contexts.
+# Preserve explicit caller values; fill only the missing installed-Git default.
+ifeq ($(OS),Windows_NT)
+ifeq ($(strip $(EXEPATH)),)
+MOSSWORK_GIT_SHELL_BIN := $(shell git_bin="$$(git --exec-path)/../../../bin"; if [ -f "$$git_bin/git.exe" ]; then cygpath -aw "$$git_bin"; fi)
+ifneq ($(MOSSWORK_GIT_SHELL_BIN),)
+export EXEPATH := $(MOSSWORK_GIT_SHELL_BIN)
+endif
+endif
+endif
+
 REPO_ROOT     := $(shell pwd)
 DASHBOARD_DIR := $(REPO_ROOT)/dashboard
 DASHBOARD_DEST := $(REPO_ROOT)/src/octop/dashboard
