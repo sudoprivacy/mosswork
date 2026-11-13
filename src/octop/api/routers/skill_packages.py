@@ -196,6 +196,7 @@ def _package_payload_with_creator(
     return {
         **_package_payload(store, row, locale=locale),
         **_creator_fields(server, row.created_by),
+        "market_source": store.market_source(row.id),
     }
 
 

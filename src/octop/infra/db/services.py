@@ -26,6 +26,7 @@ from octop.infra.db.repos.proactive_care_config import ProactiveCareConfigRepo
 from octop.infra.db.repos.providers import ProviderRepo
 from octop.infra.db.repos.published_experts import PublishedExpertRepo
 from octop.infra.db.repos.resource_manifests import ResourceManifestRepo
+from octop.infra.db.repos.resource_market import ResourceMarketRepo
 from octop.infra.db.repos.secrets import SecretRepo
 from octop.infra.db.repos.sessions import SessionRepo
 from octop.infra.db.repos.settings import SettingsRepo
@@ -49,6 +50,10 @@ class RepoBundle:
     @property
     def execution_repo(self) -> ExecutionRepo:
         return ExecutionRepo(self.db)
+
+    @property
+    def resource_market_repo(self) -> ResourceMarketRepo:
+        return ResourceMarketRepo(self.db)
 
     @property
     def resource_manifest_repo(self) -> ResourceManifestRepo:
@@ -137,6 +142,10 @@ class SharedServices:
     @property
     def execution_repo(self) -> ExecutionRepo:
         return self.repos.execution_repo
+
+    @property
+    def resource_market_repo(self) -> ResourceMarketRepo:
+        return ResourceMarketRepo(self.db)
 
     @property
     def resource_manifest_repo(self) -> ResourceManifestRepo:

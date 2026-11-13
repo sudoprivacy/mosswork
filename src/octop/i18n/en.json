@@ -515,7 +515,12 @@
     "TEAM_NOT_SHAREABLE": "Teams cannot be shared in this version.",
     "LOCAL_DOWNLOAD_UNAVAILABLE": "Saving to the host Downloads folder is only available when moss-server is opened on this computer.",
     "SKILL_PACKAGE_COPY_DENIED": "The creator of this skill package has disabled copying its skills.",
-    "SKILL_PACKAGE_LOCKED": "This skill was copied from a locked skill package and cannot be edited in the workspace."
+    "SKILL_PACKAGE_LOCKED": "This skill was copied from a locked skill package and cannot be edited in the workspace.",
+    "MARKET_PACKAGE_INVALID": "Package does not meet the development contract. Check its structure and manifest.",
+    "MARKET_CONFLICT": "Resource identity, version or review state conflicts. Refresh and try again.",
+    "MARKET_DEPENDENCY_UNAVAILABLE": "A required skill version is unpublished or unlisted. Resolve dependencies first.",
+    "MARKET_CONTENT_CORRUPT": "Package content is missing or its digest failed verification. Contact an administrator.",
+    "MARKET_INSTALL_UNSUPPORTED": "This resource requires an execution environment, configuration or capability not supported by this installer. Use a portable server package or complete its runtime integration first."
   },
   "desktop": {
     "install_log_deps": "Installing Python dependencies…",
@@ -902,5 +907,7 @@
       "search_failed": "The directory refused the user search"
     }
   },
-  "execution": {"result_unknown": "Execution was interrupted and its result needs reconciliation. Do not resubmit the same action."}
+  "execution": {
+    "result_unknown": "Execution was interrupted and its result needs reconciliation. Do not resubmit the same action."
+  }
 }

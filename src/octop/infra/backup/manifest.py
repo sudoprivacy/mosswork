@@ -34,6 +34,7 @@ class BackupManifest:
     includes_knowledge: bool = False
     includes_chats: bool = True
     includes_company_runtime_skills: bool = False
+    includes_resource_market: bool = False
     external_components: list[str] = field(default_factory=list)
 
     def to_json(self) -> str:
@@ -53,6 +54,7 @@ class BackupManifest:
             "includes_knowledge": self.includes_knowledge,
             "includes_chats": self.includes_chats,
             "includes_company_runtime_skills": self.includes_company_runtime_skills,
+            "includes_resource_market": self.includes_resource_market,
             "external_components": self.external_components,
             "agents": [asdict(a) for a in self.agents],
         }
@@ -83,6 +85,7 @@ class BackupManifest:
             includes_company_runtime_skills=bool(
                 data.get("includes_company_runtime_skills", False)
             ),
+            includes_resource_market=bool(data.get("includes_resource_market", False)),
             external_components=[str(item) for item in data.get("external_components", [])],
             includes_config=bool(data.get("includes_config", True)),
             includes_env=bool(data.get("includes_env", False)),

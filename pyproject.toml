@@ -113,6 +113,7 @@ include = [
     "src/octop/**/*.png",
     "src/octop/dashboard/**/*",
     "src/octop/infra/agents/experts/library/**/*",
+    "src/octop/infra/market/skillhub_snapshot/**/*",
     "src/octop/infra/agents/plugins/bundled/**/*",
     "src/octop/infra/agents/subagents/library/**/*",
     "src/octop/infra/agents/subagents/divisions.json",

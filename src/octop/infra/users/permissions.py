@@ -49,6 +49,9 @@ def _p(
 
 
 PERMISSIONS: dict[str, PermissionDef] = {
+    "resource_market": _p(
+        "resource_market", "control", "资源市场与提交", "Resource market and submissions"
+    ),
     "messaging": _p("messaging", "control", "同事聊天", "Messaging"),
     "groups_create": _p("groups_create", "control", "创建项目群", "Create project groups"),
     "contacts": _p("contacts", "control", "通讯录", "Contacts"),

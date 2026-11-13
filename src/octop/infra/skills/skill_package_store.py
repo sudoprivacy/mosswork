@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 import logging
 import shutil
 import sqlite3
@@ -94,6 +95,14 @@ class SkillPackageStore:
 
     def package_skills_dir(self, pack_id: str) -> Path:
         return self.root / pack_id / "skills"
+
+    def market_source(self, pack_id: str) -> dict[str, Any] | None:
+        """Return the original local release receipt, retained across local edits."""
+        path = self.root / pack_id / "market-source.json"
+        if not path.is_file():
+            return None
+        value = json.loads(path.read_text(encoding="utf-8"))
+        return value if isinstance(value, dict) else None
 
     def list_skill_summaries(
         self,

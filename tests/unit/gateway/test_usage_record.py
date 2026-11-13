@@ -89,6 +89,23 @@ def test_turn_usage_skips_malformed_token_fields() -> None:
     assert out["output_tokens"] == 3
 
 
+def test_turn_usage_accepts_history_shaped_usage_field() -> None:
+    messages = [
+        {"role": "user", "content": "hi"},
+        {
+            "role": "assistant",
+            "content": "ok",
+            "usage": {"input_tokens": 41, "output_tokens": 9},
+            "response_metadata": {"model_name": "sudorouter-gpt56-sol/gpt-5.6-sol"},
+        },
+    ]
+    out = turn_usage_from_messages(messages)
+    assert out is not None
+    assert out["input_tokens"] == 41
+    assert out["output_tokens"] == 9
+    assert out["model"] == "sudorouter-gpt56-sol/gpt-5.6-sol"
+
+
 def test_extract_snapshot_sums_current_turn_not_last_call() -> None:
     chunk = {
         "type": "state_snapshot",

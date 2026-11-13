@@ -142,6 +142,10 @@ OPENAPI_TAGS: list[dict[str, str]] = [
         "description": "Host filesystem directory browsing for dashboard forms.",
     },
     {"name": "mbti", "description": "MBTI persona presets applied to agent personality."},
+    {
+        "name": "resource-market",
+        "description": "Deployment-local offline packages, immutable releases and administrator review. Publication does not upgrade Agents.",
+    },
     {"name": "experts", "description": "Bundled expert templates for creating specialized agents."},
     {
         "name": "teams",

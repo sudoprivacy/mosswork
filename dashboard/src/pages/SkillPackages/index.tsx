@@ -38,6 +38,7 @@ import {
   Trash2,
 } from "lucide-react";
 import { useTranslation } from "react-i18next";
+import { useSearchParams } from "react-router-dom";
 
 import { authApi, type MossworkUser } from "../../api/modules/auth";
 import { skillPackagesApi } from "../../api/modules/skillPackages";
@@ -68,7 +69,7 @@ import {
   SkillImportModal,
   type ZipImportSummary,
 } from "../Agent/Skills/components/SkillImportModal";
-import SkillHubTab from "../Agent/Skills/components/SkillHubTab";
+import ResourceMarketEntry from "../../components/ResourceMarketEntry";
 import skillStyles from "../Agent/Skills/index.module.less";
 import type { ParsedZipSkill } from "../Agent/Skills/components/parseSkillZip";
 import {
@@ -80,7 +81,6 @@ import { createDetailRequestGate } from "../../utils/detailRequestGate";
 import { PackageIcon } from "./PackageIcon";
 import { PackageSkillCard } from "./PackageSkillCard";
 import PackageSkillsTable from "./PackageSkillsTable";
-import { SkillsetFromHubDrawer } from "./SkillsetFromHubDrawer";
 import styles from "./index.module.less";
 
 type PackageFormValues = {
@@ -159,6 +159,8 @@ function PackageIconPicker({
 
 export default function SkillPackagesPage() {
   const { t } = useTranslation();
+  const [searchParams, setSearchParams] = useSearchParams();
+  const marketVersion = searchParams.get("marketVersion");
   const isMobile = useIsMobile();
   const { viewMode, setViewMode, showCardView } = useCardTableView("card");
   const [packages, setPackages] = useState<SkillPackage[]>([]);
@@ -173,7 +175,9 @@ export default function SkillPackagesPage() {
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [importModalOpen, setImportModalOpen] = useState(false);
   const [hubOpen, setHubOpen] = useState(false);
-  const [skillsetHubOpen, setSkillsetHubOpen] = useState(false);
+  useEffect(() => {
+    if (marketVersion) setHubOpen(true);
+  }, [marketVersion]);
   const [importing, setImporting] = useState(false);
   const [editingPackageId, setEditingPackageId] = useState<string | null>(null);
   const [editingSkill, setEditingSkill] =
@@ -620,8 +624,8 @@ export default function SkillPackagesPage() {
               icon: <Plus size={14} />,
             }}
             secondaryAction={{
-              label: t("skillPackages.fromSkillHub"),
-              onClick: () => setSkillsetHubOpen(true),
+              label: t("nav.resourceMarket"),
+              onClick: () => setHubOpen(true),
               icon: <Store size={14} />,
               type: "default",
             }}
@@ -665,11 +669,11 @@ export default function SkillPackagesPage() {
                 >
                   {t("skillPackages.createPackage")}
                 </Button>
-                <Tooltip title={t("skillPackages.fromSkillHub")}>
+                <Tooltip title={t("nav.resourceMarket")}>
                   <Button
                     icon={<Store size={15} />}
-                    aria-label={t("skillPackages.fromSkillHub")}
-                    onClick={() => setSkillsetHubOpen(true)}
+                    aria-label={t("nav.resourceMarket")}
+                    onClick={() => setHubOpen(true)}
                   />
                 </Tooltip>
               </div>
@@ -826,6 +830,13 @@ export default function SkillPackagesPage() {
                       {selected.description || t("skillPackages.noDescription")}
                     </Typography.Paragraph>
                     <div className={styles.detailMeta}>
+                      {selected.market_source ? (
+                        <Tag title={t("localSkillMarket.sourceHint")}>
+                          {t("localSkillMarket.source", {
+                            version: selected.market_source.version,
+                          })}
+                        </Tag>
+                      ) : null}
                       <CopyableResourceId
                         inline
                         label={t("skillPackages.packageId")}
@@ -901,7 +912,7 @@ export default function SkillPackagesPage() {
                               onClick={() => setHubOpen(true)}
                             >
                               <Store size={14} />
-                              {t("skills.tencentSkillHub")}
+                              {t("nav.resourceMarket")}
                             </button>
                             <button
                               type="button"
@@ -1041,27 +1052,6 @@ export default function SkillPackagesPage() {
         urlPrefixes={SKILL_URL_PREFIXES}
       />
 
-      <SkillsetFromHubDrawer
-        open={skillsetHubOpen}
-        onClose={() => setSkillsetHubOpen(false)}
-        onCreated={async (pkg) => {
-          await loadPackages({ silent: true });
-          setSelected(pkg);
-          setSelectedId(pkg.id);
-          if (isMobile) setMobilePane("detail");
-          setSkillsetHubOpen(false);
-          message.success(t("skillPackages.created"));
-          if (pkg.skipped_skills && pkg.skipped_skills.length > 0) {
-            message.warning(
-              t("skillPackages.importedWithSkipped", {
-                count: pkg.skipped_skills.length,
-                skills: pkg.skipped_skills.join(", "),
-              }),
-            );
-          }
-        }}
-      />
-
       <SkillDrawer
         open={drawerOpen}
         editingSkill={
@@ -1085,18 +1075,34 @@ export default function SkillPackagesPage() {
       />
 
       <Drawer
-        title={t("skills.tencentSkillHub")}
+        title={t("nav.resourceMarket")}
         open={hubOpen}
-        onClose={() => setHubOpen(false)}
+        onClose={() => {
+          setHubOpen(false);
+          if (marketVersion) {
+            const next = new URLSearchParams(searchParams);
+            next.delete("marketVersion");
+            setSearchParams(next, { replace: true });
+          }
+        }}
         width={860}
         destroyOnHidden
       >
-        {selected ? (
-          <SkillHubTab
-            target={{ type: "package", packageId: selected.id }}
-            onInstalled={() => void refreshSelected()}
-          />
-        ) : null}
+        <ResourceMarketEntry
+          initialVersionId={marketVersion}
+          onInstalled={(packageId) => {
+            setHubOpen(false);
+            if (marketVersion) {
+              const next = new URLSearchParams(searchParams);
+              next.delete("marketVersion");
+              setSearchParams(next, { replace: true });
+            }
+            setSelectedId(packageId);
+            void loadPackages({ silent: true });
+            void loadDetail(packageId);
+            if (isMobile) setMobilePane("detail");
+          }}
+        />
       </Drawer>
     </PageShell>
   );

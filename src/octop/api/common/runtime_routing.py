@@ -37,6 +37,7 @@ async def runtime_owner(
             "/api/providers",
             "/api/plugins",
             "/api/skill-packages",
+            "/api/market",
             "/api/experts",
             "/api/settings",
         )

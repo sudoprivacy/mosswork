@@ -55,6 +55,7 @@ def test_legacy_manifest_defaults_plugins_omitted() -> None:
     )
     assert loaded.includes_skill_packages is True
     assert loaded.includes_plugins is False
+    assert loaded.includes_resource_market is False
     assert loaded.includes_knowledge is False
     assert loaded.includes_chats is True
 
@@ -1282,3 +1283,62 @@ def test_refuse_cross_engine_restore(layout: PathLayout, tmp_path: Path) -> None
         )
     assert excinfo.value.code == ErrorCode.BACKUP_DRIVER_MISMATCH
     pool.close()
+
+
+def test_market_objects_backup_roundtrip_and_corruption(layout: PathLayout, tmp_path: Path) -> None:
+    from octop.infra.utils.immutable_files import read_object, store_object
+
+    pool = SqlitePool(layout.db)
+    run_migrations(pool)
+    digest = store_object(
+        layout.root / "resource-market/objects", b"immutable offline market package"
+    )
+    (layout.root / "resource-market/objects/.pending-test").write_bytes(b"unfinished")
+    archive = tmp_path / "market.tar.gz"
+    create_system_backup(
+        paths=layout, agent_rows=[], pool=pool, db_config=DatabaseConfig(), dest=archive
+    )
+    with tarfile.open(archive, "r:gz") as tf:
+        assert f"resource-market/objects/{digest}" in tf.getnames()
+        assert not any(".pending-" in name for name in tf.getnames())
+    target = PathLayout(tmp_path / "restored-market")
+    target.root.mkdir()
+    restored = SqlitePool(target.db)
+    run_migrations(restored)
+    try:
+        result = restore_system_backup(
+            archive, paths=target, pool=restored, db_config=DatabaseConfig()
+        )
+        assert result["resource_market_objects"] == 1
+        assert (
+            read_object(target.root / "resource-market/objects", digest)
+            == b"immutable offline market package"
+        )
+        corrupted = tmp_path / "market-corrupted.tar.gz"
+        with tarfile.open(archive, "r:gz") as src, tarfile.open(corrupted, "w:gz") as dst:
+            for member in src.getmembers():
+                stream = src.extractfile(member)
+                data = stream.read() if stream else b""
+                if member.name == f"resource-market/objects/{digest}":
+                    data = b"altered"
+                    member.size = len(data)
+                dst.addfile(member, BytesIO(data) if stream else None)
+        with restored.connect() as conn:
+            conn.execute(
+                "INSERT INTO settings(key,value) VALUES ('market-backup-sentinel','retained')"
+            )
+        with pytest.raises(MossworkError) as caught:
+            restore_system_backup(
+                corrupted, paths=target, pool=restored, db_config=DatabaseConfig()
+            )
+        assert caught.value.code == ErrorCode.MARKET_CONTENT_CORRUPT
+        with restored.connect() as conn:
+            assert (
+                conn.execute(
+                    "SELECT value FROM settings WHERE key='market-backup-sentinel'"
+                ).fetchone()[0]
+                == "retained"
+            )
+    finally:
+        restored.close()
+        pool.close()
