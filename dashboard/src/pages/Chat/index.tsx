@@ -433,7 +433,12 @@ function ChatPageInner() {
     focusToolUiTab,
     closeTab: closeDockTab,
     setActiveTab: setDockActiveTab,
-  } = useChatDockPanel(isMobile, resolvedAgentId);
+  } = useChatDockPanel(
+    isMobile,
+    resolvedAgentId,
+    activeThreadId,
+    !sharedExpertViewer,
+  );
 
   const chromeCheckInFlightRef = useRef(false);
   const bridgeConnectionId =

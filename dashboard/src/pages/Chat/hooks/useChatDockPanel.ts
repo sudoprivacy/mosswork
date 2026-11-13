@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import type { PanelMode } from "../../../components/BrowserWorkspace";
 import {
   canonicalizeDockFilePath,
@@ -109,57 +109,101 @@ function fallbackActiveId(
   return tabs[tabs.length - 1]?.id ?? null;
 }
 
+interface DockSessionState {
+  dockOpen: boolean;
+  openTabs: DockTab[];
+  activeTabId: DockTabId | null;
+}
+
+function defaultDockSessionState(
+  threadId: string | null | undefined,
+  defaultWorkspaceOpen: boolean,
+): DockSessionState {
+  // The chat page opts into an immediately visible workspace, including its
+  // pending new-chat route before navigation has created a thread.
+  if (defaultWorkspaceOpen && threadId !== undefined) {
+    return {
+      dockOpen: true,
+      openTabs: [{ id: "workspace", kind: "workspace" }],
+      activeTabId: "workspace",
+    };
+  }
+  return { dockOpen: false, openTabs: [], activeTabId: null };
+}
+
+function dockSessionKey(
+  agentId: string | null | undefined,
+  threadId: string | null | undefined,
+): string {
+  return `${agentId ?? ""}\0${threadId ?? ""}`;
+}
+
 /**
  * Shared chat dock with tabbed file list / file viewers / browser / terminal.
  */
-export function useChatDockPanel(isMobile: boolean, agentId?: string | null) {
-  const [dockOpen, setDockOpen] = useState(false);
+export function useChatDockPanel(
+  isMobile: boolean,
+  agentId?: string | null,
+  threadId?: string | null,
+  defaultWorkspaceOpen = false,
+) {
+  const sessionKey = dockSessionKey(agentId, threadId);
+  const [sessionStates, setSessionStates] = useState<
+    Record<string, DockSessionState>
+  >(() => ({
+    [sessionKey]: defaultDockSessionState(threadId, defaultWorkspaceOpen),
+  }));
   const [dockMode, setDockMode] = useState<PanelMode>(loadPanelMode);
-  const [openTabs, setOpenTabs] = useState<DockTab[]>([]);
-  const [activeTabId, setActiveTabId] = useState<DockTabId | null>(null);
   const { panelSizes, isResizing, handleResizeStart } = usePanelResize(
     loadPanelSizes(),
     persistPanelSizes,
   );
 
-  // File paths and browser sessions are agent-scoped. Only wipe tabs when
-  // switching between two real agents (ignore null ↔ id first-paint races).
-  const prevAgentIdRef = useRef(agentId);
-  useEffect(() => {
-    const prev = prevAgentIdRef.current;
-    prevAgentIdRef.current = agentId;
-    if (prev == null || agentId == null || prev === agentId) return;
-    setDockOpen(false);
-    setOpenTabs([]);
-    setActiveTabId(null);
-  }, [agentId]);
+  const currentSession =
+    sessionStates[sessionKey] ??
+    defaultDockSessionState(threadId, defaultWorkspaceOpen);
+  const { dockOpen, openTabs, activeTabId } = currentSession;
+
+  const updateSession = useCallback(
+    (updater: (state: DockSessionState) => DockSessionState) => {
+      setSessionStates((prev) => {
+        const current =
+          prev[sessionKey] ??
+          defaultDockSessionState(threadId, defaultWorkspaceOpen);
+        return { ...prev, [sessionKey]: updater(current) };
+      });
+    },
+    [defaultWorkspaceOpen, sessionKey, threadId],
+  );
 
   const openDock = useCallback(() => {
-    setDockOpen(true);
+    updateSession((state) => ({ ...state, dockOpen: true }));
     if (isMobile) {
       setDockMode("bottom");
     }
-  }, [isMobile]);
+  }, [isMobile, setDockMode, updateSession]);
 
   const handleClose = useCallback(() => {
-    setDockOpen(false);
-    // Closing the dock restores tool UIs to the message stream.
-    setOpenTabs((prev) => {
-      const next = prev.filter((t) => t.kind !== "toolUi");
-      setActiveTabId((current) => {
-        if (current == null) return null;
-        if (next.some((t) => t.id === current)) return current;
-        return next[0]?.id ?? null;
-      });
-      return next;
+    updateSession((state) => {
+      // Closing the dock restores tool UIs to the message stream.
+      const next = state.openTabs.filter((t) => t.kind !== "toolUi");
+      const activeTabId =
+        state.activeTabId == null ||
+        next.some((t) => t.id === state.activeTabId)
+          ? state.activeTabId
+          : next[0]?.id ?? null;
+      return { dockOpen: false, openTabs: next, activeTabId };
     });
-  }, []);
+  }, [updateSession]);
 
   const openFileList = useCallback(() => {
-    setOpenTabs((prev) => ensureFilesTab(prev));
-    setActiveTabId("files");
+    updateSession((state) => ({
+      ...state,
+      openTabs: ensureFilesTab(state.openTabs),
+      activeTabId: "files",
+    }));
     openDock();
-  }, [openDock]);
+  }, [openDock, updateSession]);
 
   const openFileAt = useCallback(
     (path?: string | null, fileAgentId?: string | null) => {
@@ -180,50 +224,70 @@ export function useChatDockPanel(isMobile: boolean, agentId?: string | null) {
         return;
       }
       const id = dockFileTabId(tabPath, ownerId);
-      setOpenTabs((prev) => {
-        if (prev.some((t) => t.id === id)) return prev;
-        return [
-          ...prev,
-          {
-            id,
-            kind: "file" as const,
-            path: tabPath,
-            ...(ownerId ? { agentId: ownerId } : {}),
-          },
-        ];
+      updateSession((state) => {
+        if (state.openTabs.some((t) => t.id === id)) {
+          return { ...state, activeTabId: id };
+        }
+        return {
+          ...state,
+          openTabs: [
+            ...state.openTabs,
+            {
+              id,
+              kind: "file" as const,
+              path: tabPath,
+              ...(ownerId ? { agentId: ownerId } : {}),
+            },
+          ],
+          activeTabId: id,
+        };
       });
-      setActiveTabId(id);
       openDock();
     },
-    [agentId, openDock, openFileList],
+    [agentId, openDock, openFileList, updateSession],
   );
 
   const openWorkspaceTab = useCallback(() => {
-    setOpenTabs((prev) => {
-      if (prev.some((t) => t.id === "workspace")) return prev;
-      return [...prev, { id: "workspace", kind: "workspace" }];
+    updateSession((state) => {
+      if (state.openTabs.some((t) => t.id === "workspace")) {
+        return { ...state, activeTabId: "workspace" };
+      }
+      return {
+        ...state,
+        openTabs: [...state.openTabs, { id: "workspace", kind: "workspace" }],
+        activeTabId: "workspace",
+      };
     });
-    setActiveTabId("workspace");
     openDock();
-  }, [openDock]);
+  }, [openDock, updateSession]);
 
   const openBrowserTab = useCallback(() => {
-    setOpenTabs((prev) => {
-      if (prev.some((t) => t.id === "browser")) return prev;
-      return [...prev, { id: "browser", kind: "browser" }];
+    updateSession((state) => {
+      if (state.openTabs.some((t) => t.id === "browser")) {
+        return { ...state, activeTabId: "browser" };
+      }
+      return {
+        ...state,
+        openTabs: [...state.openTabs, { id: "browser", kind: "browser" }],
+        activeTabId: "browser",
+      };
     });
-    setActiveTabId("browser");
     openDock();
-  }, [openDock]);
+  }, [openDock, updateSession]);
 
   const openTerminalTab = useCallback(() => {
-    setOpenTabs((prev) => {
-      if (prev.some((t) => t.id === "terminal")) return prev;
-      return [...prev, { id: "terminal", kind: "terminal" }];
+    updateSession((state) => {
+      if (state.openTabs.some((t) => t.id === "terminal")) {
+        return { ...state, activeTabId: "terminal" };
+      }
+      return {
+        ...state,
+        openTabs: [...state.openTabs, { id: "terminal", kind: "terminal" }],
+        activeTabId: "terminal",
+      };
     });
-    setActiveTabId("terminal");
     openDock();
-  }, [openDock]);
+  }, [openDock, updateSession]);
 
   const openKnowledgeCitation = useCallback(
     (citation: KnowledgeCitation) => {
@@ -231,18 +295,30 @@ export function useChatDockPanel(isMobile: boolean, agentId?: string | null) {
       const docId = citation.docId?.trim();
       if (!kbId || !docId) return;
       const id = dockKnowledgeTabId(kbId, docId);
-      setOpenTabs((prev) => {
-        const existing = prev.find((t) => t.id === id);
+      updateSession((state) => {
+        const existing = state.openTabs.find((t) => t.id === id);
         if (existing?.kind === "knowledge") {
-          return prev.map((t) => (t.id === id ? { ...t, citation } : t));
+          return {
+            ...state,
+            openTabs: state.openTabs.map((t) =>
+              t.id === id ? { ...t, citation } : t,
+            ),
+            activeTabId: id,
+          };
         }
-        if (existing) return prev;
-        return [...prev, { id, kind: "knowledge" as const, citation }];
+        if (existing) return { ...state, activeTabId: id };
+        return {
+          ...state,
+          openTabs: [
+            ...state.openTabs,
+            { id, kind: "knowledge" as const, citation },
+          ],
+          activeTabId: id,
+        };
       });
-      setActiveTabId(id);
       openDock();
     },
-    [openDock],
+    [openDock, updateSession],
   );
 
   const openToolUiTab = useCallback(
@@ -250,53 +326,60 @@ export function useChatDockPanel(isMobile: boolean, agentId?: string | null) {
       const callId = opts.callId?.trim();
       if (!callId) return;
       const id = dockToolUiTabId(callId);
-      setOpenTabs((prev) => {
-        if (prev.some((t) => t.id === id)) return prev;
-        return [
-          ...prev,
-          {
-            id,
-            kind: "toolUi" as const,
-            callId,
-            title: opts.title,
-            toolName: opts.toolName,
-          },
-        ];
+      updateSession((state) => {
+        if (state.openTabs.some((t) => t.id === id)) {
+          return { ...state, activeTabId: id };
+        }
+        return {
+          ...state,
+          openTabs: [
+            ...state.openTabs,
+            {
+              id,
+              kind: "toolUi" as const,
+              callId,
+              title: opts.title,
+              toolName: opts.toolName,
+            },
+          ],
+          activeTabId: id,
+        };
       });
-      setActiveTabId(id);
       openDock();
     },
-    [openDock],
+    [openDock, updateSession],
   );
 
   const focusToolUiTab = useCallback(
     (callId: string) => {
       const id = dockToolUiTabId(callId);
-      setActiveTabId(id);
+      updateSession((state) => ({ ...state, activeTabId: id }));
       openDock();
     },
-    [openDock],
+    [openDock, updateSession],
   );
 
   /** Toggle dock open/closed around a dedicated tab. */
   const toggleDockTab = useCallback(
     (tab: Extract<DockTab, { kind: "browser" | "terminal" | "workspace" }>) => {
-      setDockOpen((prevOpen) => {
-        if (prevOpen && activeTabId === tab.id) {
-          return false;
+      updateSession((state) => {
+        if (state.dockOpen && state.activeTabId === tab.id) {
+          return { ...state, dockOpen: false };
         }
-        setOpenTabs((prev) => {
-          if (prev.some((t) => t.id === tab.id)) return prev;
-          return [...prev, tab];
-        });
-        setActiveTabId(tab.id);
-        return true;
+        return {
+          ...state,
+          dockOpen: true,
+          openTabs: state.openTabs.some((t) => t.id === tab.id)
+            ? state.openTabs
+            : [...state.openTabs, tab],
+          activeTabId: tab.id,
+        };
       });
       if (isMobile) {
         setDockMode("bottom");
       }
     },
-    [activeTabId, isMobile],
+    [isMobile, updateSession],
   );
 
   const toggleWorkspacePanel = useCallback(() => {
@@ -311,24 +394,30 @@ export function useChatDockPanel(isMobile: boolean, agentId?: string | null) {
     toggleDockTab({ id: "terminal", kind: "terminal" });
   }, [toggleDockTab]);
 
-  const closeTab = useCallback((id: DockTabId) => {
-    setOpenTabs((prev) => {
-      const next = prev.filter((t) => t.id !== id);
-      setActiveTabId((current) => {
-        const nextActive = fallbackActiveId(next, id, current);
-        if (next.length === 0) {
-          setDockOpen(false);
-        }
-        return nextActive;
+  const closeTab = useCallback(
+    (id: DockTabId) => {
+      updateSession((state) => {
+        const next = state.openTabs.filter((t) => t.id !== id);
+        return {
+          dockOpen: next.length > 0 ? state.dockOpen : false,
+          openTabs: next,
+          activeTabId: fallbackActiveId(next, id, state.activeTabId),
+        };
       });
-      return next;
-    });
-  }, []);
+    },
+    [updateSession],
+  );
 
-  const setActiveTab = useCallback((id: DockTabId) => {
-    setActiveTabId(id);
-    setDockOpen(true);
-  }, []);
+  const setActiveTab = useCallback(
+    (id: DockTabId) => {
+      updateSession((state) => ({
+        ...state,
+        activeTabId: id,
+        dockOpen: true,
+      }));
+    },
+    [updateSession],
+  );
 
   const handleModeChange = useCallback(
     (mode: PanelMode) => {
