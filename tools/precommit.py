@@ -62,6 +62,9 @@ RELEASE_ONLY_INPUTS = ROOT_DOCS | {
 }
 WINDOWS_VALIDATION_INPUTS = frozenset(
     {
+        "tools/precommit.py",
+        "tools/frontend_gate.py",
+        "tests/unit/deployment/test_frontend_gate.py",
         "tools/check_public_source.py",
         "tools/export_public_source.py",
         "tests/unit/deployment/test_precommit.py",
@@ -71,7 +74,7 @@ WINDOWS_VALIDATION_INPUTS = frozenset(
     }
 )
 WINDOWS_VALIDATION_RECIPE_SHA256 = (
-    "3eb1d071a8a5881dae6d1c730364ff7fa343659181cf10470dfaa17ff8973192"
+    "072ac56ee4a39c8a22b9127f54706712e6d8c174f15ca08a809d4944645a75ef"
 )
 
 
@@ -87,6 +90,7 @@ class CiPlan(TypedDict):
     runtime_matrix: bool
     windows_validation: bool
     validator_regressions: bool
+    checked_head: str
     paths: list[str]
     reason: str
 
@@ -148,11 +152,12 @@ def windows_validation_recipe(root: Path, head: str, environment: dict[str, str]
 
 
 def ci_plan(root: Path, base: str, head: str) -> CiPlan:
-    """Retain both runtime matrices unless complete Git inputs prove tool-only changes."""
+    """Select from the checked composition after proving both supplied commits."""
     plan: CiPlan = {
         "runtime_matrix": True,
         "windows_validation": False,
         "validator_regressions": True,
+        "checked_head": "",
         "paths": [],
         "reason": "No PR diff; run both runtime matrices",
     }
@@ -161,6 +166,18 @@ def ci_plan(root: Path, base: str, head: str) -> CiPlan:
     if not all(re.fullmatch(r"[a-f0-9]{40}", value) for value in (base, head)):
         raise ValueError("CI scope requires two full commit SHAs, or two empty dispatch inputs")
     environment = {key: value for key, value in os.environ.items() if key not in GIT_CONTEXT}
+    checked = subprocess.run(
+        ["git", "rev-parse", "--verify", "HEAD^{commit}"],
+        cwd=root,
+        env=environment,
+        capture_output=True,
+        check=False,
+    )
+    if checked.returncode:
+        plan["reason"] = "Checked source unavailable; run both runtime matrices"
+        return plan
+    checkout = checked.stdout.decode().strip()
+    plan["checked_head"] = checkout
     for revision in (base, head):
         result = subprocess.run(
             ["git", "cat-file", "-e", revision + "^{commit}"],
@@ -172,15 +189,32 @@ def ci_plan(root: Path, base: str, head: str) -> CiPlan:
         if result.returncode:
             plan["reason"] = "Git endpoint unavailable; run both runtime matrices"
             return plan
+    if base == head:
+        return plan
+    for revision in (base, head):
+        ancestor = subprocess.run(
+            ["git", "merge-base", "--is-ancestor", revision, checkout],
+            cwd=root,
+            env=environment,
+            capture_output=True,
+            check=False,
+        )
+        if ancestor.returncode:
+            plan["reason"] = (
+                "Checked source does not prove both CI input commits; run both runtime matrices"
+            )
+            return plan
     changed = paths(
         subprocess.check_output(
-            ["git", "diff", "--no-renames", "--name-only", "-z", base, head, "--"],
+            ["git", "diff", "--no-renames", "--name-only", "-z", base, checkout, "--"],
             cwd=root,
             env=environment,
         )
     )
     plan["paths"] = changed
-    plan["validator_regressions"] = validator_regressions_required(root, head, changed, environment)
+    plan["validator_regressions"] = validator_regressions_required(
+        root, checkout, changed, environment
+    )
     if not changed or any(
         path not in RELEASE_ONLY_INPUTS | WINDOWS_VALIDATION_INPUTS for path in changed
     ):
@@ -189,7 +223,7 @@ def ci_plan(root: Path, base: str, head: str) -> CiPlan:
         )
         return plan
     entries = subprocess.check_output(
-        ["git", "ls-tree", "-rz", head, "--", *changed], cwd=root, env=environment
+        ["git", "ls-tree", "-rz", checkout, "--", *changed], cwd=root, env=environment
     )
     if any(
         entry and not entry.startswith((b"100644 ", b"100755 ")) for entry in entries.split(b"\0")
@@ -205,7 +239,7 @@ def ci_plan(root: Path, base: str, head: str) -> CiPlan:
         plan["reason"] = "Validation tool removed; run both runtime matrices"
         return plan
     needs_windows = any(path in WINDOWS_VALIDATION_INPUTS for path in changed)
-    if needs_windows and not windows_validation_recipe(root, head, environment):
+    if needs_windows and not windows_validation_recipe(root, checkout, environment):
         plan["reason"] = (
             "Windows tool workflow recipe unavailable or changed; run both runtime matrices"
         )
@@ -213,7 +247,7 @@ def ci_plan(root: Path, base: str, head: str) -> CiPlan:
     plan["runtime_matrix"] = False
     plan["windows_validation"] = needs_windows
     plan["reason"] = (
-        "Independent validation tools; Linux release and Windows tool checks remain required"
+        "Independent validation tools; run existing Linux and Windows validators and complete-source exports"
         if plan["windows_validation"]
         else "Validation-only inputs; release checks remain required"
     )

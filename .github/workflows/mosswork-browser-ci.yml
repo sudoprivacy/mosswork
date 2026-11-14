@@ -169,6 +169,8 @@ jobs:
       - name: Exercise the real browser tool and input barrier
         run: |
           uv run --locked python tools/accept_browser_control.py --chrome "${{ steps.browser.outputs.executable }}" --output "$RUNNER_TEMP/browser-control"
+      - name: Check pending CDP calls finish when the receiver closes
+        run: uv run --locked pytest -c packages/moss-browser/pyproject.toml packages/moss-browser/tests/unit/test_idle.py -q
       - name: Check canonical account and standalone login regressions
         run: |
           npm --prefix dashboard test -- --maxWorkers=1 --reporter=default --reporter=junit --outputFile.junit="$RUNNER_TEMP/canonical-account.xml" src/api/canonicalIdentity.test.ts src/hooks/useCanonicalIdentity.test.tsx src/components/AuthGuard.canonical.test.tsx src/pages/Login/CanonicalLogin.test.tsx src/pages/Login/CanonicalMemberLogin.test.tsx src/components/AuthGuard.test.tsx src/pages/Login/Login.remember.test.tsx src/pages/Login/Login.forgotPassword.test.tsx src/api/request.authToken.test.ts src/api/request.setup.test.ts src/api/request.unauthorized.test.ts src/api/canonicalProfile.test.ts src/hooks/useCanonicalProfile.test.tsx src/pages/Login/CanonicalLogin.routes.test.tsx src/pages/Login/CanonicalProfilePanel.test.tsx src/api/canonicalOrganization.test.ts src/hooks/useCanonicalOrganization.test.tsx src/pages/Login/CanonicalOrganizationPanel.test.tsx

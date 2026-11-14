@@ -86,7 +86,7 @@ help:
 	@echo "  lint-frontend    ESLint + Prettier check"
 	@echo "  format-frontend  Prettier write"
 	@echo "  format-check-frontend  Prettier check before backend tests"
-	@echo "  typecheck-frontend  tsc -b (project references)"
+	@echo "  typecheck-frontend  tsc -b --force (check current source)"
 	@echo ""
 	@echo "Quality targets (full stack):"
 	@echo "  lint-all         lint + lint-frontend"
@@ -205,6 +205,7 @@ all:
 validate-application:
 	@echo "[all] Checking backend lint and frontend formatting before validation..."
 	@$(MAKE) lint format-check-frontend || { echo "[all] $(FORMAT_GATE_MESSAGE)"; exit 1; }
+	$(MAKE) typecheck-frontend
 	$(MAKE) typecheck
 	$(MAKE) test-current
 
@@ -256,6 +257,7 @@ test-live:
 precommit:
 	@echo "[precommit] Checking backend lint and frontend formatting before validation..."
 	@$(MAKE) lint format-check-frontend || { echo "[precommit] $(FORMAT_GATE_MESSAGE)"; exit 1; }
+	$(MAKE) typecheck-frontend
 	$(MAKE) typecheck
 	$(MAKE) test-affected
 
@@ -292,8 +294,8 @@ format-frontend:
 
 .PHONY: typecheck-frontend
 typecheck-frontend:
-	@echo "[typecheck-frontend] tsc..."
-	cd $(DASHBOARD_DIR) && npx tsc -b
+	@echo "[typecheck-frontend] Checking current TypeScript source before tests..."
+	cd "$(DASHBOARD_DIR)" && npx tsc -b --force
 
 # ─── Quality (full stack) ────────────────────────────────────────────────────
 

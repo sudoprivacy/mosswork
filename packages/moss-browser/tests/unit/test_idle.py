@@ -1,7 +1,11 @@
 import asyncio
+import contextlib
+import json
 from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, patch
+
+import pytest
 
 from moss_browser.cdp.client import CDPClient, CDPSessionError
 from moss_browser.idle import BrowserIdleController, idle_controller_for
@@ -123,3 +127,114 @@ async def test_cdp_client_wraps_disconnected_send():
         assert "CDP send failed" in str(exc)
     else:
         raise AssertionError("expected CDPSessionError")
+
+
+class _ClosingSocket:
+    def __init__(self):
+        self.sent = asyncio.Event()
+        self.messages = asyncio.Queue()
+        self.calls = 0
+
+    async def send(self, payload):
+        self.calls += 1
+        self.sent.set()
+
+    async def close(self):
+        await self.messages.put(None)
+
+    def __aiter__(self):
+        return self
+
+    async def __anext__(self):
+        message = await self.messages.get()
+        if message is None:
+            raise StopAsyncIteration
+        if isinstance(message, Exception):
+            raise message
+        return message
+
+
+@pytest.mark.parametrize("ending", ["close", "eof", "receiver_cancel", "failure"])
+async def test_cdp_receiver_end_refuses_original_pending_command_without_replay(ending):
+    client = CDPClient(timeout=60)
+    socket = _ClosingSocket()
+    client._ws = socket
+    receiver = asyncio.create_task(client._recv_loop())
+    client._recv_task = receiver
+    command = asyncio.create_task(client.send("Runtime.evaluate"))
+    await socket.sent.wait()
+    try:
+        if ending == "close":
+            await client.close()
+        elif ending == "receiver_cancel":
+            receiver.cancel()
+            with pytest.raises(asyncio.CancelledError):
+                await receiver
+            assert receiver.cancelled()
+        else:
+            await socket.messages.put(
+                RuntimeError("fixture transport failure")
+                if ending == "failure"
+                else None
+            )
+            await receiver
+        for _ in range(3):
+            await asyncio.sleep(0)
+        assert command.done(), (
+            "A finished receiver must not leave its original command blocked"
+        )
+        with pytest.raises(CDPSessionError):
+            await command
+        assert client._pending == {}
+        assert socket.calls == 1
+    finally:
+        command.cancel()
+        with contextlib.suppress(asyncio.CancelledError, CDPSessionError):
+            await command
+        await client.close()
+
+
+async def test_cdp_close_preserves_true_sender_cancellation_and_releases_pending_entry():
+    client = CDPClient(timeout=60)
+    socket = _ClosingSocket()
+    client._ws = socket
+    client._recv_task = asyncio.create_task(client._recv_loop())
+    command = asyncio.create_task(client.send("Runtime.evaluate"))
+    await socket.sent.wait()
+    command.cancel()
+    with pytest.raises(asyncio.CancelledError):
+        await command
+    await client.close()
+    assert command.cancelled()
+    assert client._pending == {}
+    assert socket.calls == 1
+
+
+async def test_cdp_close_keeps_a_completed_original_reply():
+    client = CDPClient(timeout=60)
+    socket = _ClosingSocket()
+    client._ws = socket
+    client._recv_task = asyncio.create_task(client._recv_loop())
+    command = asyncio.create_task(client.send("Runtime.evaluate"))
+    await socket.sent.wait()
+    await socket.messages.put(json.dumps({"id": 1, "result": {"original": True}}))
+    assert await command == {"original": True}
+    await client.close()
+    assert client._pending == {}
+    assert socket.calls == 1
+
+
+async def test_cdp_close_before_receiver_starts_does_not_raise():
+    class ClosingSocket(_ClosingSocket):
+        async def close(self):
+            await asyncio.sleep(0)
+            await super().close()
+
+    client = CDPClient()
+    socket = ClosingSocket()
+    client._ws = socket
+    client._recv_task = asyncio.create_task(client._recv_loop())
+    await client.close()
+    assert client._recv_task.done()
+    assert client._pending == {}
+    assert socket.calls == 0

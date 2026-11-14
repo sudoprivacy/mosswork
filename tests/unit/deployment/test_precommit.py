@@ -507,7 +507,9 @@ def seed_windows_validation_workflow(repo: Path) -> None:
         ("packages/moss-harness/src/moss_harness/config.py", True),
         ("pyproject.toml", True),
         ("uv.lock", True),
-        ("tools/precommit.py", True),
+        ("tools/precommit.py", False),
+        ("tools/frontend_gate.py", False),
+        ("tests/unit/deployment/test_frontend_gate.py", False),
         (".github/workflows/mosswork-ci.yml", True),
         (".github/workflows/mosswork-identity-ci.yml", True),
         ("tests/conftest.py", True),
@@ -565,6 +567,78 @@ def test_ci_scope_keeps_full_matrices_for_dispatch_empty_diff_and_shallow_histor
     )
     assert gate.ci_plan(shallow, base, head)["runtime_matrix"] is True
     assert "unavailable" in gate.ci_plan(shallow, base, head)["reason"]
+
+
+@pytest.mark.parametrize("kind", ["complete", "shallow", "unknown-recipe"])
+def test_ci_scope_binds_the_checked_merge_and_requires_its_history_and_recipe(
+    repo: Path, tmp_path: Path, kind: str
+) -> None:
+    seed_windows_validation_workflow(repo)
+    stage(repo, "tools/check_public_source.py", "# Initial tool\n")
+    ci_commit(repo, "common source")
+    common = git(repo, "rev-parse", "HEAD")
+    git(repo, "checkout", "-qb", "accepted-base")
+    stage(repo, "src/octop/config.py", "ACCEPTED = True\n")
+    if kind == "unknown-recipe":
+        path = ".github/workflows/mosswork-ci.yml"
+        source = (repo / path).read_text(encoding="utf-8")
+        assert "timeout-minutes: 10" in source
+        stage(repo, path, source.replace("timeout-minutes: 10", "timeout-minutes: 11", 1))
+    ci_commit(repo, "accepted base advancement")
+    base = git(repo, "rev-parse", "HEAD")
+    git(repo, "checkout", "-qb", "feature", common)
+    stage(repo, "tools/check_public_source.py", "# Changed tool\n")
+    ci_commit(repo, "independent tool change")
+    head = git(repo, "rev-parse", "HEAD")
+    # Neither available endpoint alone proves the checked composition.
+    assert gate.ci_plan(repo, base, head)["runtime_matrix"] is True
+    git(repo, "checkout", "accepted-base")
+    assert gate.ci_plan(repo, base, head)["runtime_matrix"] is True
+    git(repo, "checkout", "feature")
+    git(
+        repo,
+        "-c",
+        "core.hooksPath=" + str(repo / "fixture-hooks"),
+        "merge",
+        "--no-edit",
+        "accepted-base",
+    )
+    checked = git(repo, "rev-parse", "HEAD")
+    assert git(repo, "rev-parse", base + ":src/octop/config.py") == git(
+        repo, "rev-parse", checked + ":src/octop/config.py"
+    )
+    checkout = tmp_path / "ci"
+    depth = "1" if kind == "shallow" else "2"
+    subprocess.run(
+        [
+            "git",
+            "clone",
+            "--quiet",
+            "--depth=" + depth,
+            "--branch",
+            "feature",
+            repo.as_uri(),
+            str(checkout),
+        ],
+        check=True,
+    )
+    plan = gate.ci_plan(checkout, base, head)
+    assert plan["checked_head"] == checked
+    assert plan["runtime_matrix"] is (kind != "complete")
+    assert plan["windows_validation"] is (kind == "complete")
+    if kind == "shallow":
+        assert "unavailable" in plan["reason"]
+    else:
+        assert plan["paths"] == ["tools/check_public_source.py"]
+        if kind == "unknown-recipe":
+            assert "recipe" in plan["reason"]
+    if kind == "complete":
+        # A later checked change must not be hidden behind the old branch head.
+        stage(repo, "src/octop/after_head.py", "NEW_RUNTIME = True\n")
+        ci_commit(repo, "additional checked runtime source")
+        changed = gate.ci_plan(repo, base, head)
+        assert changed["runtime_matrix"] is True
+        assert "src/octop/after_head.py" in changed["paths"]
 
 
 @pytest.mark.skipif(os.name == "nt", reason="POSIX symlink fixture")
@@ -640,6 +714,8 @@ def test_committed_validation_tools_keep_windows_checks_without_runtime_jobs(
         "planner-changed",
         "linux-command",
         "linux-selection",
+        "linux-tool-selection",
+        "linux-history",
     ],
 )
 def test_windows_tool_scope_keeps_runtime_jobs_for_unqualified_workflow(
@@ -659,6 +735,16 @@ def test_windows_tool_scope_keeps_runtime_jobs_for_unqualified_workflow(
                 "      - name: Check independent validation tools and the complete current source",
                 "      - name: Removed independent tool check",
             ),
+            "linux-tool-selection": (
+                "        if: needs.ci-scope.outputs.windows_validation == 'true'\n",
+                "        if: false\n",
+            ),
+            "linux-history": (
+                "          # The tool route verifies both PR inputs against this merge checkout.\n"
+                "          fetch-depth: 2",
+                "          # The tool route verifies both PR inputs against this merge checkout.\n"
+                "          fetch-depth: 1",
+            ),
             "linux-selection": (
                 "  release-checks:\n    needs: ci-scope",
                 "  release-checks:\n    needs: other-selector",
@@ -676,7 +762,7 @@ def test_windows_tool_scope_keeps_runtime_jobs_for_unqualified_workflow(
     assert "recipe" in plan["reason"]
 
 
-@pytest.mark.parametrize("operation", ["delete", "rename", "runtime", "dispatcher", "worker"])
+@pytest.mark.parametrize("operation", ["delete", "rename", "runtime", "execution-helper", "worker"])
 def test_windows_tool_scope_refuses_missing_or_mixed_runtime_inputs(
     repo: Path, operation: str
 ) -> None:
@@ -692,7 +778,7 @@ def test_windows_tool_scope_refuses_missing_or_mixed_runtime_inputs(
         stage(repo, path, "# Changed tool\n")
         extra = {
             "runtime": "src/octop/config.py",
-            "dispatcher": "tools/precommit.py",
+            "execution-helper": "tools/test_gate.py",
             "worker": "tools/accept_sudograph_worker.py",
         }[operation]
         stage(repo, extra)

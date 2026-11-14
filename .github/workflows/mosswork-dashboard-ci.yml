@@ -5,10 +5,7 @@ on:
     branches: [main]
     paths:
       - 'dashboard/**'
-      - 'tools/frontend_gate.py'
-      - 'tools/precommit.py'
       - 'tools/test_gate.py'
-      - 'tests/unit/deployment/test_frontend_gate.py'
       - 'src/octop/infra/company_runtime/**'
       - 'src/octop/infra/history/**'
       - 'tests/integration/test_desktop_reconnect_browser.py'
