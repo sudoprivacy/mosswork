@@ -235,12 +235,20 @@ jobs:
           uv run --frozen ruff format --check tools/test_gate.py tools/ci_identity_reuse.py conftest.py tests/unit/deployment/test_test_gate.py tests/unit/deployment/test_ci_identity_reuse.py
           uv run --frozen mypy --strict tools/test_gate.py
           uv run --frozen mypy --strict tools/ci_identity_reuse.py
-      - name: Check shared fixture and cold CLI isolation
+      - name: Check shared fixture, cold CLI and offline catalog isolation
         run: |
-          uv run --frozen pytest tests/unit/connectors/test_qcc_grant.py tests/unit/connectors/test_qcc_oauth_grant.py tests/unit/test_bundled_plugins_layout.py tests/unit/test_cli_main.py tests/unit/agents/test_memory_slim.py tests/unit/agents/test_agent_manager.py -q --junitxml "$RUNNER_TEMP/shared-isolation.xml"
-      - name: Check optional catalog isolation and complete offline seeding
-        run: |
-          uv run --frozen pytest tests/unit/market tests/integration/test_local_expert_market.py tests/integration/test_local_skill_market.py -q --junitxml "$RUNNER_TEMP/market-snapshot.xml"
+          # Share two workers across the original two cohorts; startup and capacity keep their serial boundary.
+          uv run --frozen pytest \
+            tests/unit/connectors/test_qcc_grant.py \
+            tests/unit/connectors/test_qcc_oauth_grant.py \
+            tests/unit/test_bundled_plugins_layout.py \
+            tests/unit/test_cli_main.py \
+            tests/unit/agents/test_memory_slim.py \
+            tests/unit/agents/test_agent_manager.py \
+            tests/unit/market \
+            tests/integration/test_local_expert_market.py \
+            tests/integration/test_local_skill_market.py \
+            -n 2 -q --junitxml "$RUNNER_TEMP/shared-market.xml"
       - name: Check isolated dependencies and live worker fixtures
         run: |
           uv run --frozen pytest tests/unit/api/test_knowledge_bases.py tests/unit/company_runtime/test_desktop_capacity.py tests/unit/company_runtime/test_local_process.py tests/unit/company_runtime/test_supervised_process_leaf.py tests/unit/infra/test_harness_config_imports.py -q --junitxml "$RUNNER_TEMP/shared-fixtures.xml"
@@ -346,9 +354,8 @@ jobs:
             ${{ runner.temp }}/reviewed-mcp.xml
             ${{ runner.temp }}/canonical-business.xml
             ${{ runner.temp }}/canonical-chat-admission.xml
+            ${{ runner.temp }}/shared-market.xml
             ${{ runner.temp }}/shared-fixtures.xml
-            ${{ runner.temp }}/market-snapshot.xml
-            ${{ runner.temp }}/shared-isolation.xml
             ${{ runner.temp }}/sudograph-domain-client/**/domain-client-receipt.json
             ${{ runner.temp }}/sudograph-domain-client/**/fixed-json-client-receipt.json
             ${{ runner.temp }}/sudograph-domain-client/**/write-outcome-receipt.json

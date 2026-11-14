@@ -34,6 +34,11 @@ VOLATILE_ENV = GIT_CONTEXT | {
     "CODEX_TOOL_CALL_ID",
     "MOSSWORK_TEST_REQUIRE_REUSE",
 }
+VALIDATION_STORAGE = {
+    "tools/test_gate.py": "mosswork-test-gate",
+    "tools/frontend_gate.py": "mosswork-frontend-gate",
+    "tools/precommit.py": "mosswork-tools-gate",
+}
 
 
 def git_launch_context(
@@ -41,7 +46,8 @@ def git_launch_context(
 ) -> int | None:
     """Use the same Git shell for Make and commits, preserving Git policy inputs."""
     frontend = entry == "tools/frontend_gate.py"
-    if entry not in {"tools/test_gate.py", "tools/frontend_gate.py"}:
+    tools = entry == "tools/precommit.py"
+    if entry not in VALIDATION_STORAGE:
         raise ValueError("Unknown validation entry")
     hook = root / ".githooks/test-gate"
     if not hook.is_file():
@@ -52,8 +58,9 @@ def git_launch_context(
         if top != root:
             return None
         before = inputs(root)
-        storage = Path(git(root, "rev-parse", "--absolute-git-dir").decode().strip()) / (
-            "mosswork-frontend-gate" if frontend else "mosswork-test-gate"
+        storage = (
+            Path(git(root, "rev-parse", "--absolute-git-dir").decode().strip())
+            / VALIDATION_STORAGE[entry]
         )
         storage.mkdir(exist_ok=True)
     except (OSError, ValueError, subprocess.CalledProcessError):
@@ -88,7 +95,7 @@ def git_launch_context(
     argv += [
         "test-gate",
         "--",
-        sys.executable,
+        *(["uv", "run", "--frozen", "python"] if tools else [sys.executable]),
         str(root / entry),
         "--git-context",
         "--launch-id",
@@ -135,14 +142,12 @@ def git_launch_context(
 def complete_git_launch(
     root: Path, launch_id: str, options: dict[str, Any], *, entry: str = "tools/test_gate.py"
 ) -> None:
-    if (
-        entry not in {"tools/test_gate.py", "tools/frontend_gate.py"}
-        or re.fullmatch(r"[a-f0-9]{32}", launch_id) is None
-    ):
+    if entry not in VALIDATION_STORAGE or re.fullmatch(r"[a-f0-9]{32}", launch_id) is None:
         raise ValueError("Invalid validation launch completion")
     root = root.resolve()
-    storage = Path(git(root, "rev-parse", "--absolute-git-dir").decode().strip()) / (
-        "mosswork-frontend-gate" if entry == "tools/frontend_gate.py" else "mosswork-test-gate"
+    storage = (
+        Path(git(root, "rev-parse", "--absolute-git-dir").decode().strip())
+        / VALIDATION_STORAGE[entry]
     )
     with (storage / ("launch-" + launch_id + ".json")).open("x", encoding="utf-8") as marker:
         json.dump({"launch_id": launch_id, "root": str(root), "options": options}, marker)
@@ -163,14 +168,24 @@ def normalize_launch_environment() -> None:
         except ValueError:
             pass  # Preserve malformed/other Git policy inputs and their refusal.
     if sys.platform != "win32":
-        # Each native Git invocation prepends its exec directory. A commit hook
-        # enters Git once more than Make; remove only that repeated leading path.
+        # uv may insert the interpreter directory between nested Git prefixes.
+        # Remove repeated Git entries only inside that leading transport block.
         prefix = os.environ.get("GIT_EXEC_PATH")
         entries = os.environ.get("PATH", "").split(os.pathsep)
         if prefix and Path(prefix).is_dir():
-            while len(entries) > 1 and entries[:2] == [prefix, prefix]:
-                entries.pop(0)
-            os.environ["PATH"] = os.pathsep.join(entries)
+            transport = {prefix, str(Path(sys.executable).parent)}
+            leading, seen_git = True, False
+            normalized = []
+            for entry in entries:
+                if leading and entry in transport:
+                    if entry == prefix:
+                        if seen_git:
+                            continue
+                        seen_git = True
+                else:
+                    leading = False
+                normalized.append(entry)
+            os.environ["PATH"] = os.pathsep.join(normalized)
         return
     # Git for Windows prepends its own directories again in nested hooks. Keep
     # one consistent order for that installation and retain every other PATH entry.
