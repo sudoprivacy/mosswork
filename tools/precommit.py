@@ -34,11 +34,13 @@ ROOT_DOCS = frozenset(
 TOOL_FILES = (
     "tools/precommit.py",
     "tools/frontend_gate.py",
+    "tools/test_gate.py",
     "tools/check_public_source.py",
     "tools/export_public_source.py",
     "tools/accept_sudograph_worker.py",
     "tools/ci_identity_reuse.py",
     "tests/unit/deployment/test_precommit.py",
+    "tests/unit/deployment/test_test_gate.py",
     "tests/unit/deployment/test_ci_action_recipe.py",
     "tests/unit/deployment/test_hook_staging.py",
     "tests/unit/deployment/test_frontend_gate.py",
@@ -598,6 +600,11 @@ def commands(selected: str, changed: list[str] | None = None) -> list[list[str]]
         "tests/unit/deployment/test_ci_identity_reuse.py",
     ]
     if changed is None or set(changed) & {
+        "tools/test_gate.py",
+        "tests/unit/deployment/test_test_gate.py",
+    }:
+        tests.append("tests/unit/deployment/test_test_gate.py")
+    if changed is None or set(changed) & {
         "tools/frontend_gate.py",
         "tools/precommit.py",
         "tests/unit/deployment/test_frontend_gate.py",
@@ -620,7 +627,15 @@ def commands(selected: str, changed: list[str] | None = None) -> list[list[str]]
     return [
         ["uv", "run", "--frozen", "ruff", "check", *TOOL_FILES],
         ["uv", "run", "--frozen", "ruff", "format", "--check", *TOOL_FILES],
-        ["uv", "run", "--frozen", "mypy", "--strict", "tools/ci_identity_reuse.py"],
+        [
+            "uv",
+            "run",
+            "--frozen",
+            "mypy",
+            "--strict",
+            "tools/ci_identity_reuse.py",
+            "tools/test_gate.py",
+        ],
         [
             "uv",
             "run",
