@@ -770,3 +770,93 @@ def test_windows_git_launch_uses_the_actual_runtime_directory(
     assert os.environ["PATH"].split(os.pathsep) == [
         os.path.normcase(os.path.normpath(str(p))) for p in [*directories, root / "custom"]
     ]
+
+
+@pytest.mark.parametrize("folder", ["unit", "integration"])
+@pytest.mark.parametrize("staged", [False, True])
+def test_actual_graph_runs_added_modules_and_keeps_failed_pending_cases_required(
+    gate_repo: tuple[Path, dict[str, str]], folder: str, staged: bool
+) -> None:
+    root, env = gate_repo
+    initial, base, calls = execute(root, env, "added-baseline")
+    assert initial.returncode == 0 and sorted(calls) == ["first", "second"]
+    graph = base["graph"]
+    baseline = root / ".git/mosswork-test-gate/baseline.json"
+    original_pass = baseline.read_bytes()
+    added = root / "tests" / folder / "test_added_module.py"
+    added.parent.mkdir(parents=True)
+    added.write_text(
+        "from pathlib import Path\n\ndef test_added():\n"
+        "    with Path('output/observed').open('a') as f: f.write('added\\n')\n"
+        "    assert False\n\ndef test_pending():\n"
+        "    with Path('output/observed').open('a') as f: f.write('pending\\n')\n",
+        encoding="utf-8",
+    )
+    if staged:
+        subprocess.run(["git", "add", str(added.relative_to(root))], cwd=root, env=env, check=True)
+    failed, plan, calls = execute(root, env, "new-module-failed")
+    assert failed.returncode != 0, failed.stdout + failed.stderr
+    assert plan["mode"] == "affected" and plan["graph"] == graph
+    assert calls == ["added"]
+    assert baseline.read_bytes() == original_pass
+    added.write_text(
+        added.read_text(encoding="utf-8").replace("assert False", "assert True"), encoding="utf-8"
+    )
+    repaired, plan, calls = execute(root, env, "new-module-repaired")
+    assert repaired.returncode == 0, repaired.stdout + repaired.stderr
+    assert plan["mode"] == "affected" and plan["graph"] == graph
+    assert sorted(calls) == ["added", "pending"]
+
+
+def test_new_live_module_remains_unexecuted_until_original_live_scope(
+    gate_repo: tuple[Path, dict[str, str]],
+) -> None:
+    root, env = gate_repo
+    (root / "tests/test_live.py").write_text(
+        "import pytest\nfrom pathlib import Path\n\n@pytest.mark.live\ndef test_live():\n"
+        "    with Path('output/observed').open('a') as f: f.write('old-live\\n')\n",
+        encoding="utf-8",
+    )
+    initial, base, calls = execute(root, env, "live-module-baseline")
+    assert initial.returncode == 0 and sorted(calls) == ["first", "second"]
+    added = root / "tests/unit/test_new_live_module.py"
+    added.parent.mkdir(parents=True)
+    added.write_text(
+        "import pytest\nfrom pathlib import Path\n\n@pytest.mark.live\ndef test_new_live():\n"
+        "    with Path('output/observed').open('a') as f: f.write('new-live\\n')\n"
+        "    assert False\n",
+        encoding="utf-8",
+    )
+    nonlive, plan, calls = execute(root, env, "new-live-excluded")
+    assert nonlive.returncode == 0 and plan["mode"] == "affected" and calls == []
+    failed, plan, failed_calls = execute(root, env, "new-live-required", "--include-live")
+    assert failed.returncode != 0 and plan["mode"] == "affected"
+    assert failed_calls.count("new-live") == 1
+    assert not {"first", "second"}.intersection(failed_calls)
+    added.write_text(
+        added.read_text(encoding="utf-8").replace("assert False", "assert True"), encoding="utf-8"
+    )
+    repaired, plan, calls = execute(root, env, "new-live-repaired", "--include-live")
+    assert repaired.returncode == 0 and plan["mode"] == "affected"
+    assert calls.count("new-live") == 1 and not {"first", "second"}.intersection(calls)
+    assert failed_calls.count("old-live") + calls.count("old-live") == 1
+    assert plan["graph"] == base["graph"]
+
+
+def test_unknown_helpers_and_removed_tests_keep_full_run_and_name_cli_inputs(
+    gate_repo: tuple[Path, dict[str, str]],
+) -> None:
+    root, env = gate_repo
+    initial, _, _ = execute(root, env, "blocked-baseline")
+    assert initial.returncode == 0, initial.stdout + initial.stderr
+    helper = root / "tests/unit/helper.py"
+    helper.parent.mkdir(parents=True)
+    helper.write_text("UNUSED = True\n", encoding="utf-8")
+    changed, plan, calls = execute(root, env, "unknown-helper")
+    assert changed.returncode == 0 and plan["mode"] == "full"
+    assert sorted(calls) == ["first", "second"]
+    assert "tests/unit/helper.py" in plan["reason"]
+    (root / "tests/test_second.py").unlink()
+    removed, plan, calls = execute(root, env, "removed-test")
+    assert removed.returncode == 0 and plan["mode"] == "full" and calls == ["first"]
+    assert "tests/test_second.py" in plan["reason"]
