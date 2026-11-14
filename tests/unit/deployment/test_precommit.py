@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import ast
 import importlib.util
 import json
 import os
@@ -19,6 +20,282 @@ SPEC = importlib.util.spec_from_file_location("mosswork_precommit", SOURCE / "to
 assert SPEC is not None and SPEC.loader is not None
 gate = importlib.util.module_from_spec(SPEC)
 SPEC.loader.exec_module(gate)
+
+
+@pytest.fixture
+def actual_tool_history(tmp_path):
+    """Real Git/uv/checker processes with only the private command provider replaced.
+
+    The production transport, proof engine and dispatcher guards are unchanged.
+    UV_NO_SYNC makes the installed interpreter a read-only fixture dependency.
+    """
+    root = tmp_path / "tool history"
+    root.mkdir()
+    for name in dict.fromkeys(
+        (
+            "Makefile",
+            "tools/test_gate.py",
+            ".githooks/pre-commit",
+            ".githooks/test-gate",
+            *gate.TOOL_FILES,
+        )
+    ):
+        target = root / name
+        target.parent.mkdir(parents=True, exist_ok=True)
+        shutil.copyfile(SOURCE / name, target)
+    for path in (root / ".githooks").iterdir():
+        path.chmod(0o755)
+    path = root / "tools/precommit.py"
+    text = path.read_text(encoding="utf-8")
+    provider = next(
+        node
+        for node in ast.parse(text).body
+        if isinstance(node, ast.FunctionDef) and node.name == "commands"
+    )
+    lines = text.splitlines(keepends=True)
+    lines[provider.lineno - 1 : provider.end_lineno] = [
+        "def commands(selected, changed=None):\n"
+        f"    return [[{sys.executable!r}, '-m', 'unittest', 'discover', '-s', 'checks']] if selected == 'tools' else []\n"
+    ]
+    path.write_text("".join(lines), encoding="utf-8")
+    actual = ast.parse(path.read_text(encoding="utf-8"))
+    assert [
+        ast.dump(node)
+        for node in actual.body
+        if not (isinstance(node, ast.FunctionDef) and node.name == "commands")
+    ] == [
+        ast.dump(node)
+        for node in ast.parse(text).body
+        if not (isinstance(node, ast.FunctionDef) and node.name == "commands")
+    ]
+    (root / "checks").mkdir()
+    (root / "checks/test_case.py").write_text(
+        "import os, unittest\nfrom pathlib import Path\n"
+        "class Check(unittest.TestCase):\n"
+        "    def test_actual_body(self):\n"
+        "        with Path('.git/executions').open('a') as stream: stream.write('ran\\n')\n"
+        "        self.assertNotEqual(os.environ.get('TOOLS_FIXTURE_FAIL'), '1')\n",
+        encoding="utf-8",
+    )
+    (root / "pyproject.toml").write_text("[tool.fixture]\nprivate = true\n", encoding="utf-8")
+    (root / ".gitignore").write_text("__pycache__/\n.venv/\n", encoding="utf-8")
+    environment = {
+        key: value
+        for key, value in os.environ.items()
+        if key not in {"PYTEST_ADDOPTS", "PYTEST_CURRENT_TEST", "MAKEFLAGS", "MFLAGS"}
+        and not key.startswith("GIT_")
+    }
+    environment.update(
+        UV_NO_SYNC="1",
+        UV_PROJECT_ENVIRONMENT=sys.prefix,
+        UV_PYTHON=sys.executable,
+        VIRTUAL_ENV=sys.prefix,
+        PYTHONDONTWRITEBYTECODE="1",
+        PYTHONIOENCODING="utf-8",
+    )
+
+    def fixture_git(*arguments, hooks=False):
+        return subprocess.run(
+            [
+                "git",
+                "-c",
+                "core.hooksPath=" + (".githooks" if hooks else ".git/fixture-hooks"),
+                *arguments,
+            ],
+            cwd=root,
+            env=environment,
+            capture_output=True,
+            text=True,
+            encoding="utf-8",
+            check=True,
+            timeout=60,
+        )
+
+    fixture_git("init", "-q")
+    binaries = root / ".git/tool-bin"
+    binaries.mkdir()
+    node_control = binaries / ("node.cmd" if os.name == "nt" else "node")
+    node_control.write_text(
+        "@echo fixture-node\n" if os.name == "nt" else "#!/bin/sh\necho fixture-node\n",
+        encoding="utf-8",
+    )
+    node_control.chmod(0o755)
+    environment["PATH"] = str(binaries) + os.pathsep + environment["PATH"]
+    fixture_git("config", "user.name", "Tool History Fixture")
+    fixture_git("config", "user.email", "fixture@example.invalid")
+    fixture_git("config", "commit.gpgsign", "false")
+    fixture_git("add", ".")
+    fixture_git("commit", "-qm", "accepted fixture")
+    fixture_git(
+        "update-ref", "refs/remotes/origin/main", fixture_git("rev-parse", "HEAD").stdout.strip()
+    )
+    candidate = root / "tools/frontend_gate.py"
+    candidate.write_text(
+        candidate.read_text(encoding="utf-8") + "\n# Pending tool input.\n", encoding="utf-8"
+    )
+    make = shutil.which("make") or shutil.which("mingw32-make")
+
+    def run(*, commit=False, staged=False):
+        if commit:
+            return fixture_git("commit", "-m", "qualified candidate", hooks=True)
+        argv = (
+            ["uv", "run", "--frozen", "python", "tools/precommit.py"]
+            if staged
+            else [make, "all"]
+            if make
+            else ["uv", "run", "--frozen", "python", "tools/precommit.py", "--worktree"]
+        )
+        result = subprocess.run(
+            argv,
+            cwd=root,
+            env=environment,
+            capture_output=True,
+            text=True,
+            encoding="utf-8",
+            timeout=60,
+        )
+        print(result.stdout + result.stderr)
+        return result
+
+    def history():
+        return json.loads(
+            (root / ".git/mosswork-tools-gate/history.json").read_text(encoding="utf-8")
+        )
+
+    def executions():
+        path = root / ".git/executions"
+        return path.read_text().splitlines() if path.exists() else []
+
+    return root, candidate, environment, fixture_git, run, history, executions
+
+
+def test_actual_worktree_then_original_commit_reuses_tool_success(actual_tool_history):
+    root, candidate, _, fixture_git, run, history, executions = actual_tool_history
+    first = run()
+    assert first.returncode == 0, first.stdout + first.stderr
+    actual = history()
+    assert actual["passed"] and actual["complete"] and len(actual["checks"]) == 1
+    original = Path(actual["attempt"])
+    original_bytes = original.read_bytes()
+    assert executions() == ["ran"]
+    fixture_git("add", "--", str(candidate.relative_to(root)))
+    index = fixture_git("ls-files", "--stage").stdout
+    committed = run(commit=True)
+    assert "reusing" in committed.stdout + committed.stderr
+    assert executions() == ["ran"]
+    reused = history()
+    assert reused["passed"] and reused["checks"] == []
+    assert reused["reused"]["attempt"] == str(original)
+    assert original.read_bytes() == original_bytes
+    assert fixture_git("ls-files", "--stage").stdout == index
+    # Git history is an input too; the completed commit changes the checked head.
+    assert run().returncode == 0
+    assert executions() == ["ran", "ran"] and not history().get("reused")
+
+
+def test_actual_tool_success_refuses_changed_and_missing_proof(actual_tool_history):
+    root, candidate, environment, fixture_git, run, history, executions = actual_tool_history
+    assert run().returncode == 0
+    assert run().returncode == 0
+    assert executions() == ["ran"]
+    candidate.write_text(candidate.read_text(encoding="utf-8") + "# New input.\n", encoding="utf-8")
+    assert run().returncode == 0
+    assert len(executions()) == 2 and not history().get("reused")
+    environment["TOOLS_FIXTURE_COLOR"] = "different"
+    assert run().returncode == 0
+    assert len(executions()) == 3 and not history().get("reused")
+    fixture_git("config", "user.name", "Changed Git input")
+    assert run().returncode == 0
+    assert len(executions()) == 4 and not history().get("reused")
+    node_control = root / ".git/tool-bin" / ("node.cmd" if os.name == "nt" else "node")
+    node_control.write_text(
+        node_control.read_text(encoding="utf-8") + "echo changed-tool\n", encoding="utf-8"
+    )
+    assert run().returncode == 0
+    assert len(executions()) == 5 and not history().get("reused")
+    Path(history()["attempt"]).unlink()  # Deliberately damage only this synthetic fixture proof.
+    assert run().returncode == 0
+    assert len(executions()) == 6 and not history().get("reused")
+    environment["TOOLS_FIXTURE_FAIL"] = "1"
+    failed = run()
+    assert failed.returncode != 0
+    red = history()
+    assert not red["passed"] and red["complete"] and len(executions()) == 7
+    failed_path = Path(red["attempt"])
+    failed_bytes = failed_path.read_bytes()
+    environment.pop("TOOLS_FIXTURE_FAIL")
+    assert run().returncode == 0
+    assert len(executions()) == 8 and not history().get("reused")
+    assert failed_path.read_bytes() == failed_bytes
+
+
+def test_actual_empty_tools_git_shell_cannot_publish_success(actual_tool_history):
+    root, candidate, _, fixture_git, run, _, executions = actual_tool_history
+    hook = root / ".githooks/test-gate"
+    hook.write_text("#!/bin/sh\nexit 0\n", encoding="utf-8")
+    fixture_git("add", ".githooks/test-gate")
+    fixture_git("commit", "-qm", "accepted negative shell fixture")
+    fixture_git(
+        "update-ref", "refs/remotes/origin/main", fixture_git("rev-parse", "HEAD").stdout.strip()
+    )
+    candidate.write_text(
+        candidate.read_text(encoding="utf-8") + "# Still pending.\n", encoding="utf-8"
+    )
+    result = run()
+    assert result.returncode != 0
+    assert "did not complete" in result.stdout + result.stderr
+    assert executions() == []
+
+
+def test_alternate_index_runs_original_tools_without_consuming_worktree_proof(actual_tool_history):
+    root, candidate, environment, fixture_git, run, history, executions = actual_tool_history
+    assert run().returncode == 0
+    original = Path(history()["attempt"])
+    original_bytes = original.read_bytes()
+    fixture_git("add", "--", str(candidate.relative_to(root)))
+    index = root / ".git/index"
+    index_bytes = index.read_bytes()
+    alternate = root / ".git/alternate-index"
+    alternate.write_bytes(index_bytes)
+    result = subprocess.run(
+        ["uv", "run", "--frozen", "python", "tools/precommit.py"],
+        cwd=root,
+        env={**environment, "GIT_INDEX_FILE": str(alternate)},
+        capture_output=True,
+        text=True,
+        encoding="utf-8",
+        timeout=60,
+    )
+    assert result.returncode == 0, result.stdout + result.stderr
+    assert "original fresh tool checks remain required" in result.stdout + result.stderr
+    assert executions() == ["ran", "ran"]
+    assert index.read_bytes() == index_bytes
+    assert original.read_bytes() == original_bytes
+
+
+def test_unstaged_and_mixed_inputs_cannot_reuse_tool_proof(actual_tool_history):
+    root, candidate, _, fixture_git, run, history, executions = actual_tool_history
+    other = root / "tools/check_public_source.py"
+    other.write_text(
+        other.read_text(encoding="utf-8") + "\n# Unstaged tool input.\n", encoding="utf-8"
+    )
+    assert run().returncode == 0
+    assert executions() == ["ran"]
+    fixture_git("add", "--", str(candidate.relative_to(root)))
+    for _ in range(2):
+        assert run(staged=True).returncode == 0
+        assert history()["reuse_allowed"] is False and not history().get("reused")
+    assert len(executions()) == 3
+    fixture_git("add", "--", str(other.relative_to(root)))
+    assert run(staged=True).returncode == 0
+    assert len(executions()) == 4 and not history().get("reused")
+    assert run(staged=True).returncode == 0
+    assert len(executions()) == 4 and history().get("reused")
+    (root / "runtime.py").write_text("VALUE = 1\n", encoding="utf-8")
+    for _ in range(2):
+        assert run(staged=True).returncode == 0
+        assert history()["reuse_allowed"] is False and not history().get("reused")
+    assert len(executions()) == 6
 
 
 def git(root: Path, *argv: str) -> str:

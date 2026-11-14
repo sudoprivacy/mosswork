@@ -726,6 +726,25 @@ def test_posix_git_launch_preserves_other_path_entries(
     assert os.environ["GIT_CONFIG_PARAMETERS"] == "'core.hooksPath=.githooks' 'fixture.policy=keep'"
 
 
+def test_posix_git_launch_keeps_interpreter_and_custom_path_entries(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from tools import test_gate
+
+    git_exec = str(tmp_path / "git-exec")
+    Path(git_exec).mkdir()
+    interpreter = str(Path(sys.executable).parent)
+    custom = ["/custom/tools", git_exec, "/usr/bin", "/custom/tools"]
+    monkeypatch.setattr(test_gate.sys, "platform", "linux")
+    monkeypatch.setenv("GIT_EXEC_PATH", git_exec)
+    monkeypatch.setenv(
+        "PATH", os.pathsep.join([interpreter, git_exec, interpreter, git_exec, *custom])
+    )
+    test_gate.normalize_launch_environment()
+    assert os.environ["PATH"].split(os.pathsep) == [interpreter, git_exec, interpreter, *custom]
+
+
 @pytest.mark.parametrize("runtime", ["mingw64", "ucrt64"])
 def test_windows_git_launch_uses_the_actual_runtime_directory(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch, runtime: str
