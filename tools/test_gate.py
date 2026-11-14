@@ -168,14 +168,24 @@ def normalize_launch_environment() -> None:
         except ValueError:
             pass  # Preserve malformed/other Git policy inputs and their refusal.
     if sys.platform != "win32":
-        # Each native Git invocation prepends its exec directory. A commit hook
-        # enters Git once more than Make; remove only that repeated leading path.
+        # uv may insert the interpreter directory between nested Git prefixes.
+        # Remove repeated Git entries only inside that leading transport block.
         prefix = os.environ.get("GIT_EXEC_PATH")
         entries = os.environ.get("PATH", "").split(os.pathsep)
         if prefix and Path(prefix).is_dir():
-            while len(entries) > 1 and entries[:2] == [prefix, prefix]:
-                entries.pop(0)
-            os.environ["PATH"] = os.pathsep.join(entries)
+            transport = {prefix, str(Path(sys.executable).parent)}
+            leading, seen_git = True, False
+            normalized = []
+            for entry in entries:
+                if leading and entry in transport:
+                    if entry == prefix:
+                        if seen_git:
+                            continue
+                        seen_git = True
+                else:
+                    leading = False
+                normalized.append(entry)
+            os.environ["PATH"] = os.pathsep.join(normalized)
         return
     # Git for Windows prepends its own directories again in nested hooks. Keep
     # one consistent order for that installation and retain every other PATH entry.
