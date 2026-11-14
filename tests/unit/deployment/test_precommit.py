@@ -774,6 +774,66 @@ def test_tools_require_complete_known_validation_scope(repo: Path) -> None:
     assert gate.profile(repo, gate.staged_paths(repo)) == "full"
 
 
+@pytest.mark.parametrize("path", ["tools/test_gate.py", "tests/unit/deployment/test_test_gate.py"])
+@pytest.mark.parametrize("extra", [None, "runtime", "configuration", "unknown", "removed"])
+def test_local_runner_scope_keeps_real_regressions_and_original_hosted_matrix(
+    repo: Path, path: str, extra: str | None
+) -> None:
+    for name in gate.TOOL_FILES:
+        stage(repo, name, "# Known independent tool\n")
+    seed_windows_validation_workflow(repo)
+    base = git(repo, "rev-parse", "HEAD")
+    if extra == "removed":
+        git(repo, "rm", path)
+    else:
+        stage(repo, path, "# Changed validation runner\n")
+        if extra:
+            stage(
+                repo,
+                {
+                    "runtime": "src/octop/config.py",
+                    "configuration": "pyproject.toml",
+                    "unknown": "tools/unclassified.py",
+                }[extra],
+            )
+    assert gate.profile(repo, gate.staged_paths(repo)) == ("tools" if extra is None else "full")
+    checks = gate.commands("tools", [path])
+    pytest_command = next(argv for argv in checks if "pytest" in argv)
+    assert pytest_command.count("tests/unit/deployment/test_test_gate.py") == 1
+    mypy_command = next(argv for argv in checks if "mypy" in argv)
+    assert "--strict" in mypy_command and "tools/test_gate.py" in mypy_command
+    ci_commit(repo, "current independent-runner candidate")
+    hosted = gate.ci_plan(repo, base, git(repo, "rev-parse", "HEAD"))
+    assert hosted["runtime_matrix"] is True
+    assert hosted["windows_validation"] is False
+    assert hosted["validator_regressions"] is True
+
+
+@pytest.mark.parametrize("path", ["tools/test_gate.py", "tests/unit/deployment/test_test_gate.py"])
+def test_real_runner_tool_history_still_refuses_a_failed_current_candidate(request, path):
+    root, _, environment, _, run, history, executions = request.getfixturevalue(
+        "actual_tool_history"
+    )
+    target = root / path
+    target.write_text(
+        target.read_text(encoding="utf-8") + "\n# Current independent runner edit\n",
+        encoding="utf-8",
+    )
+    first = run()
+    assert first.returncode == 0, first.stdout + first.stderr
+    assert history()["passed"] and executions() == ["ran"]
+    assert run().returncode == 0 and executions() == ["ran"]
+    environment["TOOLS_FIXTURE_FAIL"] = "1"
+    failed = run()
+    assert failed.returncode != 0
+    assert not history()["passed"] and not history().get("reused")
+    assert executions() == ["ran", "ran"]
+    del environment["TOOLS_FIXTURE_FAIL"]
+    assert run().returncode == 0
+    assert history()["passed"] and not history().get("reused")
+    assert executions() == ["ran", "ran", "ran"]
+
+
 def test_only_hook_line_ending_attributes_are_scoped(repo: Path) -> None:
     for path in gate.TOOL_FILES:
         target = repo / path
