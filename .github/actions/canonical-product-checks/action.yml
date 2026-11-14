@@ -1,0 +1,30 @@
+name: Canonical product checks
+description: Run reviewed MCP, canonical business and chat admission regressions.
+runs:
+  using: composite
+  steps:
+    - name: Check retained reviewed registrations and current product ports
+      shell: bash
+      run: |
+        uv run --frozen ruff check src/octop/infra/db/repos/retained_mcp.py src/octop/infra/native_host/reviewed_mcp.py tests/unit/native_host/test_reviewed_mcp.py tests/unit/native_host/test_registered_mcp_composition.py
+        uv run --frozen ruff format --check src/octop/infra/db/repos/retained_mcp.py src/octop/infra/native_host/reviewed_mcp.py tests/unit/native_host/test_reviewed_mcp.py tests/unit/native_host/test_registered_mcp_composition.py
+        uv run --frozen mypy --strict --follow-imports=silent src/octop/infra/db/repos/retained_mcp.py src/octop/infra/native_host/reviewed_mcp.py
+        uv run --frozen pytest tests/unit/native_host/test_reviewed_mcp.py tests/unit/native_host/test_registered_mcp_composition.py -q \
+          --junitxml "$RUNNER_TEMP/reviewed-mcp.xml"
+    - name: Check canonical business, current member writes and same-instance composition
+      shell: bash
+      run: |
+        uv run --frozen pytest tests/unit/identity tests/unit/gateway/test_canonical_feishu.py tests/unit/gateway/test_feishu_delivery_business_store.py tests/unit/auth/test_feishu_adapter.py tests/unit/api/test_canonical_request_dependency.py tests/unit/test_canonical_business_product_composition.py tests/unit/test_canonical_business_supplements_consumer.py tests/unit/test_canonical_product_startup.py tests/unit/test_r26_pc3_sms_mount.py tests/unit/db/test_canonical_identity_projection.py tests/unit/i18n -q --junitxml "$RUNNER_TEMP/canonical-business.xml"
+    - name: Check canonical chat and original actor admission
+      shell: bash
+      run: |
+        uv run --frozen pytest tests/unit/api/test_canonical_chat_websocket.py tests/unit/api/test_canonical_websocket_principal.py tests/unit/test_canonical_execution_admission.py tests/unit/test_canonical_queue_reauthentication.py tests/unit/test_canonical_execution_reauthentication_http.py tests/unit/agents/test_managed_lifecycle_admission.py -q --junitxml "$RUNNER_TEMP/canonical-chat-admission.xml"
+    - uses: actions/upload-artifact@v4
+      if: always()
+      with:
+        name: canonical-product-receipts-${{ runner.os }}
+        path: |
+          ${{ runner.temp }}/reviewed-mcp.xml
+          ${{ runner.temp }}/canonical-business.xml
+          ${{ runner.temp }}/canonical-chat-admission.xml
+        if-no-files-found: ignore

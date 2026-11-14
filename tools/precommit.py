@@ -39,6 +39,8 @@ TOOL_FILES = (
     "tools/accept_sudograph_worker.py",
     "tools/ci_identity_reuse.py",
     "tests/unit/deployment/test_precommit.py",
+    "tests/unit/deployment/test_ci_action_recipe.py",
+    "tests/unit/deployment/test_hook_staging.py",
     "tests/unit/deployment/test_frontend_gate.py",
     "tests/unit/deployment/test_export_public_source.py",
     "tests/unit/deployment/test_ci_identity_reuse.py",
@@ -74,8 +76,9 @@ WINDOWS_VALIDATION_INPUTS = frozenset(
     }
 )
 WINDOWS_VALIDATION_RECIPE_SHA256 = (
-    "072ac56ee4a39c8a22b9127f54706712e6d8c174f15ca08a809d4944645a75ef"
+    "824241afb0a9ca0b5cd27361b7c5b25b2d8b522daeb3beb141b55d5d1b86fb29"
 )
+WINDOWS_VALIDATION_RECIPE_ACTIONS = (".github/actions/canonical-product-checks/action.yml",)
 
 
 def git(root: Path, *arguments: str) -> bytes:
@@ -126,29 +129,93 @@ def validator_regressions_required(
 
 def windows_validation_recipe(root: Path, head: str, environment: dict[str, str]) -> bool:
     """Old or changed workflows keep full runtime coverage until their route is qualified."""
-    result = subprocess.run(
-        ["git", "show", head + ":.github/workflows/mosswork-ci.yml"],
-        cwd=root,
-        env=environment,
-        capture_output=True,
-        check=False,
-    )
-    if result.returncode:
-        return False
-    try:
-        source = result.stdout.decode("utf-8").replace("\r\n", "\n")
-    except UnicodeDecodeError:
-        return False
+    workflow = ".github/workflows/mosswork-ci.yml"
+    sources = {}
+    for name in (workflow, *WINDOWS_VALIDATION_RECIPE_ACTIONS):
+        entry = subprocess.run(
+            ["git", "ls-tree", "-z", head, "--", name],
+            cwd=root,
+            env=environment,
+            capture_output=True,
+            check=False,
+        )
+        if entry.returncode or entry.stdout.count(b"\0") != 1:
+            return False
+        metadata, separator, path = entry.stdout.removesuffix(b"\0").partition(b"\t")
+        if (
+            not separator
+            or path != name.encode("utf-8")
+            or not metadata.startswith((b"100644 blob ", b"100755 blob "))
+        ):
+            return False
+        result = subprocess.run(
+            ["git", "show", head + ":" + name],
+            cwd=root,
+            env=environment,
+            capture_output=True,
+            check=False,
+        )
+        if result.returncode:
+            return False
+        try:
+            sources[name] = result.stdout.decode("utf-8").replace("\r\n", "\n")
+        except UnicodeDecodeError:
+            return False
+    source = sources[workflow]
     blocks = []
-    for job in ("ci-scope", "windows-validation-tools", "release-checks"):
+    for job in ("ci-scope", "release-checks"):
         if len(re.findall(r"(?m)^  " + job + r":", source)) != 1:
             return False
         block = re.search(r"(?ms)^  " + job + r":\n.*?(?=^  [A-Za-z0-9_-]+:|\Z)", source)
         if block is None:
             return False
         blocks.append((block.group(0).rstrip() + "\n").encode("utf-8"))
-    # Bind the selector, its output wiring and both complete tool jobs together.
+    # Bind the complete shared matrix and the local actions it executes together.
+    blocks.extend(
+        (name + "\0" + sources[name]).encode("utf-8") for name in WINDOWS_VALIDATION_RECIPE_ACTIONS
+    )
     return hashlib.sha256(b"\0".join(blocks)).hexdigest() == WINDOWS_VALIDATION_RECIPE_SHA256
+
+
+def ci_check_matrix(plan: CiPlan) -> str:
+    """Keep required checks in one fail-fast matrix with their original budgets."""
+    checks = [
+        {
+            "suite": "release",
+            "os": "ubuntu-24.04",
+            "check_name": "release-checks",
+            "timeout_minutes": 360,
+        }
+    ]
+    if plan["runtime_matrix"]:
+        checks.extend(
+            {
+                "suite": "acp",
+                "os": platform,
+                "check_name": f"ACP runtime observations ({platform})",
+                "timeout_minutes": 20,
+            }
+            for platform in ("ubuntu-24.04", "windows-2022", "macos-15-intel")
+        )
+        checks.extend(
+            {
+                "suite": "interop",
+                "os": platform,
+                "check_name": f"Packaged Sudograph connector interoperability ({platform})",
+                "timeout_minutes": 360,
+            }
+            for platform in ("ubuntu-24.04", "windows-2022")
+        )
+    if plan["windows_validation"]:
+        checks.append(
+            {
+                "suite": "tools",
+                "os": "windows-2022",
+                "check_name": "Windows validation tools",
+                "timeout_minutes": 10,
+            }
+        )
+    return json.dumps({"include": checks}, separators=(",", ":"))
 
 
 def ci_plan(root: Path, base: str, head: str) -> CiPlan:
@@ -519,6 +586,8 @@ def commands(selected: str, changed: list[str] | None = None) -> list[list[str]]
         return []
     tests = [
         "tests/unit/deployment/test_precommit.py",
+        "tests/unit/deployment/test_ci_action_recipe.py",
+        "tests/unit/deployment/test_hook_staging.py",
         "tests/unit/deployment/test_export_public_source.py",
         "tests/unit/deployment/test_ci_identity_reuse.py",
     ]
@@ -851,6 +920,8 @@ def main() -> int:
                         + str(ci_selection["windows_validation"]).lower()
                         + "\nvalidator_regressions="
                         + str(ci_selection["validator_regressions"]).lower()
+                        + "\ncheck_matrix="
+                        + ci_check_matrix(ci_selection)
                         + "\n"
                     )
             return 0

@@ -4,6 +4,7 @@ on:
   pull_request:
     paths:
       - '.github/workflows/mosswork-*.yml'
+      - '.github/actions/canonical-product-checks/**'
       - 'conftest.py'
       - 'tests/conftest.py'
       - 'src/octop/infra/market/**'
@@ -106,6 +107,7 @@ concurrency:
   group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.run_id }}
   cancel-in-progress: true
 
+
 jobs:
   ci-scope:
     name: CI input scope
@@ -114,6 +116,7 @@ jobs:
       runtime_matrix: ${{ steps.scope.outputs.runtime_matrix }}
       windows_validation: ${{ steps.scope.outputs.windows_validation }}
       validator_regressions: ${{ steps.scope.outputs.validator_regressions }}
+      check_matrix: ${{ steps.scope.outputs.check_matrix }}
     steps:
       - uses: actions/checkout@v4
         with:
@@ -124,13 +127,14 @@ jobs:
           CI_BASE: ${{ github.event.pull_request.base.sha }}
           CI_HEAD: ${{ github.event.pull_request.head.sha }}
         run: python3 tools/precommit.py --ci-plan "$CI_BASE" "$CI_HEAD"
-
-  windows-validation-tools:
-    name: Windows validation tools
+  release-checks:
+    name: ${{ matrix.check_name }}
     needs: ci-scope
-    if: needs.ci-scope.outputs.windows_validation == 'true'
-    runs-on: windows-2022
-    timeout-minutes: 10
+    strategy:
+      fail-fast: true
+      matrix: ${{ fromJSON(needs.ci-scope.outputs.check_matrix) }}
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: ${{ matrix.timeout_minutes }}
     steps:
       - uses: actions/checkout@v4
         with:
@@ -139,95 +143,88 @@ jobs:
         with:
           python-version: '3.12'
           enable-cache: true
+        if: ${{ matrix.suite == 'tools' }}
       - name: Run existing validators and export the complete current source
         shell: bash
         env:
           CI_BASE: ${{ github.event.pull_request.base.sha }}
           CI_HEAD: ${{ github.event.pull_request.head.sha }}
         run: uv run --no-project python tools/precommit.py --ci-tools "$CI_BASE" "$CI_HEAD"
+        if: ${{ matrix.suite == 'tools' }}
       - uses: actions/upload-artifact@v4
-        if: always()
         with:
           name: windows-validation-tools
           path: |
             ${{ runner.temp }}/mosswork-ci-tools-*/receipt.json
             ${{ runner.temp }}/mosswork-ci-tools-*/public-source/PUBLIC_SOURCE.json
           if-no-files-found: ignore
-
-  acp-runtime-observations:
-    name: ACP runtime observations (${{ matrix.os }})
-    needs: ci-scope
-    if: needs.ci-scope.outputs.runtime_matrix == 'true'
-    strategy:
-      fail-fast: true
-      matrix:
-        # ACP macOS coverage uses the standard Intel pool. ARM64 is outside this CI leg.
-        os: [ubuntu-24.04, windows-2022, macos-15-intel]
-    runs-on: ${{ matrix.os }}
-    timeout-minutes: 20
-    steps:
-      - uses: actions/checkout@v4
+        if: ${{ matrix.suite == 'tools' && (always()) }}
       - uses: astral-sh/setup-uv@v6
         with:
           python-version: '3.12'
           enable-cache: true
+        if: ${{ matrix.suite == 'acp' }}
       - name: Install the locked workspace
         run: uv sync --locked
+        if: ${{ matrix.suite == 'acp' }}
       - name: Check the ACP implementation and contract tests
         run: |
           uv run --locked ruff check packages/moss-harness/src/moss_harness/acp/runtime_status.py packages/moss-harness/src/moss_harness/acp/service.py packages/moss-harness/src/moss_harness/builtin/tools/acp_runner.py tests/unit/acp tests/support/acp_status_gate.py tools/fetch_acp_test_engine.py
           uv run --locked ruff format --check packages/moss-harness/src/moss_harness/acp/runtime_status.py packages/moss-harness/src/moss_harness/acp/service.py packages/moss-harness/src/moss_harness/builtin/tools/acp_runner.py tests/unit/acp tests/support/acp_status_gate.py tools/fetch_acp_test_engine.py
           uv run --locked mypy --config-file packages/moss-harness/pyproject.toml --follow-imports=silent packages/moss-harness/src/moss_harness/acp/runtime_status.py packages/moss-harness/src/moss_harness/acp/service.py packages/moss-harness/src/moss_harness/builtin/tools/acp_runner.py
+        if: ${{ matrix.suite == 'acp' }}
       - name: Fetch the digest-pinned native test engine
         shell: bash
         run: |
           SCODE_BIN="$(uv run --locked python tools/fetch_acp_test_engine.py --output "$RUNNER_TEMP/acp-test-engine")"
           echo "SCODE_BIN=$SCODE_BIN" >> "$GITHUB_ENV"
+        if: ${{ matrix.suite == 'acp' }}
       - name: Exercise the shared service and actual native process
         env:
           MOSSWORK_ACP_RUNTIME_E2E: '1'
         run: uv run --locked pytest tests/unit/acp tests/unit/agents/test_acp_settings.py tests/integration/test_acp_api.py -q
-
-  sudograph-interop:
-    name: Packaged Sudograph connector interoperability
-    needs: ci-scope
-    if: needs.ci-scope.outputs.runtime_matrix == 'true'
-    strategy:
-      fail-fast: true
-      matrix:
-        os: [ubuntu-24.04, windows-2022]
-    runs-on: ${{ matrix.os }}
-    env:
-      CI_VALIDATOR_REGRESSIONS: ${{ needs.ci-scope.outputs.validator_regressions }}
-    defaults:
-      run:
-        shell: bash
-    steps:
-      - uses: actions/checkout@v4
+        if: ${{ matrix.suite == 'acp' }}
       - uses: astral-sh/setup-uv@v6
         with:
           python-version: '3.12'
           enable-cache: true
+        if: ${{ matrix.suite == 'interop' }}
+        env:
+          CI_VALIDATOR_REGRESSIONS: ${{ needs.ci-scope.outputs.validator_regressions }}
       - uses: actions/setup-node@v4
         with:
-          node-version: '22.21.0'
+          node-version: 22.21.0
           cache: npm
           cache-dependency-path: packages/sudograph-worker/npm-shrinkwrap.json
+        if: ${{ matrix.suite == 'interop' }}
+        env:
+          CI_VALIDATOR_REGRESSIONS: ${{ needs.ci-scope.outputs.validator_regressions }}
       - uses: actions/cache@v4
         with:
           path: ${{ runner.temp }}/sudograph-artifacts/sudograph_compiler-0.1.0-py3-none-any.whl
           key: sudograph-compiler-${{ runner.os }}-b0fcd5b257b995f9764081968f4c797f00d5a70f1d04b771c11818f5204e6ef2
+        if: ${{ matrix.suite == 'interop' }}
+        env:
+          CI_VALIDATOR_REGRESSIONS: ${{ needs.ci-scope.outputs.validator_regressions }}
       - name: Check registered JSON HTTP, TLS and MCP boundaries
         run: |
           uv run --frozen ruff check src/octop/infra/connectors/{fixed_json,tool_protocol,registered_model}.py tests/unit/connectors/test_{fixed_json,registered_model}.py
           uv run --frozen ruff format --check src/octop/infra/connectors/{fixed_json,tool_protocol,registered_model}.py tests/unit/connectors/test_{fixed_json,registered_model}.py
           uv run --frozen mypy --strict src/octop/infra/connectors/{fixed_json,tool_protocol,registered_model}.py
           uv run --frozen pytest tests/unit/connectors/test_fixed_json.py tests/unit/connectors/test_registered_model.py -q --junitxml "$RUNNER_TEMP/fixed-json.xml"
+        if: ${{ matrix.suite == 'interop' }}
+        env:
+          CI_VALIDATOR_REGRESSIONS: ${{ needs.ci-scope.outputs.validator_regressions }}
+        shell: bash
       - name: Check safe frontmatter parsing
         run: |
           uv run --frozen ruff check src/octop/infra/utils/frontmatter.py tests/unit/utils/test_frontmatter.py
           uv run --frozen ruff format --check src/octop/infra/utils/frontmatter.py tests/unit/utils/test_frontmatter.py
           uv run --frozen mypy --follow-imports=silent src/octop/infra/utils/frontmatter.py
+        if: ${{ matrix.suite == 'interop' }}
+        env:
+          CI_VALIDATOR_REGRESSIONS: ${{ needs.ci-scope.outputs.validator_regressions }}
+        shell: bash
       - name: Check source-bound local acceptance
         shell: bash
         run: |
@@ -235,9 +232,15 @@ jobs:
           uv run --frozen ruff format --check tools/test_gate.py tools/ci_identity_reuse.py conftest.py tests/unit/deployment/test_test_gate.py tests/unit/deployment/test_ci_identity_reuse.py
           uv run --frozen mypy --strict tools/test_gate.py
           uv run --frozen mypy --strict tools/ci_identity_reuse.py
+        if: ${{ matrix.suite == 'interop' }}
+        env:
+          CI_VALIDATOR_REGRESSIONS: ${{ needs.ci-scope.outputs.validator_regressions }}
       - name: Check shared fixture, cold CLI and offline catalog isolation
         run: |
           # Share two workers across the original two cohorts; startup and capacity keep their serial boundary.
+          shared_workers=()
+          if [ "$RUNNER_OS" = Linux ]; then shared_workers=(-n 2); fi
+          echo "CI_SHARED_WORKERS: runtime_os=$RUNNER_OS worker_args=${shared_workers[*]:-serial}"
           uv run --frozen pytest \
             tests/unit/connectors/test_qcc_grant.py \
             tests/unit/connectors/test_qcc_oauth_grant.py \
@@ -248,24 +251,24 @@ jobs:
             tests/unit/market \
             tests/integration/test_local_expert_market.py \
             tests/integration/test_local_skill_market.py \
-            -n 2 -q --junitxml "$RUNNER_TEMP/shared-market.xml"
+            "${shared_workers[@]}" -q --junitxml "$RUNNER_TEMP/shared-market.xml"
+        if: ${{ matrix.suite == 'interop' }}
+        env:
+          CI_VALIDATOR_REGRESSIONS: ${{ needs.ci-scope.outputs.validator_regressions }}
+        shell: bash
       - name: Check isolated dependencies and live worker fixtures
         run: |
           uv run --frozen pytest tests/unit/api/test_knowledge_bases.py tests/unit/company_runtime/test_desktop_capacity.py tests/unit/company_runtime/test_local_process.py tests/unit/company_runtime/test_supervised_process_leaf.py tests/unit/infra/test_harness_config_imports.py -q --junitxml "$RUNNER_TEMP/shared-fixtures.xml"
           uv run --frozen pytest tests/unit/db/test_execution.py -q
-      - name: Check retained reviewed registrations and current product ports
-        run: |
-          uv run --frozen ruff check src/octop/infra/db/repos/retained_mcp.py src/octop/infra/native_host/reviewed_mcp.py tests/unit/native_host/test_reviewed_mcp.py tests/unit/native_host/test_registered_mcp_composition.py
-          uv run --frozen ruff format --check src/octop/infra/db/repos/retained_mcp.py src/octop/infra/native_host/reviewed_mcp.py tests/unit/native_host/test_reviewed_mcp.py tests/unit/native_host/test_registered_mcp_composition.py
-          uv run --frozen mypy --strict --follow-imports=silent src/octop/infra/db/repos/retained_mcp.py src/octop/infra/native_host/reviewed_mcp.py
-          uv run --frozen pytest tests/unit/native_host/test_reviewed_mcp.py tests/unit/native_host/test_registered_mcp_composition.py -q \
-            --junitxml "$RUNNER_TEMP/reviewed-mcp.xml"
-      - name: Check canonical business, current member writes and same-instance composition
-        run: |
-          uv run --frozen pytest tests/unit/identity tests/unit/gateway/test_canonical_feishu.py tests/unit/gateway/test_feishu_delivery_business_store.py tests/unit/auth/test_feishu_adapter.py tests/unit/api/test_canonical_request_dependency.py tests/unit/test_canonical_business_product_composition.py tests/unit/test_canonical_business_supplements_consumer.py tests/unit/test_canonical_product_startup.py tests/unit/test_r26_pc3_sms_mount.py tests/unit/db/test_canonical_identity_projection.py tests/unit/i18n -q --junitxml "$RUNNER_TEMP/canonical-business.xml"
-      - name: Check canonical chat and original actor admission
-        run: |
-          uv run --frozen pytest tests/unit/api/test_canonical_chat_websocket.py tests/unit/api/test_canonical_websocket_principal.py tests/unit/test_canonical_execution_admission.py tests/unit/test_canonical_queue_reauthentication.py tests/unit/test_canonical_execution_reauthentication_http.py tests/unit/agents/test_managed_lifecycle_admission.py -q --junitxml "$RUNNER_TEMP/canonical-chat-admission.xml"
+        if: ${{ matrix.suite == 'interop' }}
+        env:
+          CI_VALIDATOR_REGRESSIONS: ${{ needs.ci-scope.outputs.validator_regressions }}
+        shell: bash
+      - name: Check canonical product composition
+        if: ${{ matrix.suite == 'interop' }}
+        uses: ./.github/actions/canonical-product-checks
+        env:
+          CI_VALIDATOR_REGRESSIONS: ${{ needs.ci-scope.outputs.validator_regressions }}
       - name: Build, test and verify the installed current-source worker
         run: |
           uv run --no-project python tools/package_sudograph_worker.py --output "$RUNNER_TEMP/sudograph-worker-package"
@@ -278,6 +281,10 @@ jobs:
               out.write(f"SUDOGRAPH_WORKER_PATH={receipt['worker']}\n")
               out.write(f"SUDOGRAPH_WORKER_SHA256={receipt['worker_sha256']}\n")
           PY
+        if: ${{ matrix.suite == 'interop' }}
+        env:
+          CI_VALIDATOR_REGRESSIONS: ${{ needs.ci-scope.outputs.validator_regressions }}
+        shell: bash
       - name: Verify published compiler bytes
         shell: bash
         run: |
@@ -300,6 +307,9 @@ jobs:
           fi
           uv pip install --python "$compiler" --only-binary :all: "$wheel"
           echo "SUDOGRAPH_COMPILER_PYTHON=$compiler" >> "$GITHUB_ENV"
+        if: ${{ matrix.suite == 'interop' }}
+        env:
+          CI_VALIDATOR_REGRESSIONS: ${{ needs.ci-scope.outputs.validator_regressions }}
       - name: Run actual connector and compiler acceptance
         run: |
           uv run --no-default-groups --frozen python tools/accept_sudograph_worker.py \
@@ -308,13 +318,17 @@ jobs:
             --compiler-python "$SUDOGRAPH_COMPILER_PYTHON" \
             --emit-review-fixture \
             --output "$RUNNER_TEMP/sudograph-acceptance"
+        if: ${{ matrix.suite == 'interop' }}
+        env:
+          CI_VALIDATOR_REGRESSIONS: ${{ needs.ci-scope.outputs.validator_regressions }}
+        shell: bash
       - name: Check connector regressions and portable source exports
         run: |
           # Linux deployment checks already run in release-checks; retain the other platforms here.
           connector_tests=(tests/unit/connectors/test_custom_mcp.py tests/unit/utils/test_frontmatter.py)
           validator_workers=()
           if [ "$RUNNER_OS" != Linux ] && [ "${CI_VALIDATOR_REGRESSIONS:-true}" != false ]; then
-            connector_tests+=(tests/unit/deployment/test_export_public_source.py tests/unit/deployment/test_precommit.py tests/unit/deployment/test_test_gate.py tests/unit/deployment/test_ci_identity_reuse.py tests/unit/deployment/test_make_format_gate.py tests/unit/deployment/test_make_testmon.py tests/unit/deployment/test_frontend_gate.py)
+            connector_tests+=(tests/unit/deployment/test_export_public_source.py tests/unit/deployment/test_precommit.py tests/unit/deployment/test_ci_action_recipe.py tests/unit/deployment/test_hook_staging.py tests/unit/deployment/test_test_gate.py tests/unit/deployment/test_ci_identity_reuse.py tests/unit/deployment/test_make_format_gate.py tests/unit/deployment/test_make_testmon.py tests/unit/deployment/test_frontend_gate.py)
             # These validators use private Git, Make and pytest fixture roots.
             validator_workers=(-n 2)
           fi
@@ -325,6 +339,10 @@ jobs:
           uv run --frozen pytest tests/integration/test_connectors_api.py -q -k 'patch_custom_mcp_server_default_open_only or shared_custom_mcp_is_visible_with_collision_safe_name or chat_rejects_unknown_mcp or chat_accepts_user_instance_mcp'
           uv run --frozen python tools/export_public_source.py --output "$RUNNER_TEMP/sudograph-public-source"
           uv run --frozen python tools/check_public_source.py --root "$RUNNER_TEMP/sudograph-public-source"
+        if: ${{ matrix.suite == 'interop' }}
+        env:
+          CI_VALIDATOR_REGRESSIONS: ${{ needs.ci-scope.outputs.validator_regressions }}
+        shell: bash
       - name: Check domain client with the real installed worker
         run: |
           export MOSSWORK_TEST_SUDOGRAPH_WORKER="$SUDOGRAPH_WORKER_PATH"
@@ -335,8 +353,11 @@ jobs:
           uv run --frozen mypy src/octop/infra/sudograph src/octop/infra/native_host/sudograph.py --follow-imports=silent
           uv run --frozen pytest tests/unit/sudograph tests/unit/native_host/test_sudograph.py tests/unit/native_host/test_sudograph_write_outcome.py tests/integration/test_sudograph_client_worker.py -q \
             --basetemp "$RUNNER_TEMP/sudograph-domain-client" --junitxml "$RUNNER_TEMP/sudograph-domain-client.xml"
+        if: ${{ matrix.suite == 'interop' }}
+        env:
+          CI_VALIDATOR_REGRESSIONS: ${{ needs.ci-scope.outputs.validator_regressions }}
+        shell: bash
       - uses: actions/upload-artifact@v4
-        if: always()
         with:
           name: sudograph-interop-receipts-${{ runner.os }}
           path: |
@@ -351,45 +372,40 @@ jobs:
             ${{ runner.temp }}/sudograph-worker-package/*.tgz
             ${{ runner.temp }}/sudograph-domain-client.xml
             ${{ runner.temp }}/fixed-json.xml
-            ${{ runner.temp }}/reviewed-mcp.xml
-            ${{ runner.temp }}/canonical-business.xml
-            ${{ runner.temp }}/canonical-chat-admission.xml
             ${{ runner.temp }}/shared-market.xml
             ${{ runner.temp }}/shared-fixtures.xml
             ${{ runner.temp }}/sudograph-domain-client/**/domain-client-receipt.json
             ${{ runner.temp }}/sudograph-domain-client/**/fixed-json-client-receipt.json
             ${{ runner.temp }}/sudograph-domain-client/**/write-outcome-receipt.json
           if-no-files-found: ignore
-  release-checks:
-    needs: ci-scope
-    runs-on: ubuntu-24.04
-    env:
-      CI_VALIDATOR_REGRESSIONS: ${{ needs.ci-scope.outputs.validator_regressions }}
-    steps:
-      - uses: actions/checkout@v4
-        with:
-          # The tool route verifies both PR inputs against this merge checkout.
-          fetch-depth: 2
+        if: ${{ matrix.suite == 'interop' && (always()) }}
+        env:
+          CI_VALIDATOR_REGRESSIONS: ${{ needs.ci-scope.outputs.validator_regressions }}
       - uses: actions/setup-node@v4
         with:
           node-version: '20'
+        if: ${{ matrix.suite == 'release' }}
+        env:
+          CI_VALIDATOR_REGRESSIONS: ${{ needs.ci-scope.outputs.validator_regressions }}
       - uses: astral-sh/setup-uv@v6
         with:
           python-version: '3.12'
           enable-cache: true
-      # Both platform tool jobs run the same validators and complete-source checks.
-      - name: Check independent validation tools and the complete current source
-        if: needs.ci-scope.outputs.windows_validation == 'true'
+        if: ${{ matrix.suite == 'release' }}
         env:
+          CI_VALIDATOR_REGRESSIONS: ${{ needs.ci-scope.outputs.validator_regressions }}
+      - name: Check independent validation tools and the complete current source
+        env:
+          CI_VALIDATOR_REGRESSIONS: ${{ needs.ci-scope.outputs.validator_regressions }}
           CI_BASE: ${{ github.event.pull_request.base.sha }}
           CI_HEAD: ${{ github.event.pull_request.head.sha }}
         run: uv run --no-project python tools/precommit.py --ci-tools "$CI_BASE" "$CI_HEAD"
+        if: ${{ matrix.suite == 'release' && (needs.ci-scope.outputs.windows_validation == 'true') }}
       - name: Test packaging, exports and deployment
-        if: needs.ci-scope.outputs.windows_validation != 'true'
         run: |
           validator_args=()
           if [ "${CI_VALIDATOR_REGRESSIONS:-true}" = false ]; then
-            for module in test_export_public_source test_precommit test_test_gate test_ci_identity_reuse test_make_format_gate test_make_testmon test_frontend_gate; do
+            for module in test_export_public_source test_precommit test_ci_action_recipe test_hook_staging test_test_gate test_ci_identity_reuse test_make_format_gate test_make_testmon test_frontend_gate; do
               validator_args+=("--ignore=tests/unit/deployment/$module.py")
             done
           fi
@@ -397,6 +413,9 @@ jobs:
           if [ "${CI_VALIDATOR_REGRESSIONS:-true}" = false ]; then
             uv run --frozen pytest tests/unit/deployment/test_make_testmon.py::test_full_make_records_real_baseline_and_preserves_failure -q
           fi
+        if: ${{ matrix.suite == 'release' && (needs.ci-scope.outputs.windows_validation != 'true') }}
+        env:
+          CI_VALIDATOR_REGRESSIONS: ${{ needs.ci-scope.outputs.validator_regressions }}
       - name: Check shell and workflow syntax
         run: |
           for script in scripts/install-moss-server.sh docker/deploy/*.sh docker/enterprise/{prepare.sh,deploy.sh,start.sh,stop.sh}; do
@@ -406,16 +425,28 @@ jobs:
           sh -n .githooks/test-gate
           shellcheck scripts/install-moss-server.sh tools/publish-release-to-cos.sh docker/deploy/*.sh docker/enterprise/{prepare.sh,deploy.sh,start.sh,stop.sh}
           go run github.com/rhysd/actionlint/cmd/actionlint@v1.7.12 .github/workflows/mosswork-ci.yml .github/workflows/mosswork-release.yml .github/workflows/mosswork-cos-publish.yml .github/workflows/mosswork-desktop-update.yml
+        if: ${{ matrix.suite == 'release' }}
+        env:
+          CI_VALIDATOR_REGRESSIONS: ${{ needs.ci-scope.outputs.validator_regressions }}
       - name: Validate public source export
-        if: needs.ci-scope.outputs.windows_validation != 'true'
         run: |
           python3 tools/export_public_source.py --output "$RUNNER_TEMP/mosswork-source"
           python3 tools/check_public_source.py --root "$RUNNER_TEMP/mosswork-source"
+        if: ${{ matrix.suite == 'release' && (needs.ci-scope.outputs.windows_validation != 'true') }}
+        env:
+          CI_VALIDATOR_REGRESSIONS: ${{ needs.ci-scope.outputs.validator_regressions }}
       - uses: actions/upload-artifact@v4
-        if: always() && needs.ci-scope.outputs.windows_validation == 'true'
         with:
           name: linux-validation-tools
           path: |
             ${{ runner.temp }}/mosswork-ci-tools-*/receipt.json
             ${{ runner.temp }}/mosswork-ci-tools-*/public-source/PUBLIC_SOURCE.json
           if-no-files-found: ignore
+        if: ${{ matrix.suite == 'release' && (always() && needs.ci-scope.outputs.windows_validation == 'true') }}
+        env:
+          CI_VALIDATOR_REGRESSIONS: ${{ needs.ci-scope.outputs.validator_regressions }}
+      - name: Report the original matrix result
+        if: ${{ always() }}
+        shell: bash
+        run: |
+          echo "CI_GROUP_RESULT: suite=${{ matrix.suite }} status=${{ job.status }}. Failed checks retain their logs; cancelled siblings are unexecuted. Correct the original failure before publishing the next source."
