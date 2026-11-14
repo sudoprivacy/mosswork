@@ -37,10 +37,12 @@ def _case(name: str) -> dict[str, Any]:
 def legacy_db(tmp_path: Path) -> Path:
     path = tmp_path / "original-canonical.sqlite"
     with sqlite3.connect(path) as connection:
+        connection.execute("PRAGMA foreign_keys = ON")
         # Original authCenter/db.ts also adds the verified phone column/index
         # after its base CREATE users DDL. This is fixture setup, not app migration.
+        # Batch the original DDL and seed writes in this fixture's transaction.
         connection.executescript(
-            "PRAGMA foreign_keys = ON;"
+            "BEGIN;"
             + _FROZEN_SCHEMA
             + "ALTER TABLE users ADD COLUMN phone TEXT;"
             + "CREATE UNIQUE INDEX users_phone_uniq ON users (phone) WHERE phone IS NOT NULL;"
