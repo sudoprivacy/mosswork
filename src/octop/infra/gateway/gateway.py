@@ -16,6 +16,7 @@ from moss_gateway.manager import ChannelManager
 from moss_gateway.models import ChannelSubject
 
 from octop.i18n import channel_probe_incomplete, channel_runtime_reason, tr
+from octop.infra.browser.control import pause_user_browser
 from octop.infra.db.repos.channels import ChannelRow
 from octop.infra.db.repos.sessions import SessionRow
 from octop.infra.errors import ErrorCode, MossworkError
@@ -171,6 +172,9 @@ class Gateway:
                 thread_id,
                 {"type": "steer.discarded", "thread_id": thread_id, **asdict(discarded)},
             )
+        row = self._thread_registry.get_thread(thread_id)
+        if row is not None and row.agent_id == agent_id:
+            await pause_user_browser(row.user_id, self._agent_manager.paths.root)
 
     @property
     def cli_hub(self) -> CliHub:
@@ -562,6 +566,9 @@ class Gateway:
             return
 
         self._agent_manager.cancel_stream(agent_id.strip(), thread_id)
+        row = self._thread_registry.get_thread(thread_id)
+        if row is not None and row.agent_id == agent_id.strip():
+            await pause_user_browser(row.user_id, self._agent_manager.paths.root)
         logger.info(
             "preempt cancel: agent=%s thread=%s cmd=/%s",
             agent_id,

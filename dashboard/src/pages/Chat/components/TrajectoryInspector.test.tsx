@@ -17,6 +17,15 @@ vi.mock("../../../api/modules/trajectory", async (importOriginal) => {
   };
 });
 
+// Assert fetching and formatting with the real parser. The lazy wrapper's
+// pending/ready boundary is exercised separately in LazyMarkdown.test.tsx.
+vi.mock("../../../components/Markdown/LazyMarkdown", async () => {
+  const actual = await vi.importActual<
+    typeof import("../../../components/Markdown")
+  >("../../../components/Markdown");
+  return { default: actual.default };
+});
+
 import TrajectoryInspector, { findSourceEventId } from "./TrajectoryInspector";
 
 function event(

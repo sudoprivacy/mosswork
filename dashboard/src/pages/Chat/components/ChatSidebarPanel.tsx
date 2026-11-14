@@ -29,7 +29,7 @@ interface ChatSidebarPanelProps {
   onAgentSelect: (agentId: string) => void;
   /** Start a fresh chat from an expert row (classic + minimal). */
   onNewChatWithAgent: (agentId: string) => void;
-  onDeleteSession: (id: string) => void;
+  onDeleteSession: (id: string) => Promise<boolean>;
   onRenameSession: (id: string, name: string) => void;
   onPinSession: (id: string, pinned: boolean) => void;
   onForkSession: (id: string, agentId?: string | null) => void;

@@ -4,7 +4,7 @@ import zhCN from "antd/locale/zh_CN";
 import enUS from "antd/locale/en_US";
 import dayjs from "dayjs";
 import "dayjs/locale/zh-cn";
-import { useEffect } from "react";
+import { lazy, Suspense, useEffect } from "react";
 import DesktopWindowControls from "./components/DesktopWindowControls";
 import {
   DesktopChromeProvider,
@@ -15,7 +15,7 @@ import { useTranslation } from "react-i18next";
 import { CommunicationProvider } from "./pages/Messaging/hooks/CommunicationContext";
 import { ConversationNavigationProvider } from "./layouts/ConversationNavigation";
 import MainLayout from "./layouts/MainLayout";
-import LoginPage from "./pages/Login";
+import LoginPage, { CanonicalMossLoginPage } from "./pages/Login";
 import OidcComplete from "./pages/Login/OidcComplete";
 import SetupPage from "./pages/Setup";
 import InvitePage from "./pages/Invite";
@@ -43,6 +43,8 @@ const GlobalStyle = createGlobalStyle`
   box-sizing: border-box;
 }
 `;
+
+const HumanReviewPage = lazy(() => import("./pages/Review"));
 
 function ThemedApp() {
   const { isDark, palette, customColor } = useTheme();
@@ -136,9 +138,20 @@ function ThemedApp() {
           ) : null}
           <Routes>
             <Route path="/login" element={<LoginPage />} />
+            <Route path="/login/moss" element={<CanonicalMossLoginPage />} />
             <Route path="/login/oidc/complete" element={<OidcComplete />} />
             <Route path="/setup" element={<SetupPage />} />
             <Route path="/invite" element={<InvitePage />} />
+            <Route
+              path="/reviews/:projectId/:reviewId"
+              element={
+                <AuthGuard canonicalReview>
+                  <Suspense fallback={<MossworkSpinner />}>
+                    <HumanReviewPage />
+                  </Suspense>
+                </AuthGuard>
+              }
+            />
             <Route
               path="/*"
               element={

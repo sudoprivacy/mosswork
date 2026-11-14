@@ -39,6 +39,7 @@ export function useBrowserKeyboardInput({
   const pressedRef = useRef(new Map<string, ReturnType<typeof keyEvent>>());
 
   const releaseKeys = useCallback(() => {
+    if (composingRef.current) onEvent({ type: "compositionend" });
     for (const event of pressedRef.current.values()) {
       onEvent({
         ...event,
@@ -122,15 +123,22 @@ export function useBrowserKeyboardInput({
   };
 
   const onCompositionStart = () => {
+    if (!enabled) return;
     composingRef.current = true;
     committedRef.current = null;
+    onEvent({ type: "compositionstart" });
   };
 
   const onCompositionEnd = (event: CompositionEvent<HTMLTextAreaElement>) => {
+    const wasComposing = composingRef.current;
     composingRef.current = false;
     event.currentTarget.value = "";
-    if (!enabled || !event.data) return;
+    if (!enabled || !event.data) {
+      if (wasComposing) onEvent({ type: "compositionend" });
+      return;
+    }
     onEvent({ type: "type", text: event.data });
+    onEvent({ type: "compositionend" });
     committedRef.current = event.data;
     clearTimeout(commitTimerRef.current);
     commitTimerRef.current = setTimeout(() => {

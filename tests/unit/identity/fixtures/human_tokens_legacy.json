@@ -1,0 +1,787 @@
+{
+  "sourceCommit": "d0b84d4c8fd5905d9ec3f7c160f2ce633f535d0d",
+  "sourcePath": "src/server/auth/token.ts",
+  "sourceSha256": "825bc53f4037f7fdc90b8e46e1a4f1a73390e0070db1c6bd39f5691383f0bbb8",
+  "producer": "Exact git-show token.ts executed by Node TypeScript stripping; appended dummy-fixture generator only",
+  "verificationTime": 2000000000,
+  "dummySecret": "public-local-fixture-only-not-a-production-secret",
+  "issuer": "retained-moss-fixture",
+  "ids": {
+    "account": "9cdd9b27-a3f0-40a6-9015-8b170c237c67",
+    "homeOrg": "4ce65010-7331-415a-abaa-4d47387d845e",
+    "companyOrg": "d3f29104-c19b-4594-859c-a92734c82dbb",
+    "homeMember": "c2cc8374-8cdf-4936-8967-d891fb500634",
+    "companyMember": "23483f4d-daa0-44a5-8d60-09b19be380d7"
+  },
+  "cases": [
+    {
+      "name": "sms_home",
+      "token": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJyZXRhaW5lZC1tb3NzLWZpeHR1cmUiLCJzdWIiOiJjMmNjODM3NC04Y2RmLTQ5MzYtODk2Ny1kODkxZmI1MDA2MzQiLCJvcmdfaWQiOiI0Y2U2NTAxMC03MzMxLTQxNWEtYWJhYS00ZDQ3Mzg3ZDg0NWUiLCJyb2xlIjoiYWRtaW4iLCJzY29wZXMiOlsiKiJdLCJrZXlfaWQiOiJwaG9uZS1sb2dpbiIsImF1dGhfYXBwIjoic3Vkb3dvcmsiLCJhY2NvdW50X2lkIjoiOWNkZDliMjctYTNmMC00MGE2LTkwMTUtOGIxNzBjMjM3YzY3IiwidHlwZSI6ImFjY2VzcyIsImp0aSI6IjY4ZDk4NzUwLTBjOTItNGM2Ny05ZDExLTE5MTVmMGE2YmRiZCIsImlhdCI6MjAwMDAwMDAwMCwiZXhwIjoyMDAwMDAwMzAwfQ.T5AaViTJSvhADHHlnvuW_9HjOzQYBBapp-j7gu2tIvo",
+      "expectedAudience": null,
+      "originalAccepted": true,
+      "humanAccepted": true,
+      "reason": "",
+      "original": {
+        "userId": "c2cc8374-8cdf-4936-8967-d891fb500634",
+        "orgId": "4ce65010-7331-415a-abaa-4d47387d845e",
+        "role": "admin",
+        "keyId": "phone-login",
+        "authApp": "sudowork",
+        "accountId": "9cdd9b27-a3f0-40a6-9015-8b170c237c67",
+        "jti": "68d98750-0c92-4c67-9d11-1915f0a6bdbd",
+        "exp": 2000000300,
+        "scopes": [
+          "*"
+        ]
+      }
+    },
+    {
+      "name": "sms_company_actual_member",
+      "token": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJyZXRhaW5lZC1tb3NzLWZpeHR1cmUiLCJzdWIiOiIyMzQ4M2Y0ZC1kYWEwLTQ0YTUtOGQ2MC0wOWIxOWJlMzgwZDciLCJvcmdfaWQiOiJkM2YyOTEwNC1jMTliLTQ1OTQtODU5Yy1hOTI3MzRjODJkYmIiLCJyb2xlIjoidXNlciIsInNjb3BlcyI6WyIqIl0sImtleV9pZCI6InBob25lLWxvZ2luIiwiYXV0aF9hcHAiOiJzdWRvd29yayIsImFjY291bnRfaWQiOiI5Y2RkOWIyNy1hM2YwLTQwYTYtOTAxNS04YjE3MGMyMzdjNjciLCJ0eXBlIjoiYWNjZXNzIiwianRpIjoiY2QwNTNjYjItZjA5Zi00ZGYzLWEzYzEtNjZjNWMzYTEyOGQ2IiwiaWF0IjoyMDAwMDAwMDAwLCJleHAiOjIwMDAwMDAzMDB9.8x0g_ii6SygZpksopzd20eyg2BSg2dJ49IWOLbo2bJs",
+      "expectedAudience": null,
+      "originalAccepted": true,
+      "humanAccepted": true,
+      "reason": "",
+      "original": {
+        "userId": "23483f4d-daa0-44a5-8d60-09b19be380d7",
+        "orgId": "d3f29104-c19b-4594-859c-a92734c82dbb",
+        "role": "user",
+        "keyId": "phone-login",
+        "authApp": "sudowork",
+        "accountId": "9cdd9b27-a3f0-40a6-9015-8b170c237c67",
+        "jti": "cd053cb2-f09f-4df3-a3c1-66c5c3a128d6",
+        "exp": 2000000300,
+        "scopes": [
+          "*"
+        ]
+      }
+    },
+    {
+      "name": "legacy_phone_without_account_claim",
+      "token": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJyZXRhaW5lZC1tb3NzLWZpeHR1cmUiLCJzdWIiOiJjMmNjODM3NC04Y2RmLTQ5MzYtODk2Ny1kODkxZmI1MDA2MzQiLCJvcmdfaWQiOiI0Y2U2NTAxMC03MzMxLTQxNWEtYWJhYS00ZDQ3Mzg3ZDg0NWUiLCJyb2xlIjoiYWRtaW4iLCJzY29wZXMiOlsiKiJdLCJrZXlfaWQiOiJwaG9uZS1sb2dpbiIsImF1dGhfYXBwIjoic3Vkb3dvcmsiLCJ0eXBlIjoiYWNjZXNzIiwianRpIjoiNjhkOTg3NTAtMGM5Mi00YzY3LTlkMTEtMTkxNWYwYTZiZGJkIiwiaWF0IjoyMDAwMDAwMDAwLCJleHAiOjIwMDAwMDAzMDB9.SG79ix2hs9aDs2qpbAruMhCSGPnZMyum_aiZW0_P_8s",
+      "expectedAudience": null,
+      "originalAccepted": true,
+      "humanAccepted": true,
+      "reason": "",
+      "original": {
+        "userId": "c2cc8374-8cdf-4936-8967-d891fb500634",
+        "orgId": "4ce65010-7331-415a-abaa-4d47387d845e",
+        "role": "admin",
+        "keyId": "phone-login",
+        "authApp": "sudowork",
+        "jti": "68d98750-0c92-4c67-9d11-1915f0a6bdbd",
+        "exp": 2000000300,
+        "scopes": [
+          "*"
+        ]
+      }
+    },
+    {
+      "name": "password_human",
+      "token": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJyZXRhaW5lZC1tb3NzLWZpeHR1cmUiLCJzdWIiOiJjMmNjODM3NC04Y2RmLTQ5MzYtODk2Ny1kODkxZmI1MDA2MzQiLCJvcmdfaWQiOiI0Y2U2NTAxMC03MzMxLTQxNWEtYWJhYS00ZDQ3Mzg3ZDg0NWUiLCJyb2xlIjoiYWRtaW4iLCJzY29wZXMiOlsiKiJdLCJrZXlfaWQiOiJwYXNzd29yZC1sb2dpbiIsImF1dGhfYXBwIjoic3Vkb3dvcmsiLCJ0eXBlIjoiYWNjZXNzIiwianRpIjoiNjhkOTg3NTAtMGM5Mi00YzY3LTlkMTEtMTkxNWYwYTZiZGJkIiwiaWF0IjoyMDAwMDAwMDAwLCJleHAiOjIwMDAwMDAzMDB9.j5zGsIzmrb_Ax9AtGM5dbuHBAuEJjT7XzcfJPU6-9F4",
+      "expectedAudience": null,
+      "originalAccepted": true,
+      "humanAccepted": true,
+      "reason": "",
+      "original": {
+        "userId": "c2cc8374-8cdf-4936-8967-d891fb500634",
+        "orgId": "4ce65010-7331-415a-abaa-4d47387d845e",
+        "role": "admin",
+        "keyId": "password-login",
+        "authApp": "sudowork",
+        "jti": "68d98750-0c92-4c67-9d11-1915f0a6bdbd",
+        "exp": 2000000300,
+        "scopes": [
+          "*"
+        ]
+      }
+    },
+    {
+      "name": "moss_password_human",
+      "token": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJyZXRhaW5lZC1tb3NzLWZpeHR1cmUiLCJzdWIiOiJjMmNjODM3NC04Y2RmLTQ5MzYtODk2Ny1kODkxZmI1MDA2MzQiLCJvcmdfaWQiOiI0Y2U2NTAxMC03MzMxLTQxNWEtYWJhYS00ZDQ3Mzg3ZDg0NWUiLCJyb2xlIjoiYWRtaW4iLCJzY29wZXMiOlsiKiJdLCJrZXlfaWQiOiJtb3NzLXBhc3N3b3JkLWxvZ2luIiwiYXV0aF9hcHAiOiJtb3NzIiwidHlwZSI6ImFjY2VzcyIsImp0aSI6IjY4ZDk4NzUwLTBjOTItNGM2Ny05ZDExLTE5MTVmMGE2YmRiZCIsImlhdCI6MjAwMDAwMDAwMCwiZXhwIjoyMDAwMDAwMzAwfQ.r7DHTT3AUXaHeUxfUJXUMdDfhob00zB5eE0JThNeSQE",
+      "expectedAudience": null,
+      "originalAccepted": true,
+      "humanAccepted": true,
+      "reason": "",
+      "original": {
+        "userId": "c2cc8374-8cdf-4936-8967-d891fb500634",
+        "orgId": "4ce65010-7331-415a-abaa-4d47387d845e",
+        "role": "admin",
+        "keyId": "moss-password-login",
+        "authApp": "moss",
+        "jti": "68d98750-0c92-4c67-9d11-1915f0a6bdbd",
+        "exp": 2000000300,
+        "scopes": [
+          "*"
+        ]
+      }
+    },
+    {
+      "name": "cas_human",
+      "token": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJyZXRhaW5lZC1tb3NzLWZpeHR1cmUiLCJzdWIiOiJjMmNjODM3NC04Y2RmLTQ5MzYtODk2Ny1kODkxZmI1MDA2MzQiLCJvcmdfaWQiOiI0Y2U2NTAxMC03MzMxLTQxNWEtYWJhYS00ZDQ3Mzg3ZDg0NWUiLCJyb2xlIjoiYWRtaW4iLCJzY29wZXMiOlsiKiJdLCJrZXlfaWQiOiJjYXMtbG9naW4iLCJhdXRoX2FwcCI6InN1ZG93b3JrIiwidHlwZSI6ImFjY2VzcyIsImp0aSI6IjY4ZDk4NzUwLTBjOTItNGM2Ny05ZDExLTE5MTVmMGE2YmRiZCIsImlhdCI6MjAwMDAwMDAwMCwiZXhwIjoyMDAwMDAwMzAwfQ.dGhcYY3cEFTTgN5RvcjL8YIf0hooxuAnedqZzPj8HVw",
+      "expectedAudience": null,
+      "originalAccepted": true,
+      "humanAccepted": true,
+      "reason": "",
+      "original": {
+        "userId": "c2cc8374-8cdf-4936-8967-d891fb500634",
+        "orgId": "4ce65010-7331-415a-abaa-4d47387d845e",
+        "role": "admin",
+        "keyId": "cas-login",
+        "authApp": "sudowork",
+        "jti": "68d98750-0c92-4c67-9d11-1915f0a6bdbd",
+        "exp": 2000000300,
+        "scopes": [
+          "*"
+        ]
+      }
+    },
+    {
+      "name": "oauth2_human",
+      "token": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJyZXRhaW5lZC1tb3NzLWZpeHR1cmUiLCJzdWIiOiJjMmNjODM3NC04Y2RmLTQ5MzYtODk2Ny1kODkxZmI1MDA2MzQiLCJvcmdfaWQiOiI0Y2U2NTAxMC03MzMxLTQxNWEtYWJhYS00ZDQ3Mzg3ZDg0NWUiLCJyb2xlIjoiYWRtaW4iLCJzY29wZXMiOlsiKiJdLCJrZXlfaWQiOiJvYXV0aDItbG9naW4iLCJhdXRoX2FwcCI6InN1ZG93b3JrIiwidHlwZSI6ImFjY2VzcyIsImp0aSI6IjY4ZDk4NzUwLTBjOTItNGM2Ny05ZDExLTE5MTVmMGE2YmRiZCIsImlhdCI6MjAwMDAwMDAwMCwiZXhwIjoyMDAwMDAwMzAwfQ.ixao7oABScFXOnennTktjnhRU0QY70FcgipyAGL-qgQ",
+      "expectedAudience": null,
+      "originalAccepted": true,
+      "humanAccepted": true,
+      "reason": "",
+      "original": {
+        "userId": "c2cc8374-8cdf-4936-8967-d891fb500634",
+        "orgId": "4ce65010-7331-415a-abaa-4d47387d845e",
+        "role": "admin",
+        "keyId": "oauth2-login",
+        "authApp": "sudowork",
+        "jti": "68d98750-0c92-4c67-9d11-1915f0a6bdbd",
+        "exp": 2000000300,
+        "scopes": [
+          "*"
+        ]
+      }
+    },
+    {
+      "name": "current_role_mismatch",
+      "token": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJyZXRhaW5lZC1tb3NzLWZpeHR1cmUiLCJzdWIiOiJjMmNjODM3NC04Y2RmLTQ5MzYtODk2Ny1kODkxZmI1MDA2MzQiLCJvcmdfaWQiOiI0Y2U2NTAxMC03MzMxLTQxNWEtYWJhYS00ZDQ3Mzg3ZDg0NWUiLCJyb2xlIjoidXNlciIsInNjb3BlcyI6WyIqIl0sImtleV9pZCI6InBob25lLWxvZ2luIiwiYXV0aF9hcHAiOiJzdWRvd29yayIsImFjY291bnRfaWQiOiI5Y2RkOWIyNy1hM2YwLTQwYTYtOTAxNS04YjE3MGMyMzdjNjciLCJ0eXBlIjoiYWNjZXNzIiwianRpIjoiYjE4ODY2NjEtZTAxYy00Y2Q1LWFjZGItZGFjMmJiZDYzYTk2IiwiaWF0IjoyMDAwMDAwMDAwLCJleHAiOjIwMDAwMDAzMDB9.gJux9xLLIJEoT50Q6YCh2NMn66U0AHMtjk_Hv7q2JTM",
+      "expectedAudience": null,
+      "originalAccepted": true,
+      "humanAccepted": false,
+      "reason": "Current canonical member is admin",
+      "original": {
+        "userId": "c2cc8374-8cdf-4936-8967-d891fb500634",
+        "orgId": "4ce65010-7331-415a-abaa-4d47387d845e",
+        "role": "user",
+        "keyId": "phone-login",
+        "authApp": "sudowork",
+        "accountId": "9cdd9b27-a3f0-40a6-9015-8b170c237c67",
+        "jti": "b1886661-e01c-4cd5-acdb-dac2bbd63a96",
+        "exp": 2000000300,
+        "scopes": [
+          "*"
+        ]
+      }
+    },
+    {
+      "name": "foreign_org_super_admin",
+      "token": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJyZXRhaW5lZC1tb3NzLWZpeHR1cmUiLCJzdWIiOiJjMmNjODM3NC04Y2RmLTQ5MzYtODk2Ny1kODkxZmI1MDA2MzQiLCJvcmdfaWQiOiJkM2YyOTEwNC1jMTliLTQ1OTQtODU5Yy1hOTI3MzRjODJkYmIiLCJyb2xlIjoic3VwZXJfYWRtaW4iLCJzY29wZXMiOlsiKiJdLCJrZXlfaWQiOiJwaG9uZS1sb2dpbiIsImF1dGhfYXBwIjoic3Vkb3dvcmsiLCJhY2NvdW50X2lkIjoiOWNkZDliMjctYTNmMC00MGE2LTkwMTUtOGIxNzBjMjM3YzY3IiwidHlwZSI6ImFjY2VzcyIsImp0aSI6ImY0NTgyZmEzLWZlOWUtNDRlYi1iMjM1LTQxY2MwOGVlMTlhMCIsImlhdCI6MjAwMDAwMDAwMCwiZXhwIjoyMDAwMDAwMzAwfQ.xGXN1nmvzbnA2emdtjaEYBltDVEy34dIqzImKstmlT4",
+      "expectedAudience": null,
+      "originalAccepted": true,
+      "humanAccepted": false,
+      "reason": "A foreign-org administrative actor is not a member in that organization",
+      "original": {
+        "userId": "c2cc8374-8cdf-4936-8967-d891fb500634",
+        "orgId": "d3f29104-c19b-4594-859c-a92734c82dbb",
+        "role": "super_admin",
+        "keyId": "phone-login",
+        "authApp": "sudowork",
+        "accountId": "9cdd9b27-a3f0-40a6-9015-8b170c237c67",
+        "jti": "f4582fa3-fe9e-44eb-b235-41cc08ee19a0",
+        "exp": 2000000300,
+        "scopes": [
+          "*"
+        ]
+      }
+    },
+    {
+      "name": "wrong_account_claim",
+      "token": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJyZXRhaW5lZC1tb3NzLWZpeHR1cmUiLCJzdWIiOiJjMmNjODM3NC04Y2RmLTQ5MzYtODk2Ny1kODkxZmI1MDA2MzQiLCJvcmdfaWQiOiI0Y2U2NTAxMC03MzMxLTQxNWEtYWJhYS00ZDQ3Mzg3ZDg0NWUiLCJyb2xlIjoiYWRtaW4iLCJzY29wZXMiOlsiKiJdLCJrZXlfaWQiOiJwaG9uZS1sb2dpbiIsImF1dGhfYXBwIjoic3Vkb3dvcmsiLCJhY2NvdW50X2lkIjoiMjM0ODNmNGQtZGFhMC00NGE1LThkNjAtMDliMTliZTM4MGQ3IiwidHlwZSI6ImFjY2VzcyIsImp0aSI6ImIwYzY3NGQxLTg1NjQtNGNhOC1hNDFjLTZhNDc0NmRmMWRlMSIsImlhdCI6MjAwMDAwMDAwMCwiZXhwIjoyMDAwMDAwMzAwfQ.VMGpRAHOOcQ2RWHYW1WQZ8i4PvkLJNDrHT1MHNreRUE",
+      "expectedAudience": null,
+      "originalAccepted": true,
+      "humanAccepted": false,
+      "reason": "Real account comes from membership",
+      "original": {
+        "userId": "c2cc8374-8cdf-4936-8967-d891fb500634",
+        "orgId": "4ce65010-7331-415a-abaa-4d47387d845e",
+        "role": "admin",
+        "keyId": "phone-login",
+        "authApp": "sudowork",
+        "accountId": "23483f4d-daa0-44a5-8d60-09b19be380d7",
+        "jti": "b0c674d1-8564-4ca8-a41c-6a4746df1de1",
+        "exp": 2000000300,
+        "scopes": [
+          "*"
+        ]
+      }
+    },
+    {
+      "name": "api_key_credential",
+      "token": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJyZXRhaW5lZC1tb3NzLWZpeHR1cmUiLCJzdWIiOiJjMmNjODM3NC04Y2RmLTQ5MzYtODk2Ny1kODkxZmI1MDA2MzQiLCJvcmdfaWQiOiI0Y2U2NTAxMC03MzMxLTQxNWEtYWJhYS00ZDQ3Mzg3ZDg0NWUiLCJyb2xlIjoiYWRtaW4iLCJzY29wZXMiOlsiKiJdLCJrZXlfaWQiOiJmaXh0dXJlLWFwaS1rZXkiLCJ0eXBlIjoiYWNjZXNzIiwianRpIjoiNjhkOTg3NTAtMGM5Mi00YzY3LTlkMTEtMTkxNWYwYTZiZGJkIiwiaWF0IjoyMDAwMDAwMDAwLCJleHAiOjIwMDAwMDAzMDB9.fek_AX9udYqGC34OD6U6JnXkSBp552ZCaSDzwXF18Gs",
+      "expectedAudience": null,
+      "originalAccepted": true,
+      "humanAccepted": false,
+      "reason": "Machine key is not a human login",
+      "original": {
+        "userId": "c2cc8374-8cdf-4936-8967-d891fb500634",
+        "orgId": "4ce65010-7331-415a-abaa-4d47387d845e",
+        "role": "admin",
+        "keyId": "fixture-api-key",
+        "jti": "68d98750-0c92-4c67-9d11-1915f0a6bdbd",
+        "exp": 2000000300,
+        "scopes": [
+          "*"
+        ]
+      }
+    },
+    {
+      "name": "internal_channel_credential",
+      "token": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJyZXRhaW5lZC1tb3NzLWZpeHR1cmUiLCJzdWIiOiJjMmNjODM3NC04Y2RmLTQ5MzYtODk2Ny1kODkxZmI1MDA2MzQiLCJvcmdfaWQiOiI0Y2U2NTAxMC03MzMxLTQxNWEtYWJhYS00ZDQ3Mzg3ZDg0NWUiLCJyb2xlIjoiYWRtaW4iLCJzY29wZXMiOlsiaW50ZXJuYWw6Y2hhbm5lbCJdLCJrZXlfaWQiOiJpbnRlcm5hbC1jaGFubmVsIiwidHlwZSI6ImFjY2VzcyIsImp0aSI6IjY4ZDk4NzUwLTBjOTItNGM2Ny05ZDExLTE5MTVmMGE2YmRiZCIsImlhdCI6MjAwMDAwMDAwMCwiZXhwIjoyMDAwMDAwMzAwfQ.xAOCdePX7zTGVcXD4qlQN7adiI00l6qmLHsBaOFP5Z8",
+      "expectedAudience": null,
+      "originalAccepted": true,
+      "humanAccepted": false,
+      "reason": "Internal channel is not a human login",
+      "original": {
+        "userId": "c2cc8374-8cdf-4936-8967-d891fb500634",
+        "orgId": "4ce65010-7331-415a-abaa-4d47387d845e",
+        "role": "admin",
+        "keyId": "internal-channel",
+        "jti": "68d98750-0c92-4c67-9d11-1915f0a6bdbd",
+        "exp": 2000000300,
+        "scopes": [
+          "internal:channel"
+        ]
+      }
+    },
+    {
+      "name": "control_credential",
+      "token": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJyZXRhaW5lZC1tb3NzLWZpeHR1cmUiLCJzdWIiOiJjMmNjODM3NC04Y2RmLTQ5MzYtODk2Ny1kODkxZmI1MDA2MzQiLCJvcmdfaWQiOiI0Y2U2NTAxMC03MzMxLTQxNWEtYWJhYS00ZDQ3Mzg3ZDg0NWUiLCJyb2xlIjoiYWRtaW4iLCJzY29wZXMiOlsiYWdlbnQ6Y29udHJvbCJdLCJrZXlfaWQiOiJhZ2VudC1jb250cm9sOmZpeHR1cmUiLCJ0eXBlIjoiYWNjZXNzIiwianRpIjoiNjhkOTg3NTAtMGM5Mi00YzY3LTlkMTEtMTkxNWYwYTZiZGJkIiwiaWF0IjoyMDAwMDAwMDAwLCJleHAiOjIwMDAwMDAzMDAsImF1ZCI6Im1vc3M6YWdlbnQtY29udHJvbDp2MSJ9.kLJ-DFi0KOyuzQZhP9qnj8krDUtILAlw6A-RccoJK1M",
+      "expectedAudience": "moss:agent-control:v1",
+      "originalAccepted": true,
+      "humanAccepted": false,
+      "reason": "Purpose-bound control token is not a human login",
+      "original": {
+        "userId": "c2cc8374-8cdf-4936-8967-d891fb500634",
+        "orgId": "4ce65010-7331-415a-abaa-4d47387d845e",
+        "role": "admin",
+        "keyId": "agent-control:fixture",
+        "jti": "68d98750-0c92-4c67-9d11-1915f0a6bdbd",
+        "exp": 2000000300,
+        "scopes": [
+          "agent:control"
+        ]
+      }
+    },
+    {
+      "name": "refresh_token",
+      "token": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJyZXRhaW5lZC1tb3NzLWZpeHR1cmUiLCJzdWIiOiJjMmNjODM3NC04Y2RmLTQ5MzYtODk2Ny1kODkxZmI1MDA2MzQiLCJvcmdfaWQiOiI0Y2U2NTAxMC03MzMxLTQxNWEtYWJhYS00ZDQ3Mzg3ZDg0NWUiLCJyb2xlIjoiYWRtaW4iLCJzY29wZXMiOlsiKiJdLCJrZXlfaWQiOiJwaG9uZS1sb2dpbiIsImF1dGhfYXBwIjoic3Vkb3dvcmsiLCJhY2NvdW50X2lkIjoiOWNkZDliMjctYTNmMC00MGE2LTkwMTUtOGIxNzBjMjM3YzY3IiwidHlwZSI6InJlZnJlc2giLCJqdGkiOiI4YTUyN2I5YS1jY2QxLTQ5NTctYWEyZS05MGY5OGY3NGNjODUiLCJpYXQiOjIwMDAwMDAwMDAsImV4cCI6MjAwMDAwMDMwMH0.8_em6Um-O5-2S8fIVzeL8XXj6Jkz79j7kewIWuXrjmQ",
+      "expectedAudience": null,
+      "originalAccepted": false,
+      "humanAccepted": false,
+      "reason": "",
+      "original": null
+    },
+    {
+      "name": "wrong_issuer",
+      "token": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJkaWZmZXJlbnQtaXNzdWVyIiwic3ViIjoiYzJjYzgzNzQtOGNkZi00OTM2LTg5NjctZDg5MWZiNTAwNjM0Iiwib3JnX2lkIjoiNGNlNjUwMTAtNzMzMS00MTVhLWFiYWEtNGQ0NzM4N2Q4NDVlIiwicm9sZSI6ImFkbWluIiwic2NvcGVzIjpbIioiXSwia2V5X2lkIjoicGhvbmUtbG9naW4iLCJhdXRoX2FwcCI6InN1ZG93b3JrIiwiYWNjb3VudF9pZCI6IjljZGQ5YjI3LWEzZjAtNDBhNi05MDE1LThiMTcwYzIzN2M2NyIsInR5cGUiOiJhY2Nlc3MiLCJqdGkiOiI0OTg3NzhhNS1hOGM0LTQwYzUtOTUyOS03NGQyYmQ4ZWFlZDgiLCJpYXQiOjIwMDAwMDAwMDAsImV4cCI6MjAwMDAwMDMwMH0.0P1-s6qDfPiyHbKR81kEcGv6pDvsvDr1-hKf9PzD1po",
+      "expectedAudience": null,
+      "originalAccepted": false,
+      "humanAccepted": false,
+      "reason": "",
+      "original": null
+    },
+    {
+      "name": "missing_issuer",
+      "token": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiJjMmNjODM3NC04Y2RmLTQ5MzYtODk2Ny1kODkxZmI1MDA2MzQiLCJvcmdfaWQiOiI0Y2U2NTAxMC03MzMxLTQxNWEtYWJhYS00ZDQ3Mzg3ZDg0NWUiLCJyb2xlIjoiYWRtaW4iLCJzY29wZXMiOlsiKiJdLCJrZXlfaWQiOiJwaG9uZS1sb2dpbiIsImF1dGhfYXBwIjoic3Vkb3dvcmsiLCJhY2NvdW50X2lkIjoiOWNkZDliMjctYTNmMC00MGE2LTkwMTUtOGIxNzBjMjM3YzY3IiwidHlwZSI6ImFjY2VzcyIsImp0aSI6IjY4ZDk4NzUwLTBjOTItNGM2Ny05ZDExLTE5MTVmMGE2YmRiZCIsImlhdCI6MjAwMDAwMDAwMCwiZXhwIjoyMDAwMDAwMzAwfQ.hES5uBwh7Xy8S6sUvQiY-3rFZ0xj8V0HbYfVd-foaQM",
+      "expectedAudience": null,
+      "originalAccepted": false,
+      "humanAccepted": false,
+      "reason": "",
+      "original": null
+    },
+    {
+      "name": "expired",
+      "token": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJyZXRhaW5lZC1tb3NzLWZpeHR1cmUiLCJzdWIiOiJjMmNjODM3NC04Y2RmLTQ5MzYtODk2Ny1kODkxZmI1MDA2MzQiLCJvcmdfaWQiOiI0Y2U2NTAxMC03MzMxLTQxNWEtYWJhYS00ZDQ3Mzg3ZDg0NWUiLCJyb2xlIjoiYWRtaW4iLCJzY29wZXMiOlsiKiJdLCJrZXlfaWQiOiJwaG9uZS1sb2dpbiIsImF1dGhfYXBwIjoic3Vkb3dvcmsiLCJhY2NvdW50X2lkIjoiOWNkZDliMjctYTNmMC00MGE2LTkwMTUtOGIxNzBjMjM3YzY3IiwidHlwZSI6ImFjY2VzcyIsImp0aSI6ImZhODIzYzZhLTliMmItNDc4OC1iMmRmLTIxMzgyNzE1ZTczMyIsImlhdCI6MjAwMDAwMDAwMCwiZXhwIjoxOTk5OTk5OTk5fQ.1sat2tCTt5LvYGTI2zxNXhU6B2zRBZOowwkGztiEgf8",
+      "expectedAudience": null,
+      "originalAccepted": false,
+      "humanAccepted": false,
+      "reason": "",
+      "original": null
+    },
+    {
+      "name": "expiry_boundary",
+      "token": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJyZXRhaW5lZC1tb3NzLWZpeHR1cmUiLCJzdWIiOiJjMmNjODM3NC04Y2RmLTQ5MzYtODk2Ny1kODkxZmI1MDA2MzQiLCJvcmdfaWQiOiI0Y2U2NTAxMC03MzMxLTQxNWEtYWJhYS00ZDQ3Mzg3ZDg0NWUiLCJyb2xlIjoiYWRtaW4iLCJzY29wZXMiOlsiKiJdLCJrZXlfaWQiOiJwaG9uZS1sb2dpbiIsImF1dGhfYXBwIjoic3Vkb3dvcmsiLCJhY2NvdW50X2lkIjoiOWNkZDliMjctYTNmMC00MGE2LTkwMTUtOGIxNzBjMjM3YzY3IiwidHlwZSI6ImFjY2VzcyIsImp0aSI6IjYyZGFjZWVhLTJmYjYtNDcyMC04YjA0LTAwODEwNDE1NTYxNiIsImlhdCI6MjAwMDAwMDAwMCwiZXhwIjoyMDAwMDAwMDAwfQ.0KVR5ieysWUGiEmD9EDVW3GoOPmDqvcjOZ_yvCVHi8U",
+      "expectedAudience": null,
+      "originalAccepted": false,
+      "humanAccepted": false,
+      "reason": "",
+      "original": null
+    },
+    {
+      "name": "fractional_expiry",
+      "token": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJyZXRhaW5lZC1tb3NzLWZpeHR1cmUiLCJzdWIiOiJjMmNjODM3NC04Y2RmLTQ5MzYtODk2Ny1kODkxZmI1MDA2MzQiLCJvcmdfaWQiOiI0Y2U2NTAxMC03MzMxLTQxNWEtYWJhYS00ZDQ3Mzg3ZDg0NWUiLCJyb2xlIjoiYWRtaW4iLCJzY29wZXMiOlsiKiJdLCJrZXlfaWQiOiJwaG9uZS1sb2dpbiIsImF1dGhfYXBwIjoic3Vkb3dvcmsiLCJhY2NvdW50X2lkIjoiOWNkZDliMjctYTNmMC00MGE2LTkwMTUtOGIxNzBjMjM3YzY3IiwidHlwZSI6ImFjY2VzcyIsImp0aSI6IjA4NWRlOWM1LWM1ZWItNGYxZi04MzEzLWYzMDMzZDg3ZjdhMCIsImlhdCI6MjAwMDAwMDAwMCwiZXhwIjoyMDAwMDAwMzAwLjI1fQ.rtifiDz9ScBYVCVSkTATbwuAF9H212_dQpFvv0HRhsQ",
+      "expectedAudience": null,
+      "originalAccepted": true,
+      "humanAccepted": true,
+      "reason": "",
+      "original": {
+        "userId": "c2cc8374-8cdf-4936-8967-d891fb500634",
+        "orgId": "4ce65010-7331-415a-abaa-4d47387d845e",
+        "role": "admin",
+        "keyId": "phone-login",
+        "authApp": "sudowork",
+        "accountId": "9cdd9b27-a3f0-40a6-9015-8b170c237c67",
+        "jti": "085de9c5-c5eb-4f1f-8313-f3033d87f7a0",
+        "exp": 2000000300.25,
+        "scopes": [
+          "*"
+        ]
+      }
+    },
+    {
+      "name": "correct_human_consumer_audience",
+      "token": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJyZXRhaW5lZC1tb3NzLWZpeHR1cmUiLCJzdWIiOiJjMmNjODM3NC04Y2RmLTQ5MzYtODk2Ny1kODkxZmI1MDA2MzQiLCJvcmdfaWQiOiI0Y2U2NTAxMC03MzMxLTQxNWEtYWJhYS00ZDQ3Mzg3ZDg0NWUiLCJyb2xlIjoiYWRtaW4iLCJzY29wZXMiOlsiKiJdLCJrZXlfaWQiOiJwaG9uZS1sb2dpbiIsImF1dGhfYXBwIjoic3Vkb3dvcmsiLCJhY2NvdW50X2lkIjoiOWNkZDliMjctYTNmMC00MGE2LTkwMTUtOGIxNzBjMjM3YzY3IiwiYXVkIjoibW9zc3dvcms6Y2Fub25pY2FsLWh1bWFuOnYxIiwidHlwZSI6ImFjY2VzcyIsImp0aSI6ImMzZmJlYjA0LTEyYzgtNDFlYi1hZjk0LWI4MjEwYzI1MDM3MiIsImlhdCI6MjAwMDAwMDAwMCwiZXhwIjoyMDAwMDAwMzAwfQ.LRAyEryuzXcfOWnmHbFuHE0SDoLMLpTBTXMjmfRJKSo",
+      "expectedAudience": "mosswork:canonical-human:v1",
+      "originalAccepted": true,
+      "humanAccepted": true,
+      "reason": "",
+      "original": {
+        "userId": "c2cc8374-8cdf-4936-8967-d891fb500634",
+        "orgId": "4ce65010-7331-415a-abaa-4d47387d845e",
+        "role": "admin",
+        "keyId": "phone-login",
+        "authApp": "sudowork",
+        "accountId": "9cdd9b27-a3f0-40a6-9015-8b170c237c67",
+        "jti": "c3fbeb04-12c8-41eb-af94-b8210c250372",
+        "exp": 2000000300,
+        "scopes": [
+          "*"
+        ]
+      }
+    },
+    {
+      "name": "missing_required_audience",
+      "token": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJyZXRhaW5lZC1tb3NzLWZpeHR1cmUiLCJzdWIiOiJjMmNjODM3NC04Y2RmLTQ5MzYtODk2Ny1kODkxZmI1MDA2MzQiLCJvcmdfaWQiOiI0Y2U2NTAxMC03MzMxLTQxNWEtYWJhYS00ZDQ3Mzg3ZDg0NWUiLCJyb2xlIjoiYWRtaW4iLCJzY29wZXMiOlsiKiJdLCJrZXlfaWQiOiJwaG9uZS1sb2dpbiIsImF1dGhfYXBwIjoic3Vkb3dvcmsiLCJhY2NvdW50X2lkIjoiOWNkZDliMjctYTNmMC00MGE2LTkwMTUtOGIxNzBjMjM3YzY3IiwidHlwZSI6ImFjY2VzcyIsImp0aSI6IjY4ZDk4NzUwLTBjOTItNGM2Ny05ZDExLTE5MTVmMGE2YmRiZCIsImlhdCI6MjAwMDAwMDAwMCwiZXhwIjoyMDAwMDAwMzAwfQ.T5AaViTJSvhADHHlnvuW_9HjOzQYBBapp-j7gu2tIvo",
+      "expectedAudience": "mosswork:canonical-human:v1",
+      "originalAccepted": false,
+      "humanAccepted": false,
+      "reason": "",
+      "original": null
+    },
+    {
+      "name": "unexpected_audience",
+      "token": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJyZXRhaW5lZC1tb3NzLWZpeHR1cmUiLCJzdWIiOiJjMmNjODM3NC04Y2RmLTQ5MzYtODk2Ny1kODkxZmI1MDA2MzQiLCJvcmdfaWQiOiI0Y2U2NTAxMC03MzMxLTQxNWEtYWJhYS00ZDQ3Mzg3ZDg0NWUiLCJyb2xlIjoiYWRtaW4iLCJzY29wZXMiOlsiKiJdLCJrZXlfaWQiOiJwaG9uZS1sb2dpbiIsImF1dGhfYXBwIjoic3Vkb3dvcmsiLCJhY2NvdW50X2lkIjoiOWNkZDliMjctYTNmMC00MGE2LTkwMTUtOGIxNzBjMjM3YzY3IiwiYXVkIjoibW9zc3dvcms6Y2Fub25pY2FsLWh1bWFuOnYxIiwidHlwZSI6ImFjY2VzcyIsImp0aSI6ImE5YWI1MjY5LTRhMDYtNGY2Yy05ZDc2LWZiZDk0NmZkYjI1NyIsImlhdCI6MjAwMDAwMDAwMCwiZXhwIjoyMDAwMDAwMzAwfQ.J01dB4S1OvIfTw2gsp7fvf7JAG5PvwFAvM8NH-Hfzok",
+      "expectedAudience": null,
+      "originalAccepted": false,
+      "humanAccepted": false,
+      "reason": "",
+      "original": null
+    },
+    {
+      "name": "wrong_audience",
+      "token": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJyZXRhaW5lZC1tb3NzLWZpeHR1cmUiLCJzdWIiOiJjMmNjODM3NC04Y2RmLTQ5MzYtODk2Ny1kODkxZmI1MDA2MzQiLCJvcmdfaWQiOiI0Y2U2NTAxMC03MzMxLTQxNWEtYWJhYS00ZDQ3Mzg3ZDg0NWUiLCJyb2xlIjoiYWRtaW4iLCJzY29wZXMiOlsiKiJdLCJrZXlfaWQiOiJwaG9uZS1sb2dpbiIsImF1dGhfYXBwIjoic3Vkb3dvcmsiLCJhY2NvdW50X2lkIjoiOWNkZDliMjctYTNmMC00MGE2LTkwMTUtOGIxNzBjMjM3YzY3IiwiYXVkIjoiYW5vdGhlci1jb25zdW1lciIsInR5cGUiOiJhY2Nlc3MiLCJqdGkiOiI0ODNlNWE4YS02NDA4LTRjMjYtODEwMC05YjdlOTA1NzUxNmYiLCJpYXQiOjIwMDAwMDAwMDAsImV4cCI6MjAwMDAwMDMwMH0.YMW-w-Kqhou1Mu7aAskKwmaI4_0ay9lAZBtv_p2kb7c",
+      "expectedAudience": "mosswork:canonical-human:v1",
+      "originalAccepted": false,
+      "humanAccepted": false,
+      "reason": "",
+      "original": null
+    },
+    {
+      "name": "null_audience_is_not_absent",
+      "token": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJyZXRhaW5lZC1tb3NzLWZpeHR1cmUiLCJzdWIiOiJjMmNjODM3NC04Y2RmLTQ5MzYtODk2Ny1kODkxZmI1MDA2MzQiLCJvcmdfaWQiOiI0Y2U2NTAxMC03MzMxLTQxNWEtYWJhYS00ZDQ3Mzg3ZDg0NWUiLCJyb2xlIjoiYWRtaW4iLCJzY29wZXMiOlsiKiJdLCJrZXlfaWQiOiJwaG9uZS1sb2dpbiIsImF1dGhfYXBwIjoic3Vkb3dvcmsiLCJhY2NvdW50X2lkIjoiOWNkZDliMjctYTNmMC00MGE2LTkwMTUtOGIxNzBjMjM3YzY3IiwiYXVkIjpudWxsLCJ0eXBlIjoiYWNjZXNzIiwianRpIjoiMjg0MTE1NTEtYjcwMi00NTliLWI3ZGQtODI0NTg1NzhiZDA1IiwiaWF0IjoyMDAwMDAwMDAwLCJleHAiOjIwMDAwMDAzMDB9.gP55mT8mj4vp331vbMraLxZrD7QiZwkutXx7RC8N8KI",
+      "expectedAudience": null,
+      "originalAccepted": false,
+      "humanAccepted": false,
+      "reason": "",
+      "original": null
+    },
+    {
+      "name": "audience_array_is_not_exact_string",
+      "token": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJyZXRhaW5lZC1tb3NzLWZpeHR1cmUiLCJzdWIiOiJjMmNjODM3NC04Y2RmLTQ5MzYtODk2Ny1kODkxZmI1MDA2MzQiLCJvcmdfaWQiOiI0Y2U2NTAxMC03MzMxLTQxNWEtYWJhYS00ZDQ3Mzg3ZDg0NWUiLCJyb2xlIjoiYWRtaW4iLCJzY29wZXMiOlsiKiJdLCJrZXlfaWQiOiJwaG9uZS1sb2dpbiIsImF1dGhfYXBwIjoic3Vkb3dvcmsiLCJhY2NvdW50X2lkIjoiOWNkZDliMjctYTNmMC00MGE2LTkwMTUtOGIxNzBjMjM3YzY3IiwiYXVkIjpbIm1vc3N3b3JrOmNhbm9uaWNhbC1odW1hbjp2MSJdLCJ0eXBlIjoiYWNjZXNzIiwianRpIjoiM2UzZWEzZGUtMzlhNi00YThkLTk2NzgtODVhMjE0OTBiNzZiIiwiaWF0IjoyMDAwMDAwMDAwLCJleHAiOjIwMDAwMDAzMDB9.3i3JK5aI_aRoqmycQE06Uf3fCGqvItyEGPlE29lPucM",
+      "expectedAudience": "mosswork:canonical-human:v1",
+      "originalAccepted": false,
+      "humanAccepted": false,
+      "reason": "",
+      "original": null
+    },
+    {
+      "name": "numeric_role",
+      "token": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJyZXRhaW5lZC1tb3NzLWZpeHR1cmUiLCJzdWIiOiJjMmNjODM3NC04Y2RmLTQ5MzYtODk2Ny1kODkxZmI1MDA2MzQiLCJvcmdfaWQiOiI0Y2U2NTAxMC03MzMxLTQxNWEtYWJhYS00ZDQ3Mzg3ZDg0NWUiLCJyb2xlIjo3LCJzY29wZXMiOlsiKiJdLCJrZXlfaWQiOiJwaG9uZS1sb2dpbiIsImF1dGhfYXBwIjoic3Vkb3dvcmsiLCJhY2NvdW50X2lkIjoiOWNkZDliMjctYTNmMC00MGE2LTkwMTUtOGIxNzBjMjM3YzY3IiwidHlwZSI6ImFjY2VzcyIsImp0aSI6ImZkNjZjNzM5LTU3MWMtNDA1Mi1iMGQ4LWQ1OWRjNDcxNDdlZiIsImlhdCI6MjAwMDAwMDAwMCwiZXhwIjoyMDAwMDAwMzAwfQ.dXa0c8IbbapGIHflEVtBpt0-0XzEwPy4_lTvLgbMtT8",
+      "expectedAudience": null,
+      "originalAccepted": false,
+      "humanAccepted": false,
+      "reason": "",
+      "original": null
+    },
+    {
+      "name": "string_expiry",
+      "token": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJyZXRhaW5lZC1tb3NzLWZpeHR1cmUiLCJzdWIiOiJjMmNjODM3NC04Y2RmLTQ5MzYtODk2Ny1kODkxZmI1MDA2MzQiLCJvcmdfaWQiOiI0Y2U2NTAxMC03MzMxLTQxNWEtYWJhYS00ZDQ3Mzg3ZDg0NWUiLCJyb2xlIjoiYWRtaW4iLCJzY29wZXMiOlsiKiJdLCJrZXlfaWQiOiJwaG9uZS1sb2dpbiIsImF1dGhfYXBwIjoic3Vkb3dvcmsiLCJhY2NvdW50X2lkIjoiOWNkZDliMjctYTNmMC00MGE2LTkwMTUtOGIxNzBjMjM3YzY3IiwidHlwZSI6ImFjY2VzcyIsImp0aSI6IjY4ZDk4NzUwLTBjOTItNGM2Ny05ZDExLTE5MTVmMGE2YmRiZCIsImlhdCI6MjAwMDAwMDAwMCwiZXhwIjoiMjAwMDAwMDMwMCJ9.O3Ck8H9mQ-EcOPRSCoO1QMdWjU32lcQtq0dRc7z2OAg",
+      "expectedAudience": null,
+      "originalAccepted": false,
+      "humanAccepted": false,
+      "reason": "",
+      "original": null
+    },
+    {
+      "name": "boolean_expiry",
+      "token": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJyZXRhaW5lZC1tb3NzLWZpeHR1cmUiLCJzdWIiOiJjMmNjODM3NC04Y2RmLTQ5MzYtODk2Ny1kODkxZmI1MDA2MzQiLCJvcmdfaWQiOiI0Y2U2NTAxMC03MzMxLTQxNWEtYWJhYS00ZDQ3Mzg3ZDg0NWUiLCJyb2xlIjoiYWRtaW4iLCJzY29wZXMiOlsiKiJdLCJrZXlfaWQiOiJwaG9uZS1sb2dpbiIsImF1dGhfYXBwIjoic3Vkb3dvcmsiLCJhY2NvdW50X2lkIjoiOWNkZDliMjctYTNmMC00MGE2LTkwMTUtOGIxNzBjMjM3YzY3IiwidHlwZSI6ImFjY2VzcyIsImp0aSI6IjY4ZDk4NzUwLTBjOTItNGM2Ny05ZDExLTE5MTVmMGE2YmRiZCIsImlhdCI6MjAwMDAwMDAwMCwiZXhwIjp0cnVlfQ.qAWkQ3UPtI-fKSxVe6meguIvw3yWpEFrwsgftHiAXi4",
+      "expectedAudience": null,
+      "originalAccepted": false,
+      "humanAccepted": false,
+      "reason": "",
+      "original": null
+    },
+    {
+      "name": "missing_jti",
+      "token": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJyZXRhaW5lZC1tb3NzLWZpeHR1cmUiLCJzdWIiOiJjMmNjODM3NC04Y2RmLTQ5MzYtODk2Ny1kODkxZmI1MDA2MzQiLCJvcmdfaWQiOiI0Y2U2NTAxMC03MzMxLTQxNWEtYWJhYS00ZDQ3Mzg3ZDg0NWUiLCJyb2xlIjoiYWRtaW4iLCJzY29wZXMiOlsiKiJdLCJrZXlfaWQiOiJwaG9uZS1sb2dpbiIsImF1dGhfYXBwIjoic3Vkb3dvcmsiLCJhY2NvdW50X2lkIjoiOWNkZDliMjctYTNmMC00MGE2LTkwMTUtOGIxNzBjMjM3YzY3IiwidHlwZSI6ImFjY2VzcyIsImlhdCI6MjAwMDAwMDAwMCwiZXhwIjoyMDAwMDAwMzAwfQ.3oz8eHPn7nsiTQWOvJp_fyaUObpDBO5B4hewu2lsbWo",
+      "expectedAudience": null,
+      "originalAccepted": false,
+      "humanAccepted": false,
+      "reason": "",
+      "original": null
+    },
+    {
+      "name": "wrong_algorithm",
+      "token": "eyJhbGciOiJIUzUxMiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJyZXRhaW5lZC1tb3NzLWZpeHR1cmUiLCJzdWIiOiJjMmNjODM3NC04Y2RmLTQ5MzYtODk2Ny1kODkxZmI1MDA2MzQiLCJvcmdfaWQiOiI0Y2U2NTAxMC03MzMxLTQxNWEtYWJhYS00ZDQ3Mzg3ZDg0NWUiLCJyb2xlIjoiYWRtaW4iLCJzY29wZXMiOlsiKiJdLCJrZXlfaWQiOiJwaG9uZS1sb2dpbiIsImF1dGhfYXBwIjoic3Vkb3dvcmsiLCJhY2NvdW50X2lkIjoiOWNkZDliMjctYTNmMC00MGE2LTkwMTUtOGIxNzBjMjM3YzY3IiwidHlwZSI6ImFjY2VzcyIsImp0aSI6IjY4ZDk4NzUwLTBjOTItNGM2Ny05ZDExLTE5MTVmMGE2YmRiZCIsImlhdCI6MjAwMDAwMDAwMCwiZXhwIjoyMDAwMDAwMzAwfQ.pRAO0RNYxcfzGXo_4SEOzhnMVK0ipZ58fUyUs4iGHkM",
+      "expectedAudience": null,
+      "originalAccepted": false,
+      "humanAccepted": false,
+      "reason": "",
+      "original": null
+    },
+    {
+      "name": "wrong_header_type",
+      "token": "eyJhbGciOiJIUzI1NiIsInR5cCI6Imp3dCJ9.eyJpc3MiOiJyZXRhaW5lZC1tb3NzLWZpeHR1cmUiLCJzdWIiOiJjMmNjODM3NC04Y2RmLTQ5MzYtODk2Ny1kODkxZmI1MDA2MzQiLCJvcmdfaWQiOiI0Y2U2NTAxMC03MzMxLTQxNWEtYWJhYS00ZDQ3Mzg3ZDg0NWUiLCJyb2xlIjoiYWRtaW4iLCJzY29wZXMiOlsiKiJdLCJrZXlfaWQiOiJwaG9uZS1sb2dpbiIsImF1dGhfYXBwIjoic3Vkb3dvcmsiLCJhY2NvdW50X2lkIjoiOWNkZDliMjctYTNmMC00MGE2LTkwMTUtOGIxNzBjMjM3YzY3IiwidHlwZSI6ImFjY2VzcyIsImp0aSI6IjY4ZDk4NzUwLTBjOTItNGM2Ny05ZDExLTE5MTVmMGE2YmRiZCIsImlhdCI6MjAwMDAwMDAwMCwiZXhwIjoyMDAwMDAwMzAwfQ.FVEBLmhfKfme_XpzbFx7M5WN5WRpEmTg260RAyoq_xI",
+      "expectedAudience": null,
+      "originalAccepted": false,
+      "humanAccepted": false,
+      "reason": "",
+      "original": null
+    },
+    {
+      "name": "tampered_signature",
+      "token": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJyZXRhaW5lZC1tb3NzLWZpeHR1cmUiLCJzdWIiOiJjMmNjODM3NC04Y2RmLTQ5MzYtODk2Ny1kODkxZmI1MDA2MzQiLCJvcmdfaWQiOiI0Y2U2NTAxMC03MzMxLTQxNWEtYWJhYS00ZDQ3Mzg3ZDg0NWUiLCJyb2xlIjoiYWRtaW4iLCJzY29wZXMiOlsiKiJdLCJrZXlfaWQiOiJwaG9uZS1sb2dpbiIsImF1dGhfYXBwIjoic3Vkb3dvcmsiLCJhY2NvdW50X2lkIjoiOWNkZDliMjctYTNmMC00MGE2LTkwMTUtOGIxNzBjMjM3YzY3IiwidHlwZSI6ImFjY2VzcyIsImp0aSI6IjY4ZDk4NzUwLTBjOTItNGM2Ny05ZDExLTE5MTVmMGE2YmRiZCIsImlhdCI6MjAwMDAwMDAwMCwiZXhwIjoyMDAwMDAwMzAwfQ.A5AaViTJSvhADHHlnvuW_9HjOzQYBBapp-j7gu2tIvo",
+      "expectedAudience": null,
+      "originalAccepted": false,
+      "humanAccepted": false,
+      "reason": "",
+      "original": null
+    },
+    {
+      "name": "wrong_signing_key",
+      "token": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJyZXRhaW5lZC1tb3NzLWZpeHR1cmUiLCJzdWIiOiJjMmNjODM3NC04Y2RmLTQ5MzYtODk2Ny1kODkxZmI1MDA2MzQiLCJvcmdfaWQiOiI0Y2U2NTAxMC03MzMxLTQxNWEtYWJhYS00ZDQ3Mzg3ZDg0NWUiLCJyb2xlIjoiYWRtaW4iLCJzY29wZXMiOlsiKiJdLCJrZXlfaWQiOiJwaG9uZS1sb2dpbiIsImF1dGhfYXBwIjoic3Vkb3dvcmsiLCJhY2NvdW50X2lkIjoiOWNkZDliMjctYTNmMC00MGE2LTkwMTUtOGIxNzBjMjM3YzY3IiwidHlwZSI6ImFjY2VzcyIsImp0aSI6Ijg1NWQyNjNkLTgzMDQtNGJiMi1iYTA4LTcxYmM3YTIyY2NhZCIsImlhdCI6MjAwMDAwMDAwMCwiZXhwIjoyMDAwMDAwMzAwfQ.Vdj_mwFhroG1Qi5RztJp2CldEyYOKUa1rhnFn4La_O8",
+      "expectedAudience": null,
+      "originalAccepted": false,
+      "humanAccepted": false,
+      "reason": "",
+      "original": null
+    },
+    {
+      "name": "invalid_auth_app",
+      "token": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJyZXRhaW5lZC1tb3NzLWZpeHR1cmUiLCJzdWIiOiJjMmNjODM3NC04Y2RmLTQ5MzYtODk2Ny1kODkxZmI1MDA2MzQiLCJvcmdfaWQiOiI0Y2U2NTAxMC03MzMxLTQxNWEtYWJhYS00ZDQ3Mzg3ZDg0NWUiLCJyb2xlIjoiYWRtaW4iLCJzY29wZXMiOlsiKiJdLCJrZXlfaWQiOiJwaG9uZS1sb2dpbiIsImF1dGhfYXBwIjoic29tZS1vdGhlci1hcHBsaWNhdGlvbiIsImFjY291bnRfaWQiOiI5Y2RkOWIyNy1hM2YwLTQwYTYtOTAxNS04YjE3MGMyMzdjNjciLCJ0eXBlIjoiYWNjZXNzIiwianRpIjoiYzgzNWQ0ZDktZDQyYi00M2U2LTliYzAtMDg1YWJhNmQ5YjllIiwiaWF0IjoyMDAwMDAwMDAwLCJleHAiOjIwMDAwMDAzMDB9.HocxLwNPWSUMbMTEycV9osfYCCd5fc0bhRYuUQOW67M",
+      "expectedAudience": null,
+      "originalAccepted": false,
+      "humanAccepted": false,
+      "reason": "",
+      "original": null
+    },
+    {
+      "name": "password_without_app",
+      "token": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJyZXRhaW5lZC1tb3NzLWZpeHR1cmUiLCJzdWIiOiJjMmNjODM3NC04Y2RmLTQ5MzYtODk2Ny1kODkxZmI1MDA2MzQiLCJvcmdfaWQiOiI0Y2U2NTAxMC03MzMxLTQxNWEtYWJhYS00ZDQ3Mzg3ZDg0NWUiLCJyb2xlIjoiYWRtaW4iLCJzY29wZXMiOlsiKiJdLCJrZXlfaWQiOiJwYXNzd29yZC1sb2dpbiIsInR5cGUiOiJhY2Nlc3MiLCJqdGkiOiI2OGQ5ODc1MC0wYzkyLTRjNjctOWQxMS0xOTE1ZjBhNmJkYmQiLCJpYXQiOjIwMDAwMDAwMDAsImV4cCI6MjAwMDAwMDMwMH0.Idb5byRIWORcDiGHDXImfkUZSopyn-5YNmnA3YmhwIA",
+      "expectedAudience": null,
+      "originalAccepted": false,
+      "humanAccepted": false,
+      "reason": "",
+      "original": null
+    },
+    {
+      "name": "phone_without_app",
+      "token": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJyZXRhaW5lZC1tb3NzLWZpeHR1cmUiLCJzdWIiOiJjMmNjODM3NC04Y2RmLTQ5MzYtODk2Ny1kODkxZmI1MDA2MzQiLCJvcmdfaWQiOiI0Y2U2NTAxMC03MzMxLTQxNWEtYWJhYS00ZDQ3Mzg3ZDg0NWUiLCJyb2xlIjoiYWRtaW4iLCJzY29wZXMiOlsiKiJdLCJrZXlfaWQiOiJwaG9uZS1sb2dpbiIsInR5cGUiOiJhY2Nlc3MiLCJqdGkiOiI2OGQ5ODc1MC0wYzkyLTRjNjctOWQxMS0xOTE1ZjBhNmJkYmQiLCJpYXQiOjIwMDAwMDAwMDAsImV4cCI6MjAwMDAwMDMwMH0.ejDRb0Ugc49ndb37HEDQ5Bswly5J56P4pheLZrLiBfc",
+      "expectedAudience": null,
+      "originalAccepted": true,
+      "humanAccepted": false,
+      "reason": "Original primitive accepts this but it lacks a human application proof",
+      "original": {
+        "userId": "c2cc8374-8cdf-4936-8967-d891fb500634",
+        "orgId": "4ce65010-7331-415a-abaa-4d47387d845e",
+        "role": "admin",
+        "keyId": "phone-login",
+        "jti": "68d98750-0c92-4c67-9d11-1915f0a6bdbd",
+        "exp": 2000000300,
+        "scopes": [
+          "*"
+        ]
+      }
+    },
+    {
+      "name": "password_with_account_claim",
+      "token": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJyZXRhaW5lZC1tb3NzLWZpeHR1cmUiLCJzdWIiOiJjMmNjODM3NC04Y2RmLTQ5MzYtODk2Ny1kODkxZmI1MDA2MzQiLCJvcmdfaWQiOiI0Y2U2NTAxMC03MzMxLTQxNWEtYWJhYS00ZDQ3Mzg3ZDg0NWUiLCJyb2xlIjoiYWRtaW4iLCJzY29wZXMiOlsiKiJdLCJrZXlfaWQiOiJwYXNzd29yZC1sb2dpbiIsImF1dGhfYXBwIjoic3Vkb3dvcmsiLCJhY2NvdW50X2lkIjoiOWNkZDliMjctYTNmMC00MGE2LTkwMTUtOGIxNzBjMjM3YzY3IiwidHlwZSI6ImFjY2VzcyIsImp0aSI6ImZhOTk4YjBlLTM1YTQtNDc4Zi1iNTY3LTFlZjZjZjMxZjA4OCIsImlhdCI6MjAwMDAwMDAwMCwiZXhwIjoyMDAwMDAwMzAwfQ.nkYJG62cKjHBot4Jsfr4KAgxz7iog88KrtKHekwWaC4",
+      "expectedAudience": null,
+      "originalAccepted": true,
+      "humanAccepted": false,
+      "reason": "Original AuthService.requireHumanAccount accepts only phone-login",
+      "original": {
+        "userId": "c2cc8374-8cdf-4936-8967-d891fb500634",
+        "orgId": "4ce65010-7331-415a-abaa-4d47387d845e",
+        "role": "admin",
+        "keyId": "password-login",
+        "authApp": "sudowork",
+        "accountId": "9cdd9b27-a3f0-40a6-9015-8b170c237c67",
+        "jti": "fa998b0e-35a4-478f-b567-1ef6cf31f088",
+        "exp": 2000000300,
+        "scopes": [
+          "*"
+        ]
+      }
+    },
+    {
+      "name": "non_array_scopes",
+      "token": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJyZXRhaW5lZC1tb3NzLWZpeHR1cmUiLCJzdWIiOiJjMmNjODM3NC04Y2RmLTQ5MzYtODk2Ny1kODkxZmI1MDA2MzQiLCJvcmdfaWQiOiI0Y2U2NTAxMC03MzMxLTQxNWEtYWJhYS00ZDQ3Mzg3ZDg0NWUiLCJyb2xlIjoiYWRtaW4iLCJzY29wZXMiOnsid2lsZGNhcmQiOnRydWV9LCJrZXlfaWQiOiJwaG9uZS1sb2dpbiIsImF1dGhfYXBwIjoic3Vkb3dvcmsiLCJhY2NvdW50X2lkIjoiOWNkZDliMjctYTNmMC00MGE2LTkwMTUtOGIxNzBjMjM3YzY3IiwidHlwZSI6ImFjY2VzcyIsImp0aSI6IjdmYWZjODRmLWRiMWItNDg1NS1iOTdjLTVjNzI1M2IyNDYxYyIsImlhdCI6MjAwMDAwMDAwMCwiZXhwIjoyMDAwMDAwMzAwfQ.VWQKhfDmnRc8vy4ArFUIP9USvXaoRvayK-Y2AZbtyEY",
+      "expectedAudience": null,
+      "originalAccepted": false,
+      "humanAccepted": false,
+      "reason": "",
+      "original": null
+    },
+    {
+      "name": "mixed_scope_array_does_not_grant",
+      "token": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJyZXRhaW5lZC1tb3NzLWZpeHR1cmUiLCJzdWIiOiJjMmNjODM3NC04Y2RmLTQ5MzYtODk2Ny1kODkxZmI1MDA2MzQiLCJvcmdfaWQiOiI0Y2U2NTAxMC03MzMxLTQxNWEtYWJhYS00ZDQ3Mzg3ZDg0NWUiLCJyb2xlIjoiYWRtaW4iLCJzY29wZXMiOls3LHsidmFsdWUiOiIqIn1dLCJrZXlfaWQiOiJwaG9uZS1sb2dpbiIsImF1dGhfYXBwIjoic3Vkb3dvcmsiLCJhY2NvdW50X2lkIjoiOWNkZDliMjctYTNmMC00MGE2LTkwMTUtOGIxNzBjMjM3YzY3IiwidHlwZSI6ImFjY2VzcyIsImp0aSI6IjVmNGY5MzhlLWE2MmItNGRkZS05ZjAwLTdhNTBmNDBmZDgxOSIsImlhdCI6MjAwMDAwMDAwMCwiZXhwIjoyMDAwMDAwMzAwfQ.npRKH4Kfl5IPrytA3llyVvFXugUYdHw-dDACrVhs5eQ",
+      "expectedAudience": null,
+      "originalAccepted": true,
+      "humanAccepted": true,
+      "reason": "Original checks array shape only; current grants come from DB",
+      "original": {
+        "userId": "c2cc8374-8cdf-4936-8967-d891fb500634",
+        "orgId": "4ce65010-7331-415a-abaa-4d47387d845e",
+        "role": "admin",
+        "keyId": "phone-login",
+        "authApp": "sudowork",
+        "accountId": "9cdd9b27-a3f0-40a6-9015-8b170c237c67",
+        "jti": "5f4f938e-a62b-4dde-9f00-7a50f40fd819",
+        "exp": 2000000300,
+        "scopes": [
+          7,
+          {
+            "value": "*"
+          }
+        ]
+      }
+    },
+    {
+      "name": "future_iat_and_nbf_are_ignored_by_original",
+      "token": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJyZXRhaW5lZC1tb3NzLWZpeHR1cmUiLCJzdWIiOiJjMmNjODM3NC04Y2RmLTQ5MzYtODk2Ny1kODkxZmI1MDA2MzQiLCJvcmdfaWQiOiI0Y2U2NTAxMC03MzMxLTQxNWEtYWJhYS00ZDQ3Mzg3ZDg0NWUiLCJyb2xlIjoiYWRtaW4iLCJzY29wZXMiOlsiKiJdLCJrZXlfaWQiOiJwaG9uZS1sb2dpbiIsImF1dGhfYXBwIjoic3Vkb3dvcmsiLCJhY2NvdW50X2lkIjoiOWNkZDliMjctYTNmMC00MGE2LTkwMTUtOGIxNzBjMjM3YzY3IiwidHlwZSI6ImFjY2VzcyIsImp0aSI6IjY4ZDk4NzUwLTBjOTItNGM2Ny05ZDExLTE5MTVmMGE2YmRiZCIsImlhdCI6MjAwMDEwMDAwMCwiZXhwIjoyMDAwMDAwMzAwLCJuYmYiOjIwMDAxMDAwMDB9.gx_xSjrhndoqMoOc4fRenZN7ZNJUPHWg9cmlouXWY3U",
+      "expectedAudience": null,
+      "originalAccepted": true,
+      "humanAccepted": true,
+      "reason": "",
+      "original": {
+        "userId": "c2cc8374-8cdf-4936-8967-d891fb500634",
+        "orgId": "4ce65010-7331-415a-abaa-4d47387d845e",
+        "role": "admin",
+        "keyId": "phone-login",
+        "authApp": "sudowork",
+        "accountId": "9cdd9b27-a3f0-40a6-9015-8b170c237c67",
+        "jti": "68d98750-0c92-4c67-9d11-1915f0a6bdbd",
+        "exp": 2000000300,
+        "scopes": [
+          "*"
+        ]
+      }
+    },
+    {
+      "name": "empty_account_claim",
+      "token": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJyZXRhaW5lZC1tb3NzLWZpeHR1cmUiLCJzdWIiOiJjMmNjODM3NC04Y2RmLTQ5MzYtODk2Ny1kODkxZmI1MDA2MzQiLCJvcmdfaWQiOiI0Y2U2NTAxMC03MzMxLTQxNWEtYWJhYS00ZDQ3Mzg3ZDg0NWUiLCJyb2xlIjoiYWRtaW4iLCJzY29wZXMiOlsiKiJdLCJrZXlfaWQiOiJwaG9uZS1sb2dpbiIsImF1dGhfYXBwIjoic3Vkb3dvcmsiLCJhY2NvdW50X2lkIjoiIiwidHlwZSI6ImFjY2VzcyIsImp0aSI6IjA4MDJlYmM3LTAyYjctNDQ5OS04YTQyLTQ3MjFlYTAzMDQ5MSIsImlhdCI6MjAwMDAwMDAwMCwiZXhwIjoyMDAwMDAwMzAwfQ.BmXKnJv2qhNP-hbDofQcsbSf1Pvk39723L4_U7SM7ZE",
+      "expectedAudience": null,
+      "originalAccepted": false,
+      "humanAccepted": false,
+      "reason": "",
+      "original": null
+    },
+    {
+      "name": "null_account_claim",
+      "token": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJyZXRhaW5lZC1tb3NzLWZpeHR1cmUiLCJzdWIiOiJjMmNjODM3NC04Y2RmLTQ5MzYtODk2Ny1kODkxZmI1MDA2MzQiLCJvcmdfaWQiOiI0Y2U2NTAxMC03MzMxLTQxNWEtYWJhYS00ZDQ3Mzg3ZDg0NWUiLCJyb2xlIjoiYWRtaW4iLCJzY29wZXMiOlsiKiJdLCJrZXlfaWQiOiJwaG9uZS1sb2dpbiIsImF1dGhfYXBwIjoic3Vkb3dvcmsiLCJhY2NvdW50X2lkIjpudWxsLCJ0eXBlIjoiYWNjZXNzIiwianRpIjoiNzQ4NWVlMWUtMWNjMS00NWZlLTliNjctYTE4N2QzOWYxNDVlIiwiaWF0IjoyMDAwMDAwMDAwLCJleHAiOjIwMDAwMDAzMDB9.SFnDl8WQdbgAAZ6bryT56EHeD37dWyoMZClbC1_EdxI",
+      "expectedAudience": null,
+      "originalAccepted": false,
+      "humanAccepted": false,
+      "reason": "",
+      "original": null
+    },
+    {
+      "name": "moss_password_wrong_app",
+      "token": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJyZXRhaW5lZC1tb3NzLWZpeHR1cmUiLCJzdWIiOiJjMmNjODM3NC04Y2RmLTQ5MzYtODk2Ny1kODkxZmI1MDA2MzQiLCJvcmdfaWQiOiI0Y2U2NTAxMC03MzMxLTQxNWEtYWJhYS00ZDQ3Mzg3ZDg0NWUiLCJyb2xlIjoiYWRtaW4iLCJzY29wZXMiOlsiKiJdLCJrZXlfaWQiOiJtb3NzLXBhc3N3b3JkLWxvZ2luIiwiYXV0aF9hcHAiOiJzdWRvd29yayIsImFjY291bnRfaWQiOiI5Y2RkOWIyNy1hM2YwLTQwYTYtOTAxNS04YjE3MGMyMzdjNjciLCJ0eXBlIjoiYWNjZXNzIiwianRpIjoiZDdiY2Q1ODktMmViYi00YWJmLThlODItMzI0YTdiNmE2MDlkIiwiaWF0IjoyMDAwMDAwMDAwLCJleHAiOjIwMDAwMDAzMDB9.gXZN_i52VfILLtOQfYUKLV3KRY-51S0LYjkgHnSgikA",
+      "expectedAudience": null,
+      "originalAccepted": false,
+      "humanAccepted": false,
+      "reason": "",
+      "original": null
+    },
+    {
+      "name": "caller_sid_is_not_an_authority_session",
+      "token": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJyZXRhaW5lZC1tb3NzLWZpeHR1cmUiLCJzdWIiOiJjMmNjODM3NC04Y2RmLTQ5MzYtODk2Ny1kODkxZmI1MDA2MzQiLCJvcmdfaWQiOiI0Y2U2NTAxMC03MzMxLTQxNWEtYWJhYS00ZDQ3Mzg3ZDg0NWUiLCJyb2xlIjoiYWRtaW4iLCJzY29wZXMiOlsiKiJdLCJrZXlfaWQiOiJwaG9uZS1sb2dpbiIsImF1dGhfYXBwIjoic3Vkb3dvcmsiLCJhY2NvdW50X2lkIjoiOWNkZDliMjctYTNmMC00MGE2LTkwMTUtOGIxNzBjMjM3YzY3Iiwic2lkIjoidW50cnVzdGVkLWNsYWltLXNpZCIsInR5cGUiOiJhY2Nlc3MiLCJqdGkiOiI4ZDg4NzFkOS0xMGI3LTQyMDUtOTRiNi1jNDQ0MjZhMmM1NmMiLCJpYXQiOjIwMDAwMDAwMDAsImV4cCI6MjAwMDAwMDMwMH0.PVGDxkJIGb4EyexCi9TmeBD1uuEYda5hSxkhyRu_PPY",
+      "expectedAudience": null,
+      "originalAccepted": true,
+      "humanAccepted": true,
+      "reason": "",
+      "original": {
+        "userId": "c2cc8374-8cdf-4936-8967-d891fb500634",
+        "orgId": "4ce65010-7331-415a-abaa-4d47387d845e",
+        "role": "admin",
+        "keyId": "phone-login",
+        "authApp": "sudowork",
+        "accountId": "9cdd9b27-a3f0-40a6-9015-8b170c237c67",
+        "jti": "8d8871d9-10b7-4205-94b6-c44426a2c56c",
+        "exp": 2000000300,
+        "scopes": [
+          "*"
+        ]
+      }
+    },
+    {
+      "name": "admin_with_narrow_signed_scopes",
+      "token": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJyZXRhaW5lZC1tb3NzLWZpeHR1cmUiLCJzdWIiOiJjMmNjODM3NC04Y2RmLTQ5MzYtODk2Ny1kODkxZmI1MDA2MzQiLCJvcmdfaWQiOiI0Y2U2NTAxMC03MzMxLTQxNWEtYWJhYS00ZDQ3Mzg3ZDg0NWUiLCJyb2xlIjoiYWRtaW4iLCJzY29wZXMiOlsic2Vzc2lvbnM6bGlzdCJdLCJrZXlfaWQiOiJwaG9uZS1sb2dpbiIsImF1dGhfYXBwIjoic3Vkb3dvcmsiLCJhY2NvdW50X2lkIjoiOWNkZDliMjctYTNmMC00MGE2LTkwMTUtOGIxNzBjMjM3YzY3IiwidHlwZSI6ImFjY2VzcyIsImp0aSI6IjlmN2Y4YzhiLWQ2ZGEtNGZiNy05NzE5LThmYjUzYmI1MTNhZCIsImlhdCI6MjAwMDAwMDAwMCwiZXhwIjoyMDAwMDAwMzAwfQ.mUVNYwwyarLQZZQR1tClGsqyE3W4H-smskXvHj-W8Lg",
+      "expectedAudience": null,
+      "originalAccepted": true,
+      "humanAccepted": true,
+      "reason": "",
+      "original": {
+        "userId": "c2cc8374-8cdf-4936-8967-d891fb500634",
+        "orgId": "4ce65010-7331-415a-abaa-4d47387d845e",
+        "role": "admin",
+        "keyId": "phone-login",
+        "authApp": "sudowork",
+        "accountId": "9cdd9b27-a3f0-40a6-9015-8b170c237c67",
+        "jti": "9f7f8c8b-d6da-4fb7-9719-8fb53bb513ad",
+        "exp": 2000000300,
+        "scopes": [
+          "sessions:list"
+        ]
+      }
+    },
+    {
+      "name": "admin_with_empty_signed_scopes",
+      "token": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJyZXRhaW5lZC1tb3NzLWZpeHR1cmUiLCJzdWIiOiJjMmNjODM3NC04Y2RmLTQ5MzYtODk2Ny1kODkxZmI1MDA2MzQiLCJvcmdfaWQiOiI0Y2U2NTAxMC03MzMxLTQxNWEtYWJhYS00ZDQ3Mzg3ZDg0NWUiLCJyb2xlIjoiYWRtaW4iLCJzY29wZXMiOltdLCJrZXlfaWQiOiJwaG9uZS1sb2dpbiIsImF1dGhfYXBwIjoic3Vkb3dvcmsiLCJhY2NvdW50X2lkIjoiOWNkZDliMjctYTNmMC00MGE2LTkwMTUtOGIxNzBjMjM3YzY3IiwidHlwZSI6ImFjY2VzcyIsImp0aSI6ImZjNWY2ZDQzLTY5MGUtNDA1YS1iYWFhLTc1OWVmMjQ4YjMxOSIsImlhdCI6MjAwMDAwMDAwMCwiZXhwIjoyMDAwMDAwMzAwfQ.C8lVuE6w5AS0bVj7Tz6jnTsprezI1-kkuBE2fqUrONw",
+      "expectedAudience": null,
+      "originalAccepted": true,
+      "humanAccepted": true,
+      "reason": "",
+      "original": {
+        "userId": "c2cc8374-8cdf-4936-8967-d891fb500634",
+        "orgId": "4ce65010-7331-415a-abaa-4d47387d845e",
+        "role": "admin",
+        "keyId": "phone-login",
+        "authApp": "sudowork",
+        "accountId": "9cdd9b27-a3f0-40a6-9015-8b170c237c67",
+        "jti": "fc5f6d43-690e-405a-baaa-759ef248b319",
+        "exp": 2000000300,
+        "scopes": []
+      }
+    }
+  ],
+  "scopeChecks": [
+    {
+      "scopes": [],
+      "required": "sessions:create",
+      "allowed": false
+    },
+    {
+      "scopes": [
+        "sessions:list"
+      ],
+      "required": "sessions:list",
+      "allowed": true
+    },
+    {
+      "scopes": [
+        "sessions:list"
+      ],
+      "required": "sessions:create",
+      "allowed": false
+    },
+    {
+      "scopes": [
+        "*"
+      ],
+      "required": "admin:users",
+      "allowed": true
+    },
+    {
+      "scopes": [
+        "sessions:*"
+      ],
+      "required": "sessions:create",
+      "allowed": true
+    },
+    {
+      "scopes": [
+        "sessions:*"
+      ],
+      "required": "sessions:inputs:write",
+      "allowed": true
+    },
+    {
+      "scopes": [
+        "sessions:*"
+      ],
+      "required": "admin:users",
+      "allowed": false
+    },
+    {
+      "scopes": [
+        "sessions:read:*"
+      ],
+      "required": "sessions:read:item",
+      "allowed": false
+    },
+    {
+      "scopes": [
+        "session*"
+      ],
+      "required": "sessions:create",
+      "allowed": false
+    },
+    {
+      "scopes": [
+        "sessions:create"
+      ],
+      "required": "sessions",
+      "allowed": false
+    },
+    {
+      "scopes": [
+        "sessions:*"
+      ],
+      "required": "sessions",
+      "allowed": true
+    },
+    {
+      "scopes": [
+        7,
+        {
+          "scope": "*"
+        },
+        true,
+        null,
+        "sessions:list"
+      ],
+      "required": "sessions:create",
+      "allowed": false
+    },
+    {
+      "scopes": [
+        7,
+        {
+          "scope": "*"
+        },
+        true,
+        null,
+        "sessions:list"
+      ],
+      "required": "sessions:list",
+      "allowed": true
+    }
+  ]
+}

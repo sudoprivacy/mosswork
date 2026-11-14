@@ -416,7 +416,9 @@ export default function RemoteBrowserPage({
 
   const {
     status,
+    inputReady,
     tabs: streamTabs,
+    sessionInfo,
     connect,
     disconnect,
     sendEvent,
@@ -495,6 +497,12 @@ export default function RemoteBrowserPage({
     setSession(view);
     if (!urlEditingRef.current && view.url) setNavUrl(view.url);
   }, [streamTabs]);
+
+  useEffect(() => {
+    if (!urlEditingRef.current && sessionInfo?.current_url) {
+      setNavUrl(sessionInfo.current_url);
+    }
+  }, [sessionInfo?.current_url]);
 
   const refreshEnv = useCallback(async (): Promise<EnvStatus | null> => {
     setEnvLoading(true);
@@ -791,7 +799,11 @@ export default function RemoteBrowserPage({
   // visible canvas area so text stays legible instead of CSS-downscaled.
   // Delegated to the shared hook also used by BrowserWorkspace.
   useAutoViewportResize({
-    enabled: !!(session && (isMobile || viewportMode === "auto")),
+    enabled: !!(
+      session &&
+      (isMobile || viewportMode === "auto") &&
+      sessionInfo?.control_owner === "user"
+    ),
     containerRef,
     isStreaming,
     sendEvent,
@@ -1387,7 +1399,17 @@ export default function RemoteBrowserPage({
                   navUrl={navUrl}
                   onNavUrlChange={setNavUrl}
                   onNavigate={(url) => streamNavigate(url)}
-                  interactive={Boolean(session)}
+                  interactive={
+                    isStreaming &&
+                    sessionInfo?.control_owner === "user" &&
+                    inputReady
+                  }
+                  controlHint={t("browserWorkspace.nativeControlHint")}
+                  waitingForFrame={
+                    isStreaming &&
+                    sessionInfo?.control_owner === "user" &&
+                    !inputReady
+                  }
                   bookmarked={currentBookmarked}
                   onToggleBookmark={toggle}
                   addressBarExtra={

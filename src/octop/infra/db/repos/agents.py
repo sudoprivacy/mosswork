@@ -6,6 +6,7 @@ from dataclasses import dataclass
 
 from octop.infra.db.pool import DatabasePool
 from octop.infra.db.repos._base import UNSET, DbRow, bool_int, map_rows, now_ts, optional_updates
+from octop.infra.db.retention import assert_agent_deletable
 
 
 def _opt_str(r: DbRow, key: str) -> str | None:
@@ -289,6 +290,12 @@ class AgentRepo:
         with self._db.transaction() as conn:
             conn.execute(f"UPDATE agents SET {', '.join(fields)} WHERE agent_id = ?", params)
 
+    def assert_deletable(self, agent_id: str) -> None:
+        """Refuse retained resources before runtime or workspace cleanup begins."""
+        with self._db.connect() as conn:
+            assert_agent_deletable(conn, agent_id)
+
     def delete(self, agent_id: str) -> None:
         with self._db.transaction() as conn:
+            assert_agent_deletable(conn, agent_id)
             conn.execute("DELETE FROM agents WHERE agent_id = ?", (agent_id,))

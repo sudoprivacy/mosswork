@@ -39,6 +39,8 @@ TOOL_FILES = (
     "tools/accept_sudograph_worker.py",
     "tools/ci_identity_reuse.py",
     "tests/unit/deployment/test_precommit.py",
+    "tests/unit/deployment/test_ci_action_recipe.py",
+    "tests/unit/deployment/test_hook_staging.py",
     "tests/unit/deployment/test_frontend_gate.py",
     "tests/unit/deployment/test_export_public_source.py",
     "tests/unit/deployment/test_ci_identity_reuse.py",
@@ -74,8 +76,9 @@ WINDOWS_VALIDATION_INPUTS = frozenset(
     }
 )
 WINDOWS_VALIDATION_RECIPE_SHA256 = (
-    "2fb9a56593c48bca93bcc9364634e3ec0ed15ba7a14c826df142c3afae531d44"
+    "824241afb0a9ca0b5cd27361b7c5b25b2d8b522daeb3beb141b55d5d1b86fb29"
 )
+WINDOWS_VALIDATION_RECIPE_ACTIONS = (".github/actions/canonical-product-checks/action.yml",)
 
 
 def git(root: Path, *arguments: str) -> bytes:
@@ -126,19 +129,39 @@ def validator_regressions_required(
 
 def windows_validation_recipe(root: Path, head: str, environment: dict[str, str]) -> bool:
     """Old or changed workflows keep full runtime coverage until their route is qualified."""
-    result = subprocess.run(
-        ["git", "show", head + ":.github/workflows/mosswork-ci.yml"],
-        cwd=root,
-        env=environment,
-        capture_output=True,
-        check=False,
-    )
-    if result.returncode:
-        return False
-    try:
-        source = result.stdout.decode("utf-8").replace("\r\n", "\n")
-    except UnicodeDecodeError:
-        return False
+    workflow = ".github/workflows/mosswork-ci.yml"
+    sources = {}
+    for name in (workflow, *WINDOWS_VALIDATION_RECIPE_ACTIONS):
+        entry = subprocess.run(
+            ["git", "ls-tree", "-z", head, "--", name],
+            cwd=root,
+            env=environment,
+            capture_output=True,
+            check=False,
+        )
+        if entry.returncode or entry.stdout.count(b"\0") != 1:
+            return False
+        metadata, separator, path = entry.stdout.removesuffix(b"\0").partition(b"\t")
+        if (
+            not separator
+            or path != name.encode("utf-8")
+            or not metadata.startswith((b"100644 blob ", b"100755 blob "))
+        ):
+            return False
+        result = subprocess.run(
+            ["git", "show", head + ":" + name],
+            cwd=root,
+            env=environment,
+            capture_output=True,
+            check=False,
+        )
+        if result.returncode:
+            return False
+        try:
+            sources[name] = result.stdout.decode("utf-8").replace("\r\n", "\n")
+        except UnicodeDecodeError:
+            return False
+    source = sources[workflow]
     blocks = []
     for job in ("ci-scope", "release-checks"):
         if len(re.findall(r"(?m)^  " + job + r":", source)) != 1:
@@ -147,7 +170,10 @@ def windows_validation_recipe(root: Path, head: str, environment: dict[str, str]
         if block is None:
             return False
         blocks.append((block.group(0).rstrip() + "\n").encode("utf-8"))
-    # Bind the selector, its output wiring and the complete shared matrix together.
+    # Bind the complete shared matrix and the local actions it executes together.
+    blocks.extend(
+        (name + "\0" + sources[name]).encode("utf-8") for name in WINDOWS_VALIDATION_RECIPE_ACTIONS
+    )
     return hashlib.sha256(b"\0".join(blocks)).hexdigest() == WINDOWS_VALIDATION_RECIPE_SHA256
 
 
@@ -560,6 +586,8 @@ def commands(selected: str, changed: list[str] | None = None) -> list[list[str]]
         return []
     tests = [
         "tests/unit/deployment/test_precommit.py",
+        "tests/unit/deployment/test_ci_action_recipe.py",
+        "tests/unit/deployment/test_hook_staging.py",
         "tests/unit/deployment/test_export_public_source.py",
         "tests/unit/deployment/test_ci_identity_reuse.py",
     ]

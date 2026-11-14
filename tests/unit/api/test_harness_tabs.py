@@ -6,6 +6,7 @@ from types import SimpleNamespace
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
+from tests.support.browser_profiles import browser_paths as browser_paths
 
 from octop.api.routers.browser import harness as harness_mod
 
@@ -57,42 +58,39 @@ async def test_harness_list_tabs_marks_profile_target_active() -> None:
         {"type": "page", "id": "TAB-B", "url": "https://b.test", "title": "B"},
     ]
 
-    class _JsonResp:
-        def __init__(self, data: list[dict[str, object]]) -> None:
-            self._data = data
-
-        async def __aenter__(self) -> _JsonResp:
-            return self
-
-        async def __aexit__(self, *exc: object) -> bool:
-            return False
-
-        async def json(self, content_type: object = None) -> list[dict[str, object]]:
-            return self._data
-
-    class _Session:
-        def __init__(self, data: list[dict[str, object]]) -> None:
-            self._data = data
-
-        async def __aenter__(self) -> _Session:
-            return self
-
-        async def __aexit__(self, *exc: object) -> bool:
-            return False
-
-        def get(self, url: str, timeout: object = None) -> _JsonResp:
-            return _JsonResp(self._data)
-
-    with patch("aiohttp.ClientSession", new=lambda: _Session(targets)):
-        tabs = await harness_mod.harness_list_tabs(sess)
+    passive = AsyncMock(
+        side_effect=[
+            {
+                "targetInfo": {
+                    "targetId": "TAB-B",
+                    "type": "page",
+                    "browserContextId": "original-context",
+                }
+            },
+            {
+                "targetInfos": [
+                    *[
+                        {**target, "targetId": target["id"], "browserContextId": "original-context"}
+                        for target in targets
+                    ],
+                    {"targetId": "FOREIGN", "type": "page", "browserContextId": "other-context"},
+                ]
+            },
+        ]
+    )
+    active = AsyncMock(side_effect=AssertionError("A tab observation must be passive"))
+    sess._internal.client = SimpleNamespace(send=active, send_passive=passive)
+    tabs = await harness_mod.harness_list_tabs(sess)
 
     assert [t["id"] for t in tabs] == ["TAB-A", "TAB-B"]
     assert tabs[1]["active"] is True
     assert tabs[0]["active"] is False
+    assert passive.await_count == 2
+    active.assert_not_awaited()
 
 
 @pytest.mark.asyncio
-async def test_shutdown_browser_forces_current_user_profile() -> None:
+async def test_shutdown_browser_forces_current_user_profile(browser_paths) -> None:
     result = SimpleNamespace(success=True, error=None)
     with (
         patch(
@@ -103,6 +101,7 @@ async def test_shutdown_browser_forces_current_user_profile() -> None:
     ):
         body = await harness_mod.shutdown_browser(
             user=SimpleNamespace(id=7),
+            server=SimpleNamespace(paths=browser_paths),
         )
     assert body == {"ok": True, "profile": "user-7"}
     tool.assert_awaited_once_with(

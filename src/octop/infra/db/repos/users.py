@@ -5,9 +5,11 @@ from __future__ import annotations
 import builtins
 import json
 from dataclasses import dataclass, field
+from typing import Any
 
 from octop.infra.db.pool import DatabasePool
 from octop.infra.db.repos._base import DbRow, bool_int, insert_returning_id, map_rows, now_ts
+from octop.infra.db.retention import assert_user_deletable
 
 
 def _parse_permissions(raw: object) -> builtins.list[str]:
@@ -111,37 +113,67 @@ class UserRepo:
         permissions: builtins.list[str] | None = None,
         role_name: str | None = None,
     ) -> int:
-        perms_json = json.dumps(permissions or [], ensure_ascii=False)
         with self._db.transaction() as conn:
-            user_id = insert_returning_id(
+            return self.create_in_transaction(
                 conn,
-                "INSERT INTO users(username, password_hash, role, display_name, locale, "
-                "email, sso_provider_id, sso_subject, disabled, created_at, permissions, "
-                "role_name) "
-                "VALUES (?, ?, ?, ?, ?, ?, ?, ?, 0, ?, ?, ?)",
-                (
-                    username,
-                    password_hash,
-                    role,
-                    display_name,
-                    locale,
-                    email,
-                    sso_provider_id,
-                    sso_subject,
-                    now_ts(),
-                    perms_json,
-                    role_name,
-                ),
+                username=username,
+                password_hash=password_hash,
+                role=role,
+                display_name=display_name,
+                locale=locale,
+                email=email,
+                sso_provider_id=sso_provider_id,
+                sso_subject=sso_subject,
+                permissions=permissions,
+                role_name=role_name,
             )
-            # Once a source is explicitly configured, new employees wait for assignments.
-            if role != "admin":
-                conn.execute(
-                    "UPDATE users SET expert_access_mode='assigned_only' WHERE id=? "
-                    "AND EXISTS (SELECT 1 FROM expert_assignment_source "
-                    "WHERE id=1 AND revision>0)",
-                    (user_id,),
-                )
-            return user_id
+
+    def create_in_transaction(
+        self,
+        conn: Any,
+        *,
+        username: str,
+        password_hash: str | None = None,
+        role: str,
+        display_name: str | None = None,
+        locale: str = "zh",
+        email: str | None = None,
+        sso_provider_id: int | None = None,
+        sso_subject: str | None = None,
+        permissions: builtins.list[str] | None = None,
+        role_name: str | None = None,
+    ) -> int:
+        """Use the product allocator inside an already owned transaction."""
+        perms_json = json.dumps(permissions or [], ensure_ascii=False)
+        user_id = insert_returning_id(
+            conn,
+            "INSERT INTO users(username, password_hash, role, display_name, locale, "
+            "email, sso_provider_id, sso_subject, disabled, created_at, permissions, "
+            "role_name) "
+            "VALUES (?, ?, ?, ?, ?, ?, ?, ?, 0, ?, ?, ?)",
+            (
+                username,
+                password_hash,
+                role,
+                display_name,
+                locale,
+                email,
+                sso_provider_id,
+                sso_subject,
+                now_ts(),
+                perms_json,
+                role_name,
+            ),
+        )
+        # Once a source is explicitly configured, new employees wait for assignments.
+        if role != "admin":
+            conn.execute(
+                "UPDATE users SET expert_access_mode='assigned_only' WHERE id=? "
+                "AND EXISTS (SELECT 1 FROM expert_assignment_source "
+                "WHERE id=1 AND revision>0)",
+                (user_id,),
+            )
+        return user_id
 
     def get(self, user_id: int) -> UserRow | None:
         with self._db.connect() as conn:
@@ -367,8 +399,13 @@ class UserRepo:
                 (payload, user_id),
             )
 
+    def assert_deletable(self, user_id: int) -> None:
+        with self._db.connect() as conn:
+            assert_user_deletable(conn, user_id)
+
     def delete(self, user_id: int) -> None:
         with self._db.transaction() as conn:
+            assert_user_deletable(conn, user_id)
             conn.execute("DELETE FROM users WHERE id = ?", (user_id,))
 
     def count(self) -> int:

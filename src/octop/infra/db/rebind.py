@@ -105,6 +105,8 @@ def rebind_control_plane(server: MossworkServer) -> None:
     Only allowed while ``user_count == 0`` (first-run setup). Target DB must also
     be empty (greenfield); otherwise raise ``DATABASE_NOT_EMPTY`` without swapping.
     """
+    if getattr(server, "canonical_configuration", None) is not None:
+        raise ValueError("Canonical Product storage requires a controlled restart")
     communication = getattr(server, "communication", None)
     if communication is not None and communication.enabled:
         raise MossworkError(

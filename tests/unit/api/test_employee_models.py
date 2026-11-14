@@ -4,6 +4,7 @@ from unittest.mock import AsyncMock, Mock
 import httpx
 import pytest
 from fastapi import FastAPI
+from tests.support.browser_profiles import browser_paths as browser_paths
 from tests.unit.users.test_model_access import model_env as model_env
 
 from octop.api.app import _install_exception_handlers
@@ -129,7 +130,7 @@ async def test_user_edit_saves_model_access_and_rejects_invalid_grants_before_ot
 
 
 async def test_dashboard_turn_rejects_unassigned_models_before_composer_write(
-    model_env, monkeypatch
+    model_env, monkeypatch, browser_paths
 ):
     e = model_env
     monkeypatch.setattr(
@@ -147,6 +148,7 @@ async def test_dashboard_turn_rejects_unassigned_models_before_composer_write(
     monkeypatch.setattr("octop.api.routers.chat.turn.resolve_thread_id", resolve_thread)
     threads = SimpleNamespace(update_composer=Mock())
     server = SimpleNamespace(
+        paths=browser_paths,
         services=e.services,
         app_runtime=SimpleNamespace(
             agent_registry=SimpleNamespace(providers=ProviderStore(e.services.provider_repo)),

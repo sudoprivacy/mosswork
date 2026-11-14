@@ -127,7 +127,7 @@ async def test_permission_drafts_experts_corruption_and_unsupported_runtime_are_
     )
     assert result.status_code == 409, result.text
     assert result.json()["error"]["code"] == "MARKET_INSTALL_UNSUPPORTED"
-    # Deliberately corrupt this private fixture, including Windows read-only files.
+    # Simulate owner tampering after removing the immutable object's write protection.
     (market.objects / v1["object_sha256"]).chmod(0o600)
     (market.objects / v1["object_sha256"]).unlink()
     (market.objects / v1["object_sha256"]).write_bytes(b"corrupt")

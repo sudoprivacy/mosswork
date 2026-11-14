@@ -138,8 +138,9 @@ class CDPClient:
     async def close(self) -> None:
         """Close the WebSocket connection."""
         ws = self._ws
+        self._ws = None
+        self._fail_pending("Connection closed")
         if ws:
-            self._ws = None
             await ws.close()
         if self._recv_task:
             self._recv_task.cancel()
@@ -149,12 +150,22 @@ class CDPClient:
                 pass
         logger.debug("CDP connection closed")
 
+    def _fail_pending(self, message: str) -> None:
+        for future in self._pending.values():
+            if not future.done():
+                future.set_exception(CDPSessionError(message))
+        self._pending.clear()
+
     async def _recv_loop(self) -> None:
         """Background task: read messages and dispatch to pending futures or
         listeners."""
-        assert self._ws is not None
+        ws = self._ws
+        if ws is None:
+            self._fail_pending("Connection closed")
+            return
+        failure = "Connection closed"
         try:
-            async for raw in self._ws:
+            async for raw in ws:
                 msg: dict[str, Any] = json.loads(raw)
                 if "id" in msg:
                     future = self._pending.pop(msg["id"], None)
@@ -171,7 +182,6 @@ class CDPClient:
                             asyncio.create_task(result)
         except Exception as exc:  # noqa: BLE001  # pylint: disable=broad-except
             logger.debug("CDP recv loop ended: %s", exc)
-            for future in self._pending.values():
-                if not future.done():
-                    future.set_exception(CDPSessionError(f"Connection lost: {exc}"))
-            self._pending.clear()
+            failure = f"Connection lost: {exc}"
+        finally:
+            self._fail_pending(failure)

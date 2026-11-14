@@ -727,8 +727,26 @@ class ExecutionRepo:
             )
 
     def claim(
-        self, node: str, incarnation: str, *, run_id: str | None = None
+        self,
+        node: str,
+        incarnation: str,
+        *,
+        run_id: str | None = None,
+        eligible_run_ids: tuple[str, ...] | None = None,
     ) -> dict[str, Any] | None:
+        if eligible_run_ids is not None and not eligible_run_ids:
+            return None
+        # Unadapted workers must not claim canonical attribution-only work.
+        # An adapted worker supplies only IDs with a live process-local caller.
+        admission_filter = (
+            "AND NOT jsonb_exists(CAST(r.request_json AS jsonb),'canonical_actor') "
+            if self.db.dialect == "postgresql"
+            else "AND json_type(r.request_json,'$.canonical_actor') IS NULL "
+        )
+        admission_parameters: tuple[str, ...] = ()
+        if eligible_run_ids is not None:
+            admission_filter = "AND r.run_id IN (" + ",".join("?" for _ in eligible_run_ids) + ") "
+            admission_parameters = eligible_run_ids
         with self._transaction() as (conn, now):
             process = self._node(conn, now, node, incarnation, ready=True)
             if process["role"] == "web":
@@ -753,8 +771,19 @@ class ExecutionRepo:
                 "WHERE r.state='queued' AND (CAST(? AS TEXT) IS NULL OR r.run_id=?) "
                 "AND (o.node_id IS NULL OR (o.node_id=? AND o.incarnation=?) OR (n.state='stopped' AND n.incarnation=o.incarnation)) "
                 "AND (?=0 OR (u.role='admin' AND ?=0) OR (u.role<>'admin' AND MOD(r.user_id-1,?)=?)) "
-                "ORDER BY f.last_dispatch,r.created_at,r.run_id LIMIT 32",
-                (run_id, run_id, node, incarnation, len(nodes), index, max(1, len(nodes)), index),
+                + admission_filter
+                + "ORDER BY f.last_dispatch,r.created_at,r.run_id LIMIT 32",
+                (
+                    run_id,
+                    run_id,
+                    node,
+                    incarnation,
+                    len(nodes),
+                    index,
+                    max(1, len(nodes)),
+                    index,
+                    *admission_parameters,
+                ),
             ).fetchall()
             run = None
             for candidate in runs:

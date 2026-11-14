@@ -21,6 +21,7 @@ export type ChromeTabBarProps = {
   onClose?: (key: string, e: MouseEvent) => void;
   onNewTab?: () => void;
   newTabTitle?: string;
+  disabled?: boolean;
   /** Right-side actions (theme, AI panel, …). */
   trailing?: ReactNode;
   className?: string;
@@ -37,6 +38,7 @@ export function ChromeTabBar({
   onClose,
   onNewTab,
   newTabTitle,
+  disabled = false,
   trailing,
   className,
 }: ChromeTabBarProps) {
@@ -49,10 +51,13 @@ export function ChromeTabBar({
             <div
               role="tab"
               aria-selected={selected}
+              aria-disabled={disabled}
               className={`${styles.tab}${
                 selected ? ` ${styles.tabActive}` : ""
               }`}
-              onClick={() => onChange(tab.key)}
+              onClick={() => {
+                if (!disabled) onChange(tab.key);
+              }}
             >
               {tab.leading}
               <span className={styles.tabLabel}>{tab.label}</span>
@@ -60,13 +65,14 @@ export function ChromeTabBar({
                 <span
                   className={styles.tabClose}
                   role="button"
-                  tabIndex={0}
+                  aria-disabled={disabled}
+                  tabIndex={disabled ? -1 : 0}
                   onClick={(e) => {
                     e.stopPropagation();
-                    onClose(tab.key, e);
+                    if (!disabled) onClose(tab.key, e);
                   }}
                   onKeyDown={(e) => {
-                    if (e.key === "Enter" || e.key === " ") {
+                    if (!disabled && (e.key === "Enter" || e.key === " ")) {
                       e.preventDefault();
                       e.stopPropagation();
                       onClose(tab.key, e as unknown as MouseEvent);
@@ -96,6 +102,7 @@ export function ChromeTabBar({
               onClick={onNewTab}
               title={newTabTitle}
               aria-label={newTabTitle}
+              disabled={disabled}
             >
               <Plus size={12} />
             </button>

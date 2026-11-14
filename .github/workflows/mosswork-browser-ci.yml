@@ -1,0 +1,229 @@
+name: Mosswork browser acceptance
+
+on:
+  pull_request:
+    paths:
+      - ".github/workflows/mosswork-browser-ci.yml"
+      - "dashboard/**"
+      - "src/octop/api/routers/browser/**"
+      - "src/octop/api/routers/chat/**"
+      - "src/octop/api/routers/canonical_*.py"
+      - "src/octop/api/app.py"
+      - "src/octop/api/deps.py"
+      - "src/octop/api/middleware/setup_lockdown.py"
+      - "src/octop/launch.py"
+      - "src/octop/infra/browser/**"
+      - "src/octop/infra/native_host/**"
+      - "src/octop/infra/identity/**"
+      - "src/octop/infra/db/repos/retained_*.py"
+      - "src/octop/infra/db/rebind.py"
+      - "src/octop/infra/agents/middleware/browser_profile.py"
+      - "src/octop/infra/agents/manager.py"
+      - "src/octop/infra/agents/execution_backend.py"
+      - "src/octop/infra/execution/**"
+      - "src/octop/infra/gateway/**"
+      - "src/octop/infra/server.py"
+      - "packages/moss-browser/**"
+      - "packages/moss-harness/**"
+      - "tools/accept_browser_*.py"
+      - "tests/unit/deployment/test_browser_worker_acceptance.py"
+      - "tools/accept_browser_fixture.json"
+      - "tools/accept_cohost_acp.py"
+      - "tools/export_public_source.py"
+      - "tests/unit/deployment/test_export_public_source.py"
+      - "tests/unit/deployment/test_browser_fixture_intake.py"
+      - "tests/unit/infra/native_host/**"
+      - "tests/unit/native_host/**"
+      - "tests/unit/db/test_retained_*.py"
+      - "tests/unit/db/fixtures/retained_*.sql"
+      - "tests/integration/test_browser_api.py"
+      - "tests/integration/test_chat_ws.py"
+      - "tests/unit/api/test_browser*"
+      - "tests/unit/agents/test_browser_profile_middleware.py"
+      - "tests/unit/agents/test_managed_execution_backend.py"
+      - "tests/unit/agents/test_managed_lifecycle_admission.py"
+      - "tests/unit/test_canonical_execution_admission.py"
+      - "tests/unit/test_canonical_execution_reauthentication_http.py"
+      - "tests/unit/test_canonical_business_product_composition.py"
+      - "tests/unit/test_canonical_business_supplements_consumer.py"
+      - "tests/unit/test_canonical_product_startup.py"
+      - "tests/unit/identity/test_canonical_business_composition.py"
+      - "tests/unit/test_execution_gateway.py"
+      - "pyproject.toml"
+      - "uv.lock"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  actions: read
+
+jobs:
+  native-host-regressions:
+    name: Native host regressions (${{ matrix.os }}, ${{ matrix.suite }})
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-24.04, windows-2022]
+        suite: [transport, review, pages, product, startup]
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 20
+    defaults:
+      run:
+        shell: bash
+    env:
+      PYTHONUTF8: "1"
+      PYTHONIOENCODING: utf-8
+      NODE_OPTIONS: --max-old-space-size=2048
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v6
+        with:
+          python-version: "3.12"
+          enable-cache: true
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+      - name: Install the locked workspace
+        run: uv sync --locked
+      - name: Check strict native context and product admission
+        env:
+          NATIVE_SUITE: ${{ matrix.suite }}
+        run: |
+          extra=()
+          case "$NATIVE_SUITE" in
+            transport)
+              paths=(tests/unit/native_host tests/unit/infra/native_host tests/unit/db/test_retained_cohost.py tests/unit/db/test_retained_ontology.py tests/unit/db/test_retained_model_audit.py)
+              extra+=(--ignore-glob=tests/unit/native_host/test_human_review*.py)
+              ;;
+            review)
+              paths=()
+              for path in tests/unit/native_host/test_human_review*.py; do
+                if [[ "$path" != tests/unit/native_host/test_human_review_page*.py ]]; then
+                  paths+=("$path")
+                fi
+              done
+              ;;
+            pages)
+              paths=(tests/unit/native_host/test_human_review_page*.py)
+              ;;
+            product)
+              paths=(tests/unit/agents/test_managed_execution_backend.py tests/unit/agents/test_managed_lifecycle_admission.py tests/unit/test_canonical_execution_admission.py tests/unit/test_canonical_execution_reauthentication_http.py tests/unit/test_canonical_business_product_composition.py tests/unit/test_canonical_business_supplements_consumer.py tests/unit/test_execution_gateway.py)
+              ;;
+            startup)
+              paths=(tests/unit/test_canonical_product_startup.py)
+              ;;
+            *) exit 2 ;;
+          esac
+          uv run --locked pytest "${paths[@]}" "${extra[@]}" -q --junitxml="$RUNNER_TEMP/native-host-$NATIVE_SUITE.xml"
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: native-host-${{ runner.os }}-${{ matrix.suite }}
+          path: ${{ runner.temp }}/native-host-${{ matrix.suite }}.xml
+          if-no-files-found: error
+
+  browser:
+    needs: native-host-regressions
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-24.04, windows-2022]
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 20
+    defaults:
+      run:
+        shell: bash
+    env:
+      PYTHONUTF8: "1"
+      PYTHONIOENCODING: utf-8
+      NODE_OPTIONS: --max-old-space-size=2048
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v6
+        with:
+          python-version: "3.12"
+          enable-cache: true
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: dashboard/package-lock.json
+      - name: Install the locked workspace and real browser
+        run: |
+          uv sync --locked
+          if [ "$RUNNER_OS" = Linux ]; then
+            uv run --locked playwright install --with-deps chromium
+          else
+            uv run --locked playwright install chromium
+          fi
+      - name: Resolve the installed browser executable
+        id: browser
+        run: |
+          uv run --locked python -c 'from playwright.sync_api import sync_playwright; p=sync_playwright().start(); print("executable=" + p.chromium.executable_path); p.stop()' >> "$GITHUB_OUTPUT"
+      - name: Build the actual dashboard and check browser regressions
+        run: |
+          npm --prefix dashboard ci --no-audit --no-fund
+          npm --prefix dashboard run build
+          npm --prefix dashboard test -- --maxWorkers=1 src/hooks/useBrowserStream.test.tsx src/hooks/useBrowserKeyboardInput.test.tsx src/utils/browserCanvas.test.ts src/pages/Chat/hooks/useChat.cancel.test.ts
+          uv run --locked pytest tests/unit/agents/test_browser_profile_middleware.py tests/unit/api/test_browser_stream_input.py tests/unit/api/test_browser_stream_mouse.py tests/unit/api/test_browser_stream_listen.py tests/unit/api/test_browser_stream_normalize_nav.py tests/integration/test_browser_api.py tests/integration/test_chat_ws.py tests/unit/gateway/test_preempt_stop_cancel.py -q
+      - name: Exercise the real browser tool and input barrier
+        run: |
+          uv run --locked python tools/accept_browser_control.py --chrome "${{ steps.browser.outputs.executable }}" --output "$RUNNER_TEMP/browser-control"
+      - name: Check pending CDP calls finish when the receiver closes
+        run: uv run --locked pytest -c packages/moss-browser/pyproject.toml packages/moss-browser/tests/unit/test_idle.py -q
+      - name: Check canonical account and standalone login regressions
+        run: |
+          npm --prefix dashboard test -- --maxWorkers=1 --reporter=default --reporter=junit --outputFile.junit="$RUNNER_TEMP/canonical-account.xml" src/api/canonicalIdentity.test.ts src/hooks/useCanonicalIdentity.test.tsx src/components/AuthGuard.canonical.test.tsx src/pages/Login/CanonicalLogin.test.tsx src/pages/Login/CanonicalMemberLogin.test.tsx src/components/AuthGuard.test.tsx src/pages/Login/Login.remember.test.tsx src/pages/Login/Login.forgotPassword.test.tsx src/api/request.authToken.test.ts src/api/request.setup.test.ts src/api/request.unauthorized.test.ts src/api/canonicalProfile.test.ts src/hooks/useCanonicalProfile.test.tsx src/pages/Login/CanonicalLogin.routes.test.tsx src/pages/Login/CanonicalProfilePanel.test.tsx src/api/canonicalOrganization.test.ts src/hooks/useCanonicalOrganization.test.tsx src/pages/Login/CanonicalOrganizationPanel.test.tsx
+      - name: Preserve browser regression CI in the public source export
+        run: uv run --locked pytest tests/unit/deployment/test_export_public_source.py tests/unit/deployment/test_browser_fixture_intake.py tests/unit/deployment/test_browser_worker_acceptance.py -q
+      - name: Exercise the published browser worker through the host transport
+        run: |
+          chrome_args=()
+          # Match Playwright's sandbox mode in this disposable hosted Linux job.
+          # The Worker starts Chrome directly; production launch defaults stay intact.
+          if [ "$RUNNER_OS" = Linux ]; then
+            chrome_args+=(--chrome-arg=--no-sandbox)
+          fi
+          uv run --locked python tools/accept_browser_worker.py --chrome "${{ steps.browser.outputs.executable }}" --output "$RUNNER_TEMP/browser-worker" "${chrome_args[@]}"
+      - name: Intake the published domain fixture for this platform
+        id: fixture
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          artifact=$(uv run --locked python -c 'import json,os; print(json.load(open("tools/accept_browser_fixture.json"))["platforms"][os.environ["RUNNER_OS"]]["artifact_id"])')
+          gh api "repos/sudoprivacy/mosswork/actions/artifacts/$artifact/zip" > "$RUNNER_TEMP/sudograph-fixture.zip"
+          uv run --locked python tools/accept_browser_fixture.py --archive "$RUNNER_TEMP/sudograph-fixture.zip" --platform "$RUNNER_OS" --output "$RUNNER_TEMP/published-fixture" --github-output "$GITHUB_OUTPUT"
+      - name: Exercise the compiled dashboard through real HTTP and WebSocket
+        run: |
+          uv run --locked python tools/accept_browser_viewer.py --chrome "${{ steps.browser.outputs.executable }}" --output "$RUNNER_TEMP/browser-viewer" --review-fixture "${{ steps.fixture.outputs.fixture }}" --review-manifest-sha256 "${{ steps.fixture.outputs.manifest_sha256 }}" --review-intake "$RUNNER_TEMP/published-fixture/intake.json"
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: browser-acceptance-${{ runner.os }}
+          path: |
+            ${{ runner.temp }}/canonical-account.xml
+            ${{ runner.temp }}/browser-control/receipt.json
+            ${{ runner.temp }}/browser-control/checks.json
+            ${{ runner.temp }}/browser-control/incomplete.json
+            ${{ runner.temp }}/browser-worker/receipt.json
+            ${{ runner.temp }}/browser-worker/checks.json
+            ${{ runner.temp }}/browser-worker/incomplete.json
+            ${{ runner.temp }}/browser-worker/worker-launch-diagnostic.json
+            ${{ runner.temp }}/browser-worker/worker-page.jpg
+            ${{ runner.temp }}/browser-viewer/receipt.json
+            ${{ runner.temp }}/browser-viewer/dashboard-content-manifest.json
+            ${{ runner.temp }}/browser-viewer/incomplete.json
+            ${{ runner.temp }}/browser-viewer/desktop-viewer.png
+            ${{ runner.temp }}/browser-viewer/chat-browser-panel.png
+            ${{ runner.temp }}/browser-viewer/mobile-viewer.png
+            ${{ runner.temp }}/browser-viewer/sudograph-initial-state.json
+            ${{ runner.temp }}/browser-viewer/sudograph-viewer.png
+            ${{ runner.temp }}/browser-viewer/sudograph-records-viewer.png
+            ${{ runner.temp }}/browser-viewer/sudograph-record-requests.json
+            ${{ runner.temp }}/browser-viewer/failure-viewer-*.png
+            ${{ runner.temp }}/browser-viewer/transport.json
+            ${{ runner.temp }}/browser-viewer/published-fixture-intake.json
+            ${{ runner.temp }}/published-fixture/intake.json
+            ${{ runner.temp }}/published-fixture/receipt.json
+            ${{ runner.temp }}/published-fixture/browser-fixture/manifest.json
+          if-no-files-found: ignore

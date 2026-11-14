@@ -155,7 +155,7 @@ async def test_install_rejects_missing_skills_corruption_and_mutating_composer(e
     response = await client.post(route, headers=auth, json={"name": "missing skill"})
     assert response.status_code == 409, response.text
     market.listing(skill["resource_id"], True)
-    # Deliberately corrupt this private fixture, including Windows read-only files.
+    # Simulate owner tampering after removing the immutable object's write protection.
     (market.objects / version["object_sha256"]).chmod(0o600)
     (market.objects / version["object_sha256"]).unlink()
     (market.objects / version["object_sha256"]).write_bytes(b"changed content")

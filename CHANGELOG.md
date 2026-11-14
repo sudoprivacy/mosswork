@@ -6,6 +6,10 @@
 
 ## [Unreleased]
 
+### Added
+
+- Canonical human review captures the original compiler document and reads records through current independent document/page grants and original-member audit. Production providers and comment delivery remain separate integration requirements.
+
 ## [0.0.7] - 2026-11-11
 
 ### Added

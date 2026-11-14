@@ -70,7 +70,7 @@ if ((${#STAGED_FILES[@]} > 0)); then
     fi
   done
   if ((${#existing[@]} > 0)); then
-    git add -- "${existing[@]}"
+    printf '%s\0' "${existing[@]}" | git --literal-pathspecs add --pathspec-from-file=- --pathspec-file-nul
   fi
 fi
 

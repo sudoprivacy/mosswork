@@ -2047,6 +2047,28 @@ def _ensure_sandbox_budget_schema(db: DatabasePool) -> None:
         _apply_postgresql_migration(conn, block)
 
 
+def _ensure_canonical_product_projection_schema(db: DatabasePool) -> None:
+    """Apply unreleased v30 projection DDL to already initialized product DBs."""
+    suffix = ".pg.sql" if db.dialect == "postgresql" else ".sql"
+    sql = (_MIGRATIONS_DIR / ("030_employee_knowledge" + suffix)).read_text(encoding="utf-8")
+    block = sql.split("-- Canonical product identity projection:", 1)[1].split(
+        "-- End canonical product identity projection.", 1
+    )[0]
+    with db.transaction() as conn:
+        _apply_postgresql_migration(conn, block)
+
+
+def _ensure_retained_session_projection_schema(db: DatabasePool) -> None:
+    """Fold product-only original-session references into unreleased v30."""
+    suffix = ".pg.sql" if db.dialect == "postgresql" else ".sql"
+    sql = (_MIGRATIONS_DIR / ("030_employee_knowledge" + suffix)).read_text(encoding="utf-8")
+    block = sql.split("-- Retained cohost product projection:", 1)[1].split(
+        "-- End retained cohost product projection.", 1
+    )[0]
+    with db.transaction() as conn:
+        _apply_postgresql_migration(conn, block)
+
+
 def _ensure_optional_model_limit(db: DatabasePool) -> None:
     """Allow zero (unlimited) on existing development v29 databases as well."""
     with db.transaction() as conn:
@@ -2180,6 +2202,8 @@ def _run_migrations(db: DatabasePool) -> None:
     _ensure_user_role_schema(db)
     _ensure_bridge_connections_schema(db)
     _ensure_sandbox_budget_schema(db)
+    _ensure_canonical_product_projection_schema(db)
+    _ensure_retained_session_projection_schema(db)
     _ensure_optional_model_limit(db)
     _ensure_source_definition_trigger(db)
     _ensure_resource_market_schema(db)

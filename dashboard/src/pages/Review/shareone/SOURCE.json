@@ -1,0 +1,10 @@
+{
+  "repository": "https://github.com/sudoprivacy/shareone",
+  "revision": "4d7b56aa37e502dae9a251c59ab8c4438457752f",
+  "source": {
+    "hostRead": "935611312a52b542f921d63f3adf26956eca06cb5257a7179c6cc2dd499867a5",
+    "escapeScript": "1cd5bba6bcc49a2b27246d4e91a4ec60b59abcc54a2f278ee945ddd06de8f1a3",
+    "html": "14a340373eb25b667f42f36e16f6a60e6b59d068f0a17d1885f3606da3b618e4"
+  },
+  "adoption": "Original child SDK interface/build function and presentation helper; legacy parent cookie-fetch class excluded. Existing message protocol unchanged. Compiler renderer is not copied or rewritten."
+}

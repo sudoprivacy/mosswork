@@ -5,6 +5,7 @@ from __future__ import annotations
 from types import SimpleNamespace
 
 import pytest
+from tests.support.browser_profiles import browser_paths as browser_paths
 
 from octop.api.routers.chat.turn import resolve_thread_id
 from octop.infra.errors import ErrorCode, MossworkError
@@ -67,7 +68,7 @@ def test_build_composer_context_includes_model_override() -> None:
 
 
 @pytest.mark.parametrize("selection", [None, []])
-async def test_plain_worker_turn_can_queue_without_a_sandbox(monkeypatch, selection):
+async def test_plain_worker_turn_can_queue_without_a_sandbox(monkeypatch, selection, browser_paths):
     from unittest.mock import AsyncMock, Mock
 
     from octop.api.routers.chat.models import ChatTurnBody
@@ -88,6 +89,7 @@ async def test_plain_worker_turn_can_queue_without_a_sandbox(monkeypatch, select
     registry = SimpleNamespace(start=AsyncMock(side_effect=AssertionError("no sandbox available")))
     server = SimpleNamespace(
         role="worker",
+        paths=browser_paths,
         services=SimpleNamespace(),
         app_runtime=SimpleNamespace(
             agent_registry=registry, gateway=SimpleNamespace(thread_registry=object())

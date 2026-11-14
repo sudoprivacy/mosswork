@@ -4,6 +4,7 @@ on:
   pull_request:
     paths:
       - '.github/workflows/mosswork-*.yml'
+      - '.github/actions/canonical-product-checks/**'
       - 'conftest.py'
       - 'tests/conftest.py'
       - 'src/octop/infra/market/**'
@@ -49,14 +50,53 @@ on:
       - 'tests/unit/sudograph/**'
       - 'tests/integration/test_sudograph_client_worker.py'
       - 'tests/unit/deployment/**'
-      - 'pyproject.toml'
-      - 'uv.lock'
       - 'tools/fetch_acp_test_engine.py'
       - 'tests/unit/acp/**'
       - 'tests/unit/db/test_execution.py'
       - 'tests/unit/agents/test_acp_settings.py'
       - 'tests/integration/test_acp_api.py'
       - 'tests/support/acp_*'
+      - 'src/octop/api/routers/chat/**'
+      - 'src/octop/api/common/canonical_identity.py'
+      - 'src/octop/infra/agents/execution_backend.py'
+      - 'src/octop/infra/execution/**'
+      - 'src/octop/infra/db/repos/execution.py'
+      - 'src/octop/infra/identity/**'
+      - 'src/octop/api/app.py'
+      - 'src/octop/api/deps.py'
+      - 'src/octop/api/routers/canonical_*.py'
+      - 'src/octop/api/middleware/setup_lockdown.py'
+      - 'src/octop/infra/db/repos/canonical_identity.py'
+      - 'src/octop/infra/gateway/feishu_delivery.py'
+      - 'src/octop/i18n/**'
+      - 'tests/unit/gateway/test_canonical_feishu.py'
+      - 'tests/unit/gateway/test_feishu_delivery_business_store.py'
+      - 'tests/unit/auth/test_feishu_adapter.py'
+      - 'tests/unit/db/test_canonical_identity_projection.py'
+      - 'tests/unit/i18n/**'
+      - 'tests/unit/api/test_canonical*'
+      - 'tests/unit/test_canonical*'
+      - 'tests/unit/test_r26_pc3_sms_mount.py'
+      - 'tests/unit/agents/test_managed_lifecycle_admission.py'
+      - 'tests/unit/identity/**'
+      - 'tests/unit/connectors/test_qcc_grant.py'
+      - 'tests/unit/connectors/test_qcc_oauth_grant.py'
+      - 'tests/unit/agents/test_memory_slim.py'
+      - 'tests/unit/agents/test_agent_manager.py'
+      - 'tests/unit/company_runtime/test_local_process.py'
+      - 'src/octop/infra/company_runtime/local.py'
+      - 'src/octop/infra/company_runtime/processes.py'
+      - 'tests/unit/company_runtime/test_supervised_process_leaf.py'
+      - 'src/octop/infra/db/repos/retained_mcp.py'
+      - 'src/octop/infra/native_host/reviewed_mcp.py'
+      - 'src/octop/infra/native_host/sudograph.py'
+      - 'tests/unit/native_host/test_sudograph*.py'
+      - 'tests/unit/db/fixtures/retained_mcp_103.sql'
+      - 'tests/unit/native_host/test_reviewed_mcp.py'
+      - 'tests/unit/native_host/test_registered_mcp_composition.py'
+      - 'tests/unit/connectors/test_fixed_json.py'
+      - 'src/octop/api/routers/knowledge_bases.py'
+      - 'src/octop/infra/agents/providers/onnx_service.py'
   workflow_dispatch:
 
 permissions:
@@ -218,12 +258,17 @@ jobs:
         shell: bash
       - name: Check isolated dependencies and live worker fixtures
         run: |
-          uv run --frozen pytest tests/unit/api/test_knowledge_bases.py tests/unit/company_runtime/test_desktop_capacity.py tests/unit/company_runtime/test_local_process.py tests/unit/infra/test_harness_config_imports.py -q --junitxml "$RUNNER_TEMP/shared-fixtures.xml"
+          uv run --frozen pytest tests/unit/api/test_knowledge_bases.py tests/unit/company_runtime/test_desktop_capacity.py tests/unit/company_runtime/test_local_process.py tests/unit/company_runtime/test_supervised_process_leaf.py tests/unit/infra/test_harness_config_imports.py -q --junitxml "$RUNNER_TEMP/shared-fixtures.xml"
           uv run --frozen pytest tests/unit/db/test_execution.py -q
         if: ${{ matrix.suite == 'interop' }}
         env:
           CI_VALIDATOR_REGRESSIONS: ${{ needs.ci-scope.outputs.validator_regressions }}
         shell: bash
+      - name: Check canonical product composition
+        if: ${{ matrix.suite == 'interop' }}
+        uses: ./.github/actions/canonical-product-checks
+        env:
+          CI_VALIDATOR_REGRESSIONS: ${{ needs.ci-scope.outputs.validator_regressions }}
       - name: Build, test and verify the installed current-source worker
         run: |
           uv run --no-project python tools/package_sudograph_worker.py --output "$RUNNER_TEMP/sudograph-worker-package"
@@ -283,7 +328,7 @@ jobs:
           connector_tests=(tests/unit/connectors/test_custom_mcp.py tests/unit/utils/test_frontmatter.py)
           validator_workers=()
           if [ "$RUNNER_OS" != Linux ] && [ "${CI_VALIDATOR_REGRESSIONS:-true}" != false ]; then
-            connector_tests+=(tests/unit/deployment/test_export_public_source.py tests/unit/deployment/test_precommit.py tests/unit/deployment/test_test_gate.py tests/unit/deployment/test_ci_identity_reuse.py tests/unit/deployment/test_make_format_gate.py tests/unit/deployment/test_make_testmon.py tests/unit/deployment/test_frontend_gate.py)
+            connector_tests+=(tests/unit/deployment/test_export_public_source.py tests/unit/deployment/test_precommit.py tests/unit/deployment/test_ci_action_recipe.py tests/unit/deployment/test_hook_staging.py tests/unit/deployment/test_test_gate.py tests/unit/deployment/test_ci_identity_reuse.py tests/unit/deployment/test_make_format_gate.py tests/unit/deployment/test_make_testmon.py tests/unit/deployment/test_frontend_gate.py)
             # These validators use private Git, Make and pytest fixture roots.
             validator_workers=(-n 2)
           fi
@@ -303,10 +348,10 @@ jobs:
           export MOSSWORK_TEST_SUDOGRAPH_WORKER="$SUDOGRAPH_WORKER_PATH"
           export MOSSWORK_TEST_SUDOGRAPH_WORKER_SHA256="$SUDOGRAPH_WORKER_SHA256"
           export MOSSWORK_TEST_SUDOGRAPH_COMPILER="$SUDOGRAPH_COMPILER_PYTHON"
-          uv run --frozen ruff check src/octop/infra/sudograph tests/unit/sudograph tests/integration/test_sudograph_client_worker.py
-          uv run --frozen ruff format --check src/octop/infra/sudograph tests/unit/sudograph tests/integration/test_sudograph_client_worker.py
-          uv run --frozen mypy src/octop/infra/sudograph --follow-imports=silent
-          uv run --frozen pytest tests/unit/sudograph tests/integration/test_sudograph_client_worker.py -q \
+          uv run --frozen ruff check src/octop/infra/sudograph src/octop/infra/native_host/sudograph.py tests/unit/sudograph tests/unit/native_host/test_sudograph.py tests/unit/native_host/test_sudograph_write_outcome.py tests/integration/test_sudograph_client_worker.py
+          uv run --frozen ruff format --check src/octop/infra/sudograph src/octop/infra/native_host/sudograph.py tests/unit/sudograph tests/unit/native_host/test_sudograph.py tests/unit/native_host/test_sudograph_write_outcome.py tests/integration/test_sudograph_client_worker.py
+          uv run --frozen mypy src/octop/infra/sudograph src/octop/infra/native_host/sudograph.py --follow-imports=silent
+          uv run --frozen pytest tests/unit/sudograph tests/unit/native_host/test_sudograph.py tests/unit/native_host/test_sudograph_write_outcome.py tests/integration/test_sudograph_client_worker.py -q \
             --basetemp "$RUNNER_TEMP/sudograph-domain-client" --junitxml "$RUNNER_TEMP/sudograph-domain-client.xml"
         if: ${{ matrix.suite == 'interop' }}
         env:
@@ -360,7 +405,7 @@ jobs:
         run: |
           validator_args=()
           if [ "${CI_VALIDATOR_REGRESSIONS:-true}" = false ]; then
-            for module in test_export_public_source test_precommit test_test_gate test_ci_identity_reuse test_make_format_gate test_make_testmon test_frontend_gate; do
+            for module in test_export_public_source test_precommit test_ci_action_recipe test_hook_staging test_test_gate test_ci_identity_reuse test_make_format_gate test_make_testmon test_frontend_gate; do
               validator_args+=("--ignore=tests/unit/deployment/$module.py")
             done
           fi

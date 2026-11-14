@@ -1,5 +1,6 @@
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import type { DesktopRuntimeBridge, RuntimeEvent } from "@/api/desktopRuntime";
+import { mossworkThreadsApi } from "@/api/modules/mossworkThreads";
 import * as store from "./chatStore";
 let listener: ((event: RuntimeEvent) => void) | undefined;
 let bridge: DesktopRuntimeBridge;
@@ -22,6 +23,7 @@ beforeEach(() => {
     },
   };
   window.__mossworkRuntime = bridge;
+  store.setThreadExecutionMode("local-thread", "local");
 });
 afterEach(() => {
   store.removeSession("local-thread");
@@ -1219,4 +1221,87 @@ it("displays an explicitly resent image even when its hash is already in history
   expect(
     store.getSnapshot("local-thread").messages.at(-1)?.localArtifacts,
   ).toEqual([sent]);
+});
+
+it.each([null, undefined])(
+  "withdraws local routing when current thread mode is %s",
+  async (mode) => {
+    const cancel = vi
+      .spyOn(mossworkThreadsApi, "cancel")
+      .mockResolvedValue({ thread_id: "local-thread", requested: true });
+    store.setThreadExecutionMode("local-thread", mode);
+
+    await store.cancelStream("local-thread", "expert");
+
+    expect(cancel).toHaveBeenCalledExactlyOnceWith(
+      "expert",
+      "local-thread",
+      expect.any(AbortSignal),
+    );
+    expect(bridge.cancel).not.toHaveBeenCalled();
+  },
+);
+
+it.each([null, undefined])(
+  "withdraws stale project selectors when current binding is %s",
+  async (binding) => {
+    store.setThreadProjectBinding("local-thread", {
+      project_id: "old-project",
+      binding_revision: 7,
+      grant_id: "old-selection",
+      grant_version: 3,
+    });
+    store.setThreadProjectBinding("local-thread", binding);
+    const pending = store.sendTurn("local-thread", "continue", "expert", "key");
+    const sent = vi.mocked(bridge.start).mock.calls[0]?.[0];
+    listener?.({
+      event: "done",
+      thread_id: "local-thread",
+      status: "completed",
+    });
+    await pending;
+
+    expect(bridge.start).toHaveBeenCalledOnce();
+    expect(sent).not.toHaveProperty("project_id");
+    expect(sent).not.toHaveProperty("binding_revision");
+    expect(sent).not.toHaveProperty("grant_id");
+    expect(sent).not.toHaveProperty("grant_version");
+  },
+);
+
+it("removing a session withdraws its memoized local routing", async () => {
+  const cancel = vi
+    .spyOn(mossworkThreadsApi, "cancel")
+    .mockResolvedValue({ thread_id: "local-thread", requested: true });
+  store.removeSession("local-thread");
+
+  await store.cancelStream("local-thread", "expert");
+
+  expect(cancel).toHaveBeenCalledExactlyOnceWith(
+    "expert",
+    "local-thread",
+    expect.any(AbortSignal),
+  );
+  expect(bridge.cancel).not.toHaveBeenCalled();
+});
+
+it("removing a session drops its project selectors before fresh local selection", async () => {
+  store.setThreadProjectBinding("local-thread", {
+    project_id: "old-project",
+    binding_revision: 7,
+    grant_id: "old-selection",
+    grant_version: 3,
+  });
+  store.removeSession("local-thread");
+  store.setThreadExecutionMode("local-thread", "local");
+  const pending = store.sendTurn("local-thread", "continue", "expert", "key");
+  const sent = vi.mocked(bridge.start).mock.calls[0]?.[0];
+  listener?.({ event: "done", thread_id: "local-thread", status: "completed" });
+  await pending;
+
+  expect(bridge.start).toHaveBeenCalledOnce();
+  expect(sent).not.toHaveProperty("project_id");
+  expect(sent).not.toHaveProperty("binding_revision");
+  expect(sent).not.toHaveProperty("grant_id");
+  expect(sent).not.toHaveProperty("grant_version");
 });

@@ -583,6 +583,32 @@ endpoint (public, mounted directly in `api/app.py`).
 | `POST` | `/agents/{aid}/files/access-urls` | user | refresh inbound media URLs (signed) |
 | `GET`  | `/agents/{aid}/files/{path}` | owner | read an inbound file |
 
+### Browser input and continuation
+
+BrowserPanel and the independent viewer attach to the execution browser. Native
+conversation Stop (including `/stop`) pauses browser tools and drains a sent
+operation before allowing user input. A newly admitted message can continue;
+an older queued message cannot resume control after Stop. The compatibility
+handoff endpoint remains available, but the UI requires no Take/Return buttons.
+
+The authenticated `/browser-stream/ws` sends `controlEpoch` and `targetEpoch`
+with session snapshots and JPEG frames. Input must carry the epochs of the frame
+actually painted. Navigation, tab changes and resizing invalidate old coordinates.
+The client fences input immediately when requesting a target change and waits
+for the new frame; it never replays rejected input. Held keys, pointer buttons and
+IME composition block continuation. Background transport failures produce an
+error/status message rather than silently leaving a stale viewer.
+
+The viewer consumes existing logout and unauthorized events to close its stream,
+clear local session metadata and invalidate pending frame decodes and input.
+Cross-tab logout is checked on storage changes and focus. Sliding token renewal
+keeps the connection; host-side current resource grants remain authoritative.
+Closing a viewer does not establish that a native execution has stopped.
+
+These local compatibility profiles do not establish production tenant grants.
+See [Browser sessions](browser-sessions.md) for the authority boundary, execution
+matrix and remaining production acceptance.
+
 ## Updates, ollama, i18n, plugins, slash, preferences
 
 | Method | Path | Auth | Notes |

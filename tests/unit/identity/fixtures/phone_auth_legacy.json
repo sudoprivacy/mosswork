@@ -1,0 +1,429 @@
+{
+  "sourceCommit": "d0b84d4c8fd5905d9ec3f7c160f2ce633f535d0d",
+  "sourceHashes": {
+    "phoneAuth": "880550dc2d9d5bcd59452a9ed0f22b98f4896a20d4d82b5bfdb599b75480834d",
+    "authCenterDb": "f83b7ad772d28b54160315f96a7e3cd20648006cef4da5afd6082241c5571b0d"
+  },
+  "producer": "Exact retained TypeScript service plus original DB method bodies, executed against real node:sqlite; injected SMS sink only",
+  "schema": "      CREATE TABLE IF NOT EXISTS phone_login_codes (\n        phone TEXT PRIMARY KEY,\n        code_hash TEXT NOT NULL,\n        created_at INTEGER NOT NULL,\n        expires_at INTEGER NOT NULL,\n        attempts INTEGER NOT NULL DEFAULT 0\n      );\n      CREATE TABLE IF NOT EXISTS phone_login_sends (\n        id INTEGER PRIMARY KEY AUTOINCREMENT,\n        phone TEXT NOT NULL,\n        sent_at INTEGER NOT NULL\n      );",
+  "dummySecret": "public-phone-code-fixture-key-not-production",
+  "now": 2000000000000,
+  "phone": "13900000001",
+  "config": {
+    "enabled": true,
+    "delivery": "tencent",
+    "codeTtlSec": 300,
+    "resendCooldownSec": 60,
+    "maxSendsPerHour": 5,
+    "maxVerifyAttempts": 3,
+    "autoCreateOrg": true
+  },
+  "normalization": [
+    {
+      "raw": null,
+      "expected": null
+    },
+    {
+      "raw": 13900000001,
+      "expected": null
+    },
+    {
+      "raw": "",
+      "expected": null
+    },
+    {
+      "raw": "13900000001",
+      "expected": "13900000001"
+    },
+    {
+      "raw": "+86 139-0000-0001",
+      "expected": "13900000001"
+    },
+    {
+      "raw": "8613900000001",
+      "expected": "13900000001"
+    },
+    {
+      "raw": " 139 0000 0001 ",
+      "expected": "13900000001"
+    },
+    {
+      "raw": "﻿+86 13900000001﻿",
+      "expected": "13900000001"
+    },
+    {
+      "raw": "13900000001",
+      "expected": null
+    },
+    {
+      "raw": "\u001c13900000001",
+      "expected": null
+    },
+    {
+      "raw": "+86 23900000001",
+      "expected": null
+    },
+    {
+      "raw": "１３９０００００００１",
+      "expected": null
+    },
+    {
+      "raw": "1390000000",
+      "expected": null
+    },
+    {
+      "raw": "139000000001",
+      "expected": null
+    }
+  ],
+  "codeHashes": [
+    {
+      "code": "000000",
+      "expectedHash": "36c256e71cb795607ff76553b0b60bb1a76f813cb2151b74e0290cc9e4c297c0"
+    },
+    {
+      "code": "0001",
+      "expectedHash": "fc6fd9e8186f71ad67971ab62f1d7af515524c9c9ff71689835fa71992362dff"
+    },
+    {
+      "code": "12345678",
+      "expectedHash": "c1ab10bbcbd22896ccf8e4b30445a43c44f5ca9ea14dc96792919c5157ee9ffc"
+    },
+    {
+      "code": "515181",
+      "expectedHash": "f8705c15b2b4d0dcc0b342c2d2b61924fe236876e84414c5fe67f4d871ab9f09"
+    },
+    {
+      "code": "949405",
+      "expectedHash": "87e08485285fc8a1c380ece3a2d951bc555d0d38410f9cb1ce1046e8dc11ee07"
+    }
+  ],
+  "originalPending": {
+    "delivered": {
+      "phone": "13900000001",
+      "code": "628158"
+    },
+    "record": {
+      "phone": "13900000001",
+      "codeHash": "e78441626ece81b856788c3ce9b33a5ca37b933a2971c70342b8d1a60598d495",
+      "createdAt": 2000000000000,
+      "expiresAt": 2000000300000,
+      "attempts": 0
+    },
+    "sendResult": {
+      "nextSendIn": 60,
+      "delivery": "tencent"
+    },
+    "consumed": true,
+    "replayed": false
+  },
+  "initialRecord": {
+    "phone": "13900000001",
+    "codeHash": "2344764a4c27d65fe8d78e39e39e38686397353eaf4bd9005dd9a933c5b19f96",
+    "createdAt": 2000000000000,
+    "expiresAt": 2000000300000,
+    "attempts": 0
+  },
+  "scenarios": [
+    {
+      "name": "expiry_boundary",
+      "config": {
+        "enabled": true,
+        "delivery": "tencent",
+        "codeTtlSec": 300,
+        "resendCooldownSec": 60,
+        "maxSendsPerHour": 5,
+        "maxVerifyAttempts": 3,
+        "autoCreateOrg": true
+      },
+      "actions": [
+        {
+          "type": "verify",
+          "code": "001234",
+          "at": 2000000300000
+        }
+      ],
+      "results": [
+        {
+          "value": false
+        }
+      ],
+      "remaining": null,
+      "sentCount": 0
+    },
+    {
+      "name": "trimmed_code",
+      "config": {
+        "enabled": true,
+        "delivery": "tencent",
+        "codeTtlSec": 300,
+        "resendCooldownSec": 60,
+        "maxSendsPerHour": 5,
+        "maxVerifyAttempts": 3,
+        "autoCreateOrg": true
+      },
+      "actions": [
+        {
+          "type": "verify",
+          "code": " ﻿001234\n",
+          "at": 2000000001000
+        }
+      ],
+      "results": [
+        {
+          "value": true
+        }
+      ],
+      "remaining": null,
+      "sentCount": 0
+    },
+    {
+      "name": "invalid_code_uncharged",
+      "config": {
+        "enabled": true,
+        "delivery": "tencent",
+        "codeTtlSec": 300,
+        "resendCooldownSec": 60,
+        "maxSendsPerHour": 5,
+        "maxVerifyAttempts": 3,
+        "autoCreateOrg": true
+      },
+      "actions": [
+        {
+          "type": "verify",
+          "code": "１２３４５６",
+          "at": 2000000001000
+        }
+      ],
+      "results": [
+        {
+          "value": false
+        }
+      ],
+      "remaining": {
+        "attempts": 0,
+        "createdAt": 2000000000000,
+        "expiresAt": 2000000300000
+      },
+      "sentCount": 0
+    },
+    {
+      "name": "attempt_budget",
+      "config": {
+        "enabled": true,
+        "delivery": "tencent",
+        "codeTtlSec": 300,
+        "resendCooldownSec": 60,
+        "maxSendsPerHour": 5,
+        "maxVerifyAttempts": 3,
+        "autoCreateOrg": true
+      },
+      "actions": [
+        {
+          "type": "verify",
+          "code": "999999",
+          "at": 2000000000001
+        },
+        {
+          "type": "verify",
+          "code": "999999",
+          "at": 2000000000002
+        },
+        {
+          "type": "verify",
+          "code": "999999",
+          "at": 2000000000003
+        },
+        {
+          "type": "verify",
+          "code": "001234",
+          "at": 2000000000004
+        }
+      ],
+      "results": [
+        {
+          "value": false
+        },
+        {
+          "value": false
+        },
+        {
+          "value": false
+        },
+        {
+          "status": 429,
+          "retryAfterSec": null
+        }
+      ],
+      "remaining": null,
+      "sentCount": 0
+    },
+    {
+      "name": "cooldown_rounding",
+      "config": {
+        "enabled": true,
+        "delivery": "tencent",
+        "codeTtlSec": 300,
+        "resendCooldownSec": 60,
+        "maxSendsPerHour": 5,
+        "maxVerifyAttempts": 3,
+        "autoCreateOrg": true
+      },
+      "actions": [
+        {
+          "type": "send",
+          "at": 2000000059999
+        }
+      ],
+      "results": [
+        {
+          "status": 429,
+          "retryAfterSec": 1
+        }
+      ],
+      "remaining": {
+        "attempts": 0,
+        "createdAt": 2000000000000,
+        "expiresAt": 2000000300000
+      },
+      "sentCount": 0
+    },
+    {
+      "name": "resend_at_boundary",
+      "config": {
+        "enabled": true,
+        "delivery": "tencent",
+        "codeTtlSec": 300,
+        "resendCooldownSec": 60,
+        "maxSendsPerHour": 5,
+        "maxVerifyAttempts": 3,
+        "autoCreateOrg": true
+      },
+      "actions": [
+        {
+          "type": "send",
+          "at": 2000000060000
+        }
+      ],
+      "results": [
+        {
+          "value": {
+            "nextSendIn": 60,
+            "delivery": "tencent"
+          }
+        }
+      ],
+      "remaining": {
+        "attempts": 0,
+        "createdAt": 2000000060000,
+        "expiresAt": 2000000360000
+      },
+      "sentCount": 1
+    },
+    {
+      "name": "hourly_cap_after_consume",
+      "config": {
+        "enabled": true,
+        "delivery": "tencent",
+        "codeTtlSec": 300,
+        "resendCooldownSec": 0,
+        "maxSendsPerHour": 1,
+        "maxVerifyAttempts": 3,
+        "autoCreateOrg": true
+      },
+      "seededSends": [
+        2000000000000
+      ],
+      "actions": [
+        {
+          "type": "verify",
+          "code": "001234",
+          "at": 2000000000000
+        },
+        {
+          "type": "send",
+          "at": 2000000000001
+        }
+      ],
+      "results": [
+        {
+          "value": true
+        },
+        {
+          "status": 429,
+          "retryAfterSec": null
+        }
+      ],
+      "remaining": null,
+      "sentCount": 1
+    },
+    {
+      "name": "hourly_inclusive_boundary",
+      "config": {
+        "enabled": true,
+        "delivery": "tencent",
+        "codeTtlSec": 300,
+        "resendCooldownSec": 0,
+        "maxSendsPerHour": 1,
+        "maxVerifyAttempts": 3,
+        "autoCreateOrg": true
+      },
+      "seededSends": [
+        1999996400000
+      ],
+      "actions": [
+        {
+          "type": "send",
+          "at": 2000000000000
+        }
+      ],
+      "results": [
+        {
+          "status": 429,
+          "retryAfterSec": null
+        }
+      ],
+      "remaining": {
+        "attempts": 0,
+        "createdAt": 2000000000000,
+        "expiresAt": 2000000300000
+      },
+      "sentCount": 1
+    },
+    {
+      "name": "hourly_expired_boundary",
+      "config": {
+        "enabled": true,
+        "delivery": "tencent",
+        "codeTtlSec": 300,
+        "resendCooldownSec": 0,
+        "maxSendsPerHour": 1,
+        "maxVerifyAttempts": 3,
+        "autoCreateOrg": true
+      },
+      "seededSends": [
+        1999996399999
+      ],
+      "actions": [
+        {
+          "type": "send",
+          "at": 2000000000000
+        }
+      ],
+      "results": [
+        {
+          "value": {
+            "nextSendIn": 0,
+            "delivery": "tencent"
+          }
+        }
+      ],
+      "remaining": {
+        "attempts": 0,
+        "createdAt": 2000000000000,
+        "expiresAt": 2000000300000
+      },
+      "sentCount": 1
+    }
+  ]
+}

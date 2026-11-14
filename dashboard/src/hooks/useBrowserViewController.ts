@@ -29,7 +29,7 @@ type ConnectStreamFn = (
   width: number,
   height: number,
   callbacks: {
-    onFrame: (base64Data: string) => void;
+    onFrame: (base64Data: string, isCurrent: () => boolean) => Promise<boolean>;
     onStatusChange?: (status: string) => void;
     onError?: (message: string) => void;
   },
@@ -132,7 +132,9 @@ export function useBrowserViewController({
         size.width,
         size.height,
         {
-          onFrame: (base64Data) => viewerRef.current?.paintFrame(base64Data),
+          onFrame: (base64Data, isCurrent) =>
+            viewerRef.current?.paintFrame(base64Data, isCurrent) ??
+            Promise.resolve(false),
           onError: err,
         },
         {

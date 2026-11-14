@@ -3,6 +3,7 @@ import i18n from "../i18n";
 import { markNavigatingAway } from "../utils/reloadOnStaleChunk";
 
 const AUTH_TOKEN_KEY = "auth_token";
+const AUTH_REFRESH_PAIR_KEY = "auth_refresh_pair";
 /** sessionStorage handoff for SSO redirects / popups (default = remember). */
 const AUTH_REMEMBER_PREF_KEY = "auth_remember_pref";
 
@@ -73,6 +74,50 @@ export function isSessionOnlyAuth(): boolean {
  * post the token back to the opener — ``sessionStorage`` is not shared.
  */
 export function setAuthToken(token: string, remember: boolean = true) {
+  localStorage.removeItem(AUTH_REFRESH_PAIR_KEY);
+  sessionStorage.removeItem(AUTH_REFRESH_PAIR_KEY);
+  saveAuthToken(token, remember);
+}
+
+/** Save a canonical pair in the existing auth store before publishing its event. */
+export function setAuthTokens(
+  accessToken: string,
+  refreshToken: string,
+  remember: boolean = true,
+): void {
+  const storage = remember ? localStorage : sessionStorage;
+  const otherStorage = remember ? sessionStorage : localStorage;
+  storage.setItem(
+    AUTH_REFRESH_PAIR_KEY,
+    JSON.stringify({ access_token: accessToken, refresh_token: refreshToken }),
+  );
+  otherStorage.removeItem(AUTH_REFRESH_PAIR_KEY);
+  saveAuthToken(accessToken, remember);
+}
+
+/** Read only a refresh token bound to the currently selected access token. */
+export function getAuthRefreshToken(): string {
+  const storage = isSessionOnlyAuth() ? sessionStorage : localStorage;
+  try {
+    const pair: unknown = JSON.parse(
+      storage.getItem(AUTH_REFRESH_PAIR_KEY) || "null",
+    );
+    if (
+      pair &&
+      typeof pair === "object" &&
+      "access_token" in pair &&
+      pair.access_token === getAuthToken() &&
+      "refresh_token" in pair &&
+      typeof pair.refresh_token === "string"
+    )
+      return pair.refresh_token;
+  } catch {
+    /* An incomplete or obsolete pair cannot refresh another login. */
+  }
+  return "";
+}
+
+function saveAuthToken(token: string, remember: boolean) {
   if (remember) {
     localStorage.setItem(AUTH_TOKEN_KEY, token);
     sessionStorage.removeItem(AUTH_TOKEN_KEY);
@@ -96,6 +141,8 @@ export function getAuthToken(): string {
 
 /** Remove JWT token from both storages. */
 export function clearAuthToken() {
+  localStorage.removeItem(AUTH_REFRESH_PAIR_KEY);
+  sessionStorage.removeItem(AUTH_REFRESH_PAIR_KEY);
   localStorage.removeItem(AUTH_TOKEN_KEY);
   sessionStorage.removeItem(AUTH_TOKEN_KEY);
   sessionStorage.removeItem(AUTH_REMEMBER_PREF_KEY);
@@ -347,7 +394,15 @@ async function throwIfUnauthorized(
   response: Response,
   requestToken: string,
 ): Promise<void> {
-  if (response.status !== 401 || path.startsWith("/auth/")) {
+  if (
+    response.status !== 401 ||
+    path.startsWith("/auth/") ||
+    path === "/identity/phone/send-code" ||
+    path === "/identity/phone/login" ||
+    path === "/identity/password/login" ||
+    path === "/identity/moss/password/login" ||
+    path === "/identity/refresh"
+  ) {
     return;
   }
   if (requestToken === getAuthToken()) {

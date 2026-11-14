@@ -1,7 +1,13 @@
+import {
+  CanonicalIdentityProvider,
+  useCanonicalAuthMode,
+} from "../../hooks/useCanonicalIdentity";
+import { CanonicalAccountScreen, CanonicalMemberLogin } from "./CanonicalLogin";
+import BootOfflinePanel from "../../components/BootOfflinePanel";
 import { productLogo } from "../../utils/branding";
 import { useState, useEffect, useRef, type ReactNode } from "react";
-import { useNavigate, useSearchParams } from "react-router-dom";
-import { Input, Button, Checkbox, Tabs } from "antd";
+import { Navigate, useNavigate, useSearchParams } from "react-router-dom";
+import { Input, Button, Checkbox, Tabs, Spin } from "antd";
 import { message } from "@/utils/antdMessage";
 
 import { KeyRound, Lock, User } from "lucide-react";
@@ -79,6 +85,45 @@ function providerIcon(provider: OauthProviderStatus): ReactNode {
 }
 
 export default function LoginPage() {
+  const { status, error, retry } = useCanonicalAuthMode();
+  const navigate = useNavigate();
+  if (error) return <BootOfflinePanel onRetry={retry} />;
+  if (!status) return <Spin fullscreen />;
+  if (status.mode === "canonical")
+    return (
+      <CanonicalMemberLogin
+        phoneLoginAvailable={status.phone_login_available}
+        passwordLoginAvailable={status.password_login_available === true}
+        onAuthenticated={() => navigate("/", { replace: true })}
+      />
+    );
+  return <StandaloneLoginPage />;
+}
+
+/** Explicit original Moss authentication realm; grants remain server-owned. */
+export function CanonicalMossLoginPage() {
+  const { status, error, retry } = useCanonicalAuthMode();
+  const { t } = useTranslation();
+  const navigate = useNavigate();
+  if (error) return <BootOfflinePanel onRetry={retry} />;
+  if (!status) return <Spin fullscreen />;
+  if (status.mode !== "canonical") return <Navigate to="/login" replace />;
+  return (
+    <CanonicalIdentityProvider>
+      <CanonicalAccountScreen
+        phoneLoginAvailable={status.phone_login_available}
+        passwordLoginAvailable={status.password_login_available === true}
+        onAuthenticated={() => navigate("/", { replace: true })}
+        alternateLogin={{
+          href: "/login",
+          label: t("canonical.organizationSignIn"),
+        }}
+      />
+    </CanonicalIdentityProvider>
+  );
+}
+
+export function StandaloneLoginPage() {
   const { t } = useTranslation();
   const { isDark } = useTheme();
   const navigate = useNavigate();

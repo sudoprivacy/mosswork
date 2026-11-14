@@ -1,0 +1,742 @@
+{
+  "sourceCommit": "d0b84d4c8fd5905d9ec3f7c160f2ce633f535d0d",
+  "sourceHashes": {
+    "src/server/configuration/loginPolicy.ts": "572402ab2fe70a0ba54c6e2486c1a595461b66a43a55e36510b701301535ee2e",
+    "src/server/configuration/clientPolicyRepository.ts": "09168621cd012bbafd7cc91eaf10108aae3ff6935909ebba2384420d71086c9a",
+    "src/server/identity/identityRepository.ts": "ff4b194eb4860812079ef847d76486bb99a4441943a4d5e6c6d7014153d672ea",
+    "src/server/auth/service.ts": "4670964f241ed457d3104c6b2b92abe020dea37b6cff393e9aab797309be71fa"
+  },
+  "producer": "Exact retained resolver/repository/profile mapper+reader/scope function executed against real node:sqlite",
+  "org": "original-company-org",
+  "schema": {
+    "policies": "CREATE TABLE client_delivery_policies (\n        scope_type TEXT NOT NULL CHECK (scope_type IN ('platform', 'organization')),\n        scope_id TEXT NOT NULL,\n        policy_json TEXT NOT NULL DEFAULT '{}',\n        updated_by TEXT NOT NULL,\n        created_at INTEGER NOT NULL,\n        updated_at INTEGER NOT NULL,\n        PRIMARY KEY (scope_type, scope_id)\n      )",
+    "profiles": "      CREATE TABLE IF NOT EXISTS organization_profiles (\n        org_id TEXT PRIMARY KEY REFERENCES organizations(id),\n        code TEXT NOT NULL UNIQUE,\n        login_method TEXT NOT NULL DEFAULT 'password' CHECK (login_method IN ('sms', 'password', 'cas')),\n        local_enabled INTEGER NOT NULL DEFAULT 1,\n        cloud_enabled INTEGER NOT NULL DEFAULT 1,\n        client_cron_enabled INTEGER NOT NULL DEFAULT 1,\n        logo TEXT,\n        app_name TEXT,\n        top_name TEXT,\n        about_name TEXT,\n        app_company_name TEXT,\n        login_description TEXT,\n        created_at INTEGER NOT NULL,\n        updated_at INTEGER NOT NULL\n      );"
+  },
+  "cases": [
+    {
+      "name": "org_precedes_platform_0",
+      "organization": {
+        "loginMethod": 0
+      },
+      "platform": {
+        "loginMethod": "password"
+      },
+      "profile": "cas",
+      "expected": "sms"
+    },
+    {
+      "name": "platform_precedes_legacy_0",
+      "organization": {},
+      "platform": {
+        "loginMethod": 0
+      },
+      "profile": "cas",
+      "expected": "sms"
+    },
+    {
+      "name": "org_precedes_platform_1",
+      "organization": {
+        "loginMethod": 1
+      },
+      "platform": {
+        "loginMethod": "password"
+      },
+      "profile": "cas",
+      "expected": "password"
+    },
+    {
+      "name": "platform_precedes_legacy_1",
+      "organization": {},
+      "platform": {
+        "loginMethod": 1
+      },
+      "profile": "cas",
+      "expected": "password"
+    },
+    {
+      "name": "org_precedes_platform_2",
+      "organization": {
+        "loginMethod": 2
+      },
+      "platform": {
+        "loginMethod": "password"
+      },
+      "profile": "cas",
+      "expected": "cas"
+    },
+    {
+      "name": "platform_precedes_legacy_2",
+      "organization": {},
+      "platform": {
+        "loginMethod": 2
+      },
+      "profile": "cas",
+      "expected": "cas"
+    },
+    {
+      "name": "org_precedes_platform_\"sms\"",
+      "organization": {
+        "loginMethod": "sms"
+      },
+      "platform": {
+        "loginMethod": "password"
+      },
+      "profile": "cas",
+      "expected": "sms"
+    },
+    {
+      "name": "platform_precedes_legacy_\"sms\"",
+      "organization": {},
+      "platform": {
+        "loginMethod": "sms"
+      },
+      "profile": "cas",
+      "expected": "sms"
+    },
+    {
+      "name": "org_precedes_platform_\"password\"",
+      "organization": {
+        "loginMethod": "password"
+      },
+      "platform": {
+        "loginMethod": "password"
+      },
+      "profile": "cas",
+      "expected": "password"
+    },
+    {
+      "name": "platform_precedes_legacy_\"password\"",
+      "organization": {},
+      "platform": {
+        "loginMethod": "password"
+      },
+      "profile": "cas",
+      "expected": "password"
+    },
+    {
+      "name": "org_precedes_platform_\"cas\"",
+      "organization": {
+        "loginMethod": "cas"
+      },
+      "platform": {
+        "loginMethod": "password"
+      },
+      "profile": "cas",
+      "expected": "cas"
+    },
+    {
+      "name": "platform_precedes_legacy_\"cas\"",
+      "organization": {},
+      "platform": {
+        "loginMethod": "cas"
+      },
+      "profile": "cas",
+      "expected": "cas"
+    },
+    {
+      "name": "invalid_org_method_true",
+      "organization": {
+        "loginMethod": true
+      },
+      "platform": {},
+      "profile": "cas",
+      "expected": "cas"
+    },
+    {
+      "name": "invalid_platform_method_true",
+      "organization": {},
+      "platform": {
+        "loginMethod": true
+      },
+      "profile": "cas",
+      "expected": "cas"
+    },
+    {
+      "name": "invalid_org_method_false",
+      "organization": {
+        "loginMethod": false
+      },
+      "platform": {},
+      "profile": "cas",
+      "expected": "cas"
+    },
+    {
+      "name": "invalid_platform_method_false",
+      "organization": {},
+      "platform": {
+        "loginMethod": false
+      },
+      "profile": "cas",
+      "expected": "cas"
+    },
+    {
+      "name": "invalid_org_method_\"0\"",
+      "organization": {
+        "loginMethod": "0"
+      },
+      "platform": {},
+      "profile": "cas",
+      "expected": "cas"
+    },
+    {
+      "name": "invalid_platform_method_\"0\"",
+      "organization": {},
+      "platform": {
+        "loginMethod": "0"
+      },
+      "profile": "cas",
+      "expected": "cas"
+    },
+    {
+      "name": "invalid_org_method_\"1\"",
+      "organization": {
+        "loginMethod": "1"
+      },
+      "platform": {},
+      "profile": "cas",
+      "expected": "cas"
+    },
+    {
+      "name": "invalid_platform_method_\"1\"",
+      "organization": {},
+      "platform": {
+        "loginMethod": "1"
+      },
+      "profile": "cas",
+      "expected": "cas"
+    },
+    {
+      "name": "invalid_org_method_\"2\"",
+      "organization": {
+        "loginMethod": "2"
+      },
+      "platform": {},
+      "profile": "cas",
+      "expected": "cas"
+    },
+    {
+      "name": "invalid_platform_method_\"2\"",
+      "organization": {},
+      "platform": {
+        "loginMethod": "2"
+      },
+      "profile": "cas",
+      "expected": "cas"
+    },
+    {
+      "name": "invalid_org_method_null",
+      "organization": {
+        "loginMethod": null
+      },
+      "platform": {},
+      "profile": "cas",
+      "expected": "cas"
+    },
+    {
+      "name": "invalid_platform_method_null",
+      "organization": {},
+      "platform": {
+        "loginMethod": null
+      },
+      "profile": "cas",
+      "expected": "cas"
+    },
+    {
+      "name": "invalid_org_method_3",
+      "organization": {
+        "loginMethod": 3
+      },
+      "platform": {},
+      "profile": "cas",
+      "expected": "cas"
+    },
+    {
+      "name": "invalid_platform_method_3",
+      "organization": {},
+      "platform": {
+        "loginMethod": 3
+      },
+      "profile": "cas",
+      "expected": "cas"
+    },
+    {
+      "name": "invalid_org_method_-1",
+      "organization": {
+        "loginMethod": -1
+      },
+      "platform": {},
+      "profile": "cas",
+      "expected": "cas"
+    },
+    {
+      "name": "invalid_platform_method_-1",
+      "organization": {},
+      "platform": {
+        "loginMethod": -1
+      },
+      "profile": "cas",
+      "expected": "cas"
+    },
+    {
+      "name": "invalid_org_method_1.5",
+      "organization": {
+        "loginMethod": 1.5
+      },
+      "platform": {},
+      "profile": "cas",
+      "expected": "cas"
+    },
+    {
+      "name": "invalid_platform_method_1.5",
+      "organization": {},
+      "platform": {
+        "loginMethod": 1.5
+      },
+      "profile": "cas",
+      "expected": "cas"
+    },
+    {
+      "name": "invalid_org_method_[]",
+      "organization": {
+        "loginMethod": []
+      },
+      "platform": {},
+      "profile": "cas",
+      "expected": "cas"
+    },
+    {
+      "name": "invalid_platform_method_[]",
+      "organization": {},
+      "platform": {
+        "loginMethod": []
+      },
+      "profile": "cas",
+      "expected": "cas"
+    },
+    {
+      "name": "invalid_org_method_{}",
+      "organization": {
+        "loginMethod": {}
+      },
+      "platform": {},
+      "profile": "cas",
+      "expected": "cas"
+    },
+    {
+      "name": "invalid_platform_method_{}",
+      "organization": {},
+      "platform": {
+        "loginMethod": {}
+      },
+      "profile": "cas",
+      "expected": "cas"
+    },
+    {
+      "name": "inheritance_strict_true_true",
+      "organization": {
+        "loginMethodInherited": true
+      },
+      "platform": {},
+      "profile": "cas",
+      "defaultMethod": "sms",
+      "expected": "sms"
+    },
+    {
+      "name": "inheritance_strict_true_false",
+      "organization": {
+        "loginMethodInherited": false
+      },
+      "platform": {},
+      "profile": "cas",
+      "defaultMethod": "sms",
+      "expected": "cas"
+    },
+    {
+      "name": "inheritance_strict_true_1",
+      "organization": {
+        "loginMethodInherited": 1
+      },
+      "platform": {},
+      "profile": "cas",
+      "defaultMethod": "sms",
+      "expected": "cas"
+    },
+    {
+      "name": "inheritance_strict_true_0",
+      "organization": {
+        "loginMethodInherited": 0
+      },
+      "platform": {},
+      "profile": "cas",
+      "defaultMethod": "sms",
+      "expected": "cas"
+    },
+    {
+      "name": "inheritance_strict_true_\"true\"",
+      "organization": {
+        "loginMethodInherited": "true"
+      },
+      "platform": {},
+      "profile": "cas",
+      "defaultMethod": "sms",
+      "expected": "cas"
+    },
+    {
+      "name": "inheritance_strict_true_null",
+      "organization": {
+        "loginMethodInherited": null
+      },
+      "platform": {},
+      "profile": "cas",
+      "defaultMethod": "sms",
+      "expected": "cas"
+    },
+    {
+      "name": "inheritance_strict_true_{}",
+      "organization": {
+        "loginMethodInherited": {}
+      },
+      "platform": {},
+      "profile": "cas",
+      "defaultMethod": "sms",
+      "expected": "cas"
+    },
+    {
+      "name": "inheritance_strict_true_[]",
+      "organization": {
+        "loginMethodInherited": []
+      },
+      "platform": {},
+      "profile": "cas",
+      "defaultMethod": "sms",
+      "expected": "cas"
+    },
+    {
+      "name": "malformed_org_{bad",
+      "organizationRaw": "{bad",
+      "platform": {},
+      "profile": "cas",
+      "expected": "cas"
+    },
+    {
+      "name": "malformed_platform_{bad",
+      "organization": {},
+      "platformRaw": "{bad",
+      "profile": "cas",
+      "expected": "cas"
+    },
+    {
+      "name": "malformed_org_[1,2]",
+      "organizationRaw": "[1,2]",
+      "platform": {},
+      "profile": "cas",
+      "expected": "cas"
+    },
+    {
+      "name": "malformed_platform_[1,2]",
+      "organization": {},
+      "platformRaw": "[1,2]",
+      "profile": "cas",
+      "expected": "cas"
+    },
+    {
+      "name": "malformed_org_null",
+      "organizationRaw": "null",
+      "platform": {},
+      "profile": "cas",
+      "expected": "cas"
+    },
+    {
+      "name": "malformed_platform_null",
+      "organization": {},
+      "platformRaw": "null",
+      "profile": "cas",
+      "expected": "cas"
+    },
+    {
+      "name": "malformed_org_true",
+      "organizationRaw": "true",
+      "platform": {},
+      "profile": "cas",
+      "expected": "cas"
+    },
+    {
+      "name": "malformed_platform_true",
+      "organization": {},
+      "platformRaw": "true",
+      "profile": "cas",
+      "expected": "cas"
+    },
+    {
+      "name": "malformed_org_\"sms\"",
+      "organizationRaw": "\"sms\"",
+      "platform": {},
+      "profile": "cas",
+      "expected": "cas"
+    },
+    {
+      "name": "malformed_platform_\"sms\"",
+      "organization": {},
+      "platformRaw": "\"sms\"",
+      "profile": "cas",
+      "expected": "cas"
+    },
+    {
+      "name": "malformed_org_{\"loginMethod\":NaN}",
+      "organizationRaw": "{\"loginMethod\":NaN}",
+      "platform": {},
+      "profile": "cas",
+      "expected": "cas"
+    },
+    {
+      "name": "malformed_platform_{\"loginMethod\":NaN}",
+      "organization": {},
+      "platformRaw": "{\"loginMethod\":NaN}",
+      "profile": "cas",
+      "expected": "cas"
+    },
+    {
+      "name": "malformed_org_{\"loginMethod\":Infinity}",
+      "organizationRaw": "{\"loginMethod\":Infinity}",
+      "platform": {},
+      "profile": "cas",
+      "expected": "cas"
+    },
+    {
+      "name": "malformed_platform_{\"loginMethod\":Infinity}",
+      "organization": {},
+      "platformRaw": "{\"loginMethod\":Infinity}",
+      "profile": "cas",
+      "expected": "cas"
+    },
+    {
+      "name": "inherited_uses_valid_platform",
+      "organization": {
+        "loginMethodInherited": true
+      },
+      "platform": {
+        "loginMethod": 0
+      },
+      "profile": "password",
+      "expected": "sms"
+    },
+    {
+      "name": "explicit_org_even_if_inherited",
+      "organization": {
+        "loginMethod": "sms",
+        "loginMethodInherited": true
+      },
+      "platform": {
+        "loginMethod": "password"
+      },
+      "profile": "cas",
+      "expected": "sms"
+    },
+    {
+      "name": "ignore_org_and_legacy",
+      "organization": {
+        "loginMethod": "sms"
+      },
+      "platform": {},
+      "profile": "cas",
+      "ignore": true,
+      "expected": "password"
+    },
+    {
+      "name": "ignore_org_controlled_default",
+      "organization": {
+        "loginMethod": "cas"
+      },
+      "platform": {},
+      "profile": "cas",
+      "ignore": true,
+      "defaultMethod": "sms",
+      "expected": "sms"
+    },
+    {
+      "name": "ignore_org_valid_platform",
+      "organization": {
+        "loginMethod": "sms"
+      },
+      "platform": {
+        "loginMethod": "cas"
+      },
+      "profile": "password",
+      "ignore": true,
+      "expected": "cas"
+    },
+    {
+      "name": "absent_rows_default_password",
+      "expected": "password"
+    },
+    {
+      "name": "absent_rows_controlled_default",
+      "defaultMethod": "sms",
+      "expected": "sms"
+    },
+    {
+      "name": "legacy_sms",
+      "profile": "sms",
+      "expected": "sms"
+    },
+    {
+      "name": "legacy_password",
+      "profile": "password",
+      "expected": "password"
+    },
+    {
+      "name": "legacy_cas",
+      "profile": "cas",
+      "expected": "cas"
+    },
+    {
+      "name": "without_org_does_not_consume_profile",
+      "profile": "sms",
+      "org": null,
+      "expected": "password"
+    },
+    {
+      "name": "without_org_valid_platform",
+      "platform": {
+        "loginMethod": 2
+      },
+      "profile": "sms",
+      "org": null,
+      "expected": "cas"
+    },
+    {
+      "name": "empty_org_is_platform_only",
+      "platform": {},
+      "profile": "sms",
+      "org": "",
+      "expected": "password"
+    }
+  ],
+  "roleScopes": [
+    {
+      "role": "admin",
+      "expected": [
+        "*"
+      ]
+    },
+    {
+      "role": "super_admin",
+      "expected": [
+        "*"
+      ]
+    },
+    {
+      "role": "dept_admin",
+      "expected": [
+        "sessions:create",
+        "sessions:attach",
+        "sessions:list",
+        "admin:users",
+        "admin:api_keys",
+        "secrets:department:read",
+        "secrets:user:write",
+        "store:read",
+        "store:tenant:write",
+        "store:custom:write",
+        "cron:self",
+        "cron:list:subtree",
+        "cron:manage:subtree",
+        "admin:triggers",
+        "admin:mcp",
+        "admin:mcp:write",
+        "admin:mcp:audit"
+      ]
+    },
+    {
+      "role": "user",
+      "expected": [
+        "sessions:create",
+        "sessions:attach",
+        "sessions:list",
+        "secrets:user:write",
+        "store:read",
+        "store:tenant:write",
+        "store:custom:write",
+        "cron:self"
+      ]
+    },
+    {
+      "role": "",
+      "expected": [
+        "sessions:create",
+        "sessions:attach",
+        "sessions:list",
+        "secrets:user:write",
+        "store:read",
+        "store:tenant:write",
+        "store:custom:write",
+        "cron:self"
+      ]
+    },
+    {
+      "role": "ADMIN",
+      "expected": [
+        "sessions:create",
+        "sessions:attach",
+        "sessions:list",
+        "secrets:user:write",
+        "store:read",
+        "store:tenant:write",
+        "store:custom:write",
+        "cron:self"
+      ]
+    },
+    {
+      "role": "department_admin",
+      "expected": [
+        "sessions:create",
+        "sessions:attach",
+        "sessions:list",
+        "secrets:user:write",
+        "store:read",
+        "store:tenant:write",
+        "store:custom:write",
+        "cron:self"
+      ]
+    },
+    {
+      "role": "guest",
+      "expected": [
+        "sessions:create",
+        "sessions:attach",
+        "sessions:list",
+        "secrets:user:write",
+        "store:read",
+        "store:tenant:write",
+        "store:custom:write",
+        "cron:self"
+      ]
+    },
+    {
+      "role": null,
+      "expected": [
+        "sessions:create",
+        "sessions:attach",
+        "sessions:list",
+        "secrets:user:write",
+        "store:read",
+        "store:tenant:write",
+        "store:custom:write",
+        "cron:self"
+      ]
+    },
+    {
+      "role": 7,
+      "expected": [
+        "sessions:create",
+        "sessions:attach",
+        "sessions:list",
+        "secrets:user:write",
+        "store:read",
+        "store:tenant:write",
+        "store:custom:write",
+        "cron:self"
+      ]
+    }
+  ]
+}

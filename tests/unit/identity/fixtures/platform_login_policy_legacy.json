@@ -1,0 +1,686 @@
+{
+  "commit": "d0b84d4c8fd5905d9ec3f7c160f2ce633f535d0d",
+  "sourceHashes": {
+    "src/server/configuration/clientPolicyRepository.ts": "09168621cd012bbafd7cc91eaf10108aae3ff6935909ebba2384420d71086c9a",
+    "src/server/configuration/adminScope.ts": "a96cb995528d72367118774d9fa22bfe8b553f134fb5c49f617fb7d22f1d1c32",
+    "src/server/api/compat/sudowork/systemConfigService.ts": "cf0d44bf40f50d7b1b3b481bd114a5d025d564f7323a8957c59dd890fdc973ef",
+    "src/server/identity/organizationIdentityService.ts": "94403c26afd8bc9bc9535ae3b497c462f1637e88292cfe013c95f2e8d29f1674"
+  },
+  "scope": "Original explicit scope, update, policy repository, actual SMS readiness and CAS platform/inventory checks. Provider inventory and SMS runtime readiness are fixtures; no production provider or new signing authority.",
+  "nowMs": 1800000000123,
+  "cases": [
+    {
+      "name": "set_0",
+      "body": {
+        "login_method": 0
+      },
+      "platform": {
+        "unrelated": {
+          "keep": [
+            false,
+            null,
+            "原始"
+          ]
+        },
+        "loginMethod": "cas",
+        "loginMethodInherited": false,
+        "thirdPartyAuth": {
+          "enabled": 1,
+          "defaultProvider": "foreign-default"
+        }
+      },
+      "status": 200,
+      "unchangedOnRefusal": null,
+      "expected": {
+        "scope_type": "platform",
+        "scope_id": "default",
+        "policy_json": {
+          "unrelated": {
+            "keep": [
+              false,
+              null,
+              "原始"
+            ]
+          },
+          "loginMethod": 0,
+          "loginMethodInherited": false,
+          "thirdPartyAuth": {
+            "enabled": 1,
+            "defaultProvider": "foreign-default"
+          }
+        },
+        "updated_by": "fixture-actor",
+        "created_at": 7,
+        "updated_at": 1800000000123
+      },
+      "organization": {
+        "scope_type": "organization",
+        "scope_id": "fixture-org",
+        "policy_json": "{\"loginMethod\":0,\"keep\":\"original org\"}",
+        "updated_by": "original-org-writer",
+        "created_at": 3,
+        "updated_at": 4
+      }
+    },
+    {
+      "name": "missing_platform_0",
+      "body": {
+        "login_method": 0
+      },
+      "status": 200,
+      "unchangedOnRefusal": null,
+      "expected": {
+        "scope_type": "platform",
+        "scope_id": "default",
+        "policy_json": {
+          "loginMethod": 0
+        },
+        "updated_by": "fixture-actor",
+        "created_at": 1800000000123,
+        "updated_at": 1800000000123
+      },
+      "organization": {
+        "scope_type": "organization",
+        "scope_id": "fixture-org",
+        "policy_json": "{\"loginMethod\":0,\"keep\":\"original org\"}",
+        "updated_by": "original-org-writer",
+        "created_at": 3,
+        "updated_at": 4
+      }
+    },
+    {
+      "name": "set_1",
+      "body": {
+        "login_method": 1
+      },
+      "platform": {
+        "unrelated": {
+          "keep": [
+            false,
+            null,
+            "原始"
+          ]
+        },
+        "loginMethod": "cas",
+        "loginMethodInherited": false,
+        "thirdPartyAuth": {
+          "enabled": 1,
+          "defaultProvider": "foreign-default"
+        }
+      },
+      "status": 200,
+      "unchangedOnRefusal": null,
+      "expected": {
+        "scope_type": "platform",
+        "scope_id": "default",
+        "policy_json": {
+          "unrelated": {
+            "keep": [
+              false,
+              null,
+              "原始"
+            ]
+          },
+          "loginMethod": 1,
+          "loginMethodInherited": false,
+          "thirdPartyAuth": {
+            "enabled": 1,
+            "defaultProvider": "foreign-default"
+          }
+        },
+        "updated_by": "fixture-actor",
+        "created_at": 7,
+        "updated_at": 1800000000123
+      },
+      "organization": {
+        "scope_type": "organization",
+        "scope_id": "fixture-org",
+        "policy_json": "{\"loginMethod\":0,\"keep\":\"original org\"}",
+        "updated_by": "original-org-writer",
+        "created_at": 3,
+        "updated_at": 4
+      }
+    },
+    {
+      "name": "missing_platform_1",
+      "body": {
+        "login_method": 1
+      },
+      "status": 200,
+      "unchangedOnRefusal": null,
+      "expected": {
+        "scope_type": "platform",
+        "scope_id": "default",
+        "policy_json": {
+          "loginMethod": 1
+        },
+        "updated_by": "fixture-actor",
+        "created_at": 1800000000123,
+        "updated_at": 1800000000123
+      },
+      "organization": {
+        "scope_type": "organization",
+        "scope_id": "fixture-org",
+        "policy_json": "{\"loginMethod\":0,\"keep\":\"original org\"}",
+        "updated_by": "original-org-writer",
+        "created_at": 3,
+        "updated_at": 4
+      }
+    },
+    {
+      "name": "set_2",
+      "body": {
+        "login_method": 2
+      },
+      "platform": {
+        "unrelated": {
+          "keep": [
+            false,
+            null,
+            "原始"
+          ]
+        },
+        "loginMethod": "cas",
+        "loginMethodInherited": false,
+        "thirdPartyAuth": {
+          "enabled": 1,
+          "defaultProvider": "foreign-default"
+        }
+      },
+      "status": 200,
+      "unchangedOnRefusal": null,
+      "expected": {
+        "scope_type": "platform",
+        "scope_id": "default",
+        "policy_json": {
+          "unrelated": {
+            "keep": [
+              false,
+              null,
+              "原始"
+            ]
+          },
+          "loginMethod": 2,
+          "loginMethodInherited": false,
+          "thirdPartyAuth": {
+            "enabled": 1,
+            "defaultProvider": "foreign-default"
+          }
+        },
+        "updated_by": "fixture-actor",
+        "created_at": 7,
+        "updated_at": 1800000000123
+      },
+      "organization": {
+        "scope_type": "organization",
+        "scope_id": "fixture-org",
+        "policy_json": "{\"loginMethod\":0,\"keep\":\"original org\"}",
+        "updated_by": "original-org-writer",
+        "created_at": 3,
+        "updated_at": 4
+      }
+    },
+    {
+      "name": "missing_platform_2",
+      "body": {
+        "login_method": 2
+      },
+      "expectedStatus": 400,
+      "status": 400,
+      "unchangedOnRefusal": true,
+      "expected": null,
+      "organization": {
+        "scope_type": "organization",
+        "scope_id": "fixture-org",
+        "policy_json": "{\"loginMethod\":0,\"keep\":\"original org\"}",
+        "updated_by": "original-org-writer",
+        "created_at": 3,
+        "updated_at": 4
+      }
+    },
+    {
+      "name": "malformed_platform",
+      "body": {
+        "login_method": 1
+      },
+      "platformRaw": "{bad",
+      "status": 200,
+      "unchangedOnRefusal": null,
+      "expected": {
+        "scope_type": "platform",
+        "scope_id": "default",
+        "policy_json": {
+          "loginMethod": 1
+        },
+        "updated_by": "fixture-actor",
+        "created_at": 7,
+        "updated_at": 1800000000123
+      },
+      "organization": {
+        "scope_type": "organization",
+        "scope_id": "fixture-org",
+        "policy_json": "{\"loginMethod\":0,\"keep\":\"original org\"}",
+        "updated_by": "original-org-writer",
+        "created_at": 3,
+        "updated_at": 4
+      }
+    },
+    {
+      "name": "array_platform",
+      "body": {
+        "login_method": 1
+      },
+      "platform": [],
+      "status": 200,
+      "unchangedOnRefusal": null,
+      "expected": {
+        "scope_type": "platform",
+        "scope_id": "default",
+        "policy_json": {
+          "loginMethod": 1
+        },
+        "updated_by": "fixture-actor",
+        "created_at": 7,
+        "updated_at": 1800000000123
+      },
+      "organization": {
+        "scope_type": "organization",
+        "scope_id": "fixture-org",
+        "policy_json": "{\"loginMethod\":0,\"keep\":\"original org\"}",
+        "updated_by": "original-org-writer",
+        "created_at": 3,
+        "updated_at": 4
+      }
+    },
+    {
+      "name": "null_platform",
+      "body": {
+        "login_method": 1
+      },
+      "platform": null,
+      "status": 200,
+      "unchangedOnRefusal": null,
+      "expected": {
+        "scope_type": "platform",
+        "scope_id": "default",
+        "policy_json": {
+          "loginMethod": 1
+        },
+        "updated_by": "fixture-actor",
+        "created_at": 7,
+        "updated_at": 1800000000123
+      },
+      "organization": {
+        "scope_type": "organization",
+        "scope_id": "fixture-org",
+        "policy_json": "{\"loginMethod\":0,\"keep\":\"original org\"}",
+        "updated_by": "original-org-writer",
+        "created_at": 3,
+        "updated_at": 4
+      }
+    },
+    {
+      "name": "no_provider",
+      "body": {
+        "login_method": 2
+      },
+      "platform": {
+        "unrelated": {
+          "keep": [
+            false,
+            null,
+            "原始"
+          ]
+        },
+        "loginMethod": "cas",
+        "loginMethodInherited": false,
+        "thirdPartyAuth": {
+          "enabled": 1,
+          "defaultProvider": "foreign-default"
+        }
+      },
+      "casEnabled": false,
+      "expectedStatus": 400,
+      "status": 400,
+      "unchangedOnRefusal": true,
+      "expected": {
+        "scope_type": "platform",
+        "scope_id": "default",
+        "policy_json": {
+          "unrelated": {
+            "keep": [
+              false,
+              null,
+              "原始"
+            ]
+          },
+          "loginMethod": "cas",
+          "loginMethodInherited": false,
+          "thirdPartyAuth": {
+            "enabled": 1,
+            "defaultProvider": "foreign-default"
+          }
+        },
+        "updated_by": "original-writer",
+        "created_at": 7,
+        "updated_at": 8
+      },
+      "organization": {
+        "scope_type": "organization",
+        "scope_id": "fixture-org",
+        "policy_json": "{\"loginMethod\":0,\"keep\":\"original org\"}",
+        "updated_by": "original-org-writer",
+        "created_at": 3,
+        "updated_at": 4
+      }
+    },
+    {
+      "name": "disabled_platform_cas",
+      "body": {
+        "login_method": 2
+      },
+      "platform": {
+        "thirdPartyAuth": {
+          "enabled": 0
+        }
+      },
+      "expectedStatus": 400,
+      "status": 400,
+      "unchangedOnRefusal": true,
+      "expected": {
+        "scope_type": "platform",
+        "scope_id": "default",
+        "policy_json": {
+          "thirdPartyAuth": {
+            "enabled": 0
+          }
+        },
+        "updated_by": "original-writer",
+        "created_at": 7,
+        "updated_at": 8
+      },
+      "organization": {
+        "scope_type": "organization",
+        "scope_id": "fixture-org",
+        "policy_json": "{\"loginMethod\":0,\"keep\":\"original org\"}",
+        "updated_by": "original-org-writer",
+        "created_at": 3,
+        "updated_at": 4
+      }
+    },
+    {
+      "name": "sms_unavailable",
+      "body": {
+        "login_method": 0
+      },
+      "platform": {
+        "unrelated": {
+          "keep": [
+            false,
+            null,
+            "原始"
+          ]
+        },
+        "loginMethod": "cas",
+        "loginMethodInherited": false,
+        "thirdPartyAuth": {
+          "enabled": 1,
+          "defaultProvider": "foreign-default"
+        }
+      },
+      "smsReady": false,
+      "expectedStatus": 400,
+      "status": 400,
+      "unchangedOnRefusal": true,
+      "expected": {
+        "scope_type": "platform",
+        "scope_id": "default",
+        "policy_json": {
+          "unrelated": {
+            "keep": [
+              false,
+              null,
+              "原始"
+            ]
+          },
+          "loginMethod": "cas",
+          "loginMethodInherited": false,
+          "thirdPartyAuth": {
+            "enabled": 1,
+            "defaultProvider": "foreign-default"
+          }
+        },
+        "updated_by": "original-writer",
+        "created_at": 7,
+        "updated_at": 8
+      },
+      "organization": {
+        "scope_type": "organization",
+        "scope_id": "fixture-org",
+        "policy_json": "{\"loginMethod\":0,\"keep\":\"original org\"}",
+        "updated_by": "original-org-writer",
+        "created_at": 3,
+        "updated_at": 4
+      }
+    },
+    {
+      "name": "inherit_refused",
+      "body": {
+        "inherit_login_method": true
+      },
+      "platform": {
+        "unrelated": {
+          "keep": [
+            false,
+            null,
+            "原始"
+          ]
+        },
+        "loginMethod": "cas",
+        "loginMethodInherited": false,
+        "thirdPartyAuth": {
+          "enabled": 1,
+          "defaultProvider": "foreign-default"
+        }
+      },
+      "expectedStatus": 400,
+      "status": 400,
+      "unchangedOnRefusal": true,
+      "expected": {
+        "scope_type": "platform",
+        "scope_id": "default",
+        "policy_json": {
+          "unrelated": {
+            "keep": [
+              false,
+              null,
+              "原始"
+            ]
+          },
+          "loginMethod": "cas",
+          "loginMethodInherited": false,
+          "thirdPartyAuth": {
+            "enabled": 1,
+            "defaultProvider": "foreign-default"
+          }
+        },
+        "updated_by": "original-writer",
+        "created_at": 7,
+        "updated_at": 8
+      },
+      "organization": {
+        "scope_type": "organization",
+        "scope_id": "fixture-org",
+        "policy_json": "{\"loginMethod\":0,\"keep\":\"original org\"}",
+        "updated_by": "original-org-writer",
+        "created_at": 3,
+        "updated_at": 4
+      }
+    },
+    {
+      "name": "deny_admin",
+      "role": "admin",
+      "body": {
+        "login_method": 1
+      },
+      "platform": {
+        "unrelated": {
+          "keep": [
+            false,
+            null,
+            "原始"
+          ]
+        },
+        "loginMethod": "cas",
+        "loginMethodInherited": false,
+        "thirdPartyAuth": {
+          "enabled": 1,
+          "defaultProvider": "foreign-default"
+        }
+      },
+      "expectedStatus": 403,
+      "status": 403,
+      "unchangedOnRefusal": true,
+      "expected": {
+        "scope_type": "platform",
+        "scope_id": "default",
+        "policy_json": {
+          "unrelated": {
+            "keep": [
+              false,
+              null,
+              "原始"
+            ]
+          },
+          "loginMethod": "cas",
+          "loginMethodInherited": false,
+          "thirdPartyAuth": {
+            "enabled": 1,
+            "defaultProvider": "foreign-default"
+          }
+        },
+        "updated_by": "original-writer",
+        "created_at": 7,
+        "updated_at": 8
+      },
+      "organization": {
+        "scope_type": "organization",
+        "scope_id": "fixture-org",
+        "policy_json": "{\"loginMethod\":0,\"keep\":\"original org\"}",
+        "updated_by": "original-org-writer",
+        "created_at": 3,
+        "updated_at": 4
+      }
+    },
+    {
+      "name": "deny_dept_admin",
+      "role": "dept_admin",
+      "body": {
+        "login_method": 1
+      },
+      "platform": {
+        "unrelated": {
+          "keep": [
+            false,
+            null,
+            "原始"
+          ]
+        },
+        "loginMethod": "cas",
+        "loginMethodInherited": false,
+        "thirdPartyAuth": {
+          "enabled": 1,
+          "defaultProvider": "foreign-default"
+        }
+      },
+      "expectedStatus": 403,
+      "status": 403,
+      "unchangedOnRefusal": true,
+      "expected": {
+        "scope_type": "platform",
+        "scope_id": "default",
+        "policy_json": {
+          "unrelated": {
+            "keep": [
+              false,
+              null,
+              "原始"
+            ]
+          },
+          "loginMethod": "cas",
+          "loginMethodInherited": false,
+          "thirdPartyAuth": {
+            "enabled": 1,
+            "defaultProvider": "foreign-default"
+          }
+        },
+        "updated_by": "original-writer",
+        "created_at": 7,
+        "updated_at": 8
+      },
+      "organization": {
+        "scope_type": "organization",
+        "scope_id": "fixture-org",
+        "policy_json": "{\"loginMethod\":0,\"keep\":\"original org\"}",
+        "updated_by": "original-org-writer",
+        "created_at": 3,
+        "updated_at": 4
+      }
+    },
+    {
+      "name": "deny_user",
+      "role": "user",
+      "body": {
+        "login_method": 1
+      },
+      "platform": {
+        "unrelated": {
+          "keep": [
+            false,
+            null,
+            "原始"
+          ]
+        },
+        "loginMethod": "cas",
+        "loginMethodInherited": false,
+        "thirdPartyAuth": {
+          "enabled": 1,
+          "defaultProvider": "foreign-default"
+        }
+      },
+      "expectedStatus": 403,
+      "status": 403,
+      "unchangedOnRefusal": true,
+      "expected": {
+        "scope_type": "platform",
+        "scope_id": "default",
+        "policy_json": {
+          "unrelated": {
+            "keep": [
+              false,
+              null,
+              "原始"
+            ]
+          },
+          "loginMethod": "cas",
+          "loginMethodInherited": false,
+          "thirdPartyAuth": {
+            "enabled": 1,
+            "defaultProvider": "foreign-default"
+          }
+        },
+        "updated_by": "original-writer",
+        "created_at": 7,
+        "updated_at": 8
+      },
+      "organization": {
+        "scope_type": "organization",
+        "scope_id": "fixture-org",
+        "policy_json": "{\"loginMethod\":0,\"keep\":\"original org\"}",
+        "updated_by": "original-org-writer",
+        "created_at": 3,
+        "updated_at": 4
+      }
+    }
+  ]
+}

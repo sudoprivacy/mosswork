@@ -803,6 +803,8 @@ def ci_commit(repo: Path, message: str) -> None:
 def seed_windows_validation_workflow(repo: Path) -> None:
     path = ".github/workflows/mosswork-ci.yml"
     stage(repo, path, (SOURCE / path).read_text(encoding="utf-8"))
+    for path in gate.WINDOWS_VALIDATION_RECIPE_ACTIONS:
+        stage(repo, path, (SOURCE / path).read_text(encoding="utf-8"))
     ci_commit(repo, "qualified Windows workflow fixture")
 
 
@@ -1150,10 +1152,10 @@ def test_ci_tools_real_processes_preserve_parent_index_and_stop_after_failure(
         target = repo / path
         target.parent.mkdir(parents=True, exist_ok=True)
         shutil.copyfile(SOURCE / path, target)
-    path = ".github/workflows/mosswork-ci.yml"
-    target = repo / path
-    target.parent.mkdir(parents=True, exist_ok=True)
-    shutil.copyfile(SOURCE / path, target)
+    for path in (".github/workflows/mosswork-ci.yml", *gate.WINDOWS_VALIDATION_RECIPE_ACTIONS):
+        target = repo / path
+        target.parent.mkdir(parents=True, exist_ok=True)
+        shutil.copyfile(SOURCE / path, target)
     git(repo, "add", ".")
     ci_commit(repo, "complete validator baseline")
     base = git(repo, "rev-parse", "HEAD")

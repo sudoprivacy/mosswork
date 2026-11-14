@@ -9,10 +9,14 @@ tests.
 from __future__ import annotations
 
 import os
+import shlex
+import sys
 from pathlib import Path
 from types import SimpleNamespace
 from typing import Any
 from unittest.mock import AsyncMock, patch
+
+import pytest
 
 # --- env-status -------------------------------------------------------------
 
@@ -131,6 +135,29 @@ async def test_legacy_playwright_session_routes_removed(env: Any) -> None:
     assert r.status_code != 201
 
 
+@pytest.mark.filterwarnings("error::pytest.PytestUnhandledThreadExceptionWarning")
+def test_browser_probe_preserves_non_utf8_failure_details(tmp_path: Path) -> None:
+    """A real failed command keeps diagnostics even on a UTF-8 Python host."""
+    from octop.api.routers.browser.env import _verify_browser_binary
+
+    program = (
+        "import sys;sys.stderr.buffer.write(bytes([255])+b'Chromium probe failed');sys.exit(7)"
+    )
+    if os.name == "nt":
+        command = tmp_path / "probe.bat"
+        command.write_text(f'@"{sys.executable}" -c "{program}"\r\n', encoding="utf-8")
+    else:
+        command = tmp_path / "probe"
+        command.write_text(
+            f"#!/bin/sh\nexec {shlex.quote(sys.executable)} -c {shlex.quote(program)}\n",
+            encoding="utf-8",
+        )
+        command.chmod(0o755)
+    ok, detail = _verify_browser_binary(str(command))
+    assert ok is False
+    assert "code 7" in detail and "Chromium probe failed" in detail
+
+
 async def test_harness_sessions_shape(env: Any) -> None:
     c, _srv, auth = env
     r = await c.get("/api/browser/harness-sessions", headers=auth)
@@ -141,61 +168,37 @@ async def test_harness_sessions_shape(env: Any) -> None:
     assert isinstance(body["sessions"], list)
 
 
-async def test_harness_list_tabs_uses_sticky_target_id(monkeypatch) -> None:
-    import aiohttp
-
+async def test_harness_list_tabs_uses_connected_target_and_browser_context() -> None:
     from octop.api.routers.browser import harness as harness_router
 
-    class FakeProfile:
-        cdp_port = 9222
-
-        def load_target(self) -> str:
-            return "TAB-2"
-
-    class FakeInternal:
-        _cfg = SimpleNamespace(cdp_host="localhost")
-        _profile = FakeProfile()
-
-    class FakeSession:
-        _internal = FakeInternal()
-
-    class FakeResponse:
-        async def __aenter__(self):
-            return self
-
-        async def __aexit__(self, *exc):
-            return False
-
-        async def json(self, content_type=None):
-            return [
-                {
-                    "type": "page",
-                    "id": "TAB-1",
-                    "url": "https://www.bilibili.com/",
-                    "title": "B站",
-                },
-                {
-                    "type": "page",
-                    "id": "TAB-2",
-                    "url": "https://weibo.com/",
-                    "title": "微博",
-                },
-            ]
-
-    class FakeClientSession:
-        async def __aenter__(self):
-            return self
-
-        async def __aexit__(self, *exc):
-            return False
-
-        def get(self, _url: str, timeout=None):
-            return FakeResponse()
-
-    monkeypatch.setattr(aiohttp, "ClientSession", lambda: FakeClientSession())
-
-    tabs = await harness_router.harness_list_tabs(FakeSession())
-
+    pages = [
+        {
+            "type": "page",
+            "targetId": "TAB-1",
+            "browserContextId": "own",
+            "url": "https://www.bilibili.com/",
+            "title": "B站",
+        },
+        {
+            "type": "page",
+            "targetId": "TAB-2",
+            "browserContextId": "own",
+            "url": "https://weibo.com/",
+            "title": "微博",
+        },
+        {
+            "type": "page",
+            "targetId": "OTHER",
+            "browserContextId": "other",
+            "url": "https://example.com/private",
+        },
+    ]
+    client = SimpleNamespace(
+        send=AsyncMock(side_effect=[{"targetInfo": pages[1]}, {"targetInfos": pages}])
+    )
+    session = SimpleNamespace(_internal=SimpleNamespace(client=client))
+    tabs = await harness_router.harness_list_tabs(session)
+    assert [tab["id"] for tab in tabs] == ["TAB-1", "TAB-2"]
     assert [tab["active"] for tab in tabs] == [False, True]
 
 

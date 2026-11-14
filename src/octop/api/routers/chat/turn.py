@@ -58,6 +58,7 @@ class PreparedDashboardTurn:
     composer_context: dict[str, Any] | None
     inbound_attachments: list[dict[str, str]]
     device_task: str | None = None
+    browser_control_epoch: int | None = None
 
 
 async def resolve_thread_id(
@@ -247,6 +248,13 @@ async def _prepare_dashboard_turn(
 
     access = ExpertAccess(server.services)
     access.assert_use(user.id, agent_id)
+    # Capture at user admission, before model/MCP preparation can await. A turn
+    # queued before Stop must not acquire the browser after Stop has fenced it.
+    from octop.infra.browser.control import profile_control
+    from octop.infra.utils.browser_media import user_browser_profile
+
+    browser_control = await profile_control(user_browser_profile(user.id), server.paths.root)
+    browser_epoch = browser_control.core.epoch
     if not user.is_admin and not (turn.default_model or "").strip():
         from octop.infra.users.model_access import ModelAccess
 
@@ -369,6 +377,7 @@ async def _prepare_dashboard_turn(
         composer_context=composer_ctx,
         inbound_attachments=inbound_attachments,
         device_task=device_task,
+        browser_control_epoch=browser_epoch,
     )
 
 
@@ -387,6 +396,8 @@ def build_dashboard_inbound(
         "thread_id": prepared.thread_id,
         "user_is_admin": user_is_admin,
     }
+    if prepared.browser_control_epoch is not None:
+        metadata["_browser_control_epoch"] = prepared.browser_control_epoch
     if turn.client_request_id:
         metadata["client_request_id"] = turn.client_request_id
     if prepared.device_task:

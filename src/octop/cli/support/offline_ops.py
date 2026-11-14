@@ -266,6 +266,7 @@ def delete_agent_offline(agent_id: str, *, home: Path | None = None) -> None:
         row = svc.agent_repo.get(agent_id)
         if row is None:
             raise MossworkError(ErrorCode.AGENT_NOT_FOUND, f"agent {agent_id!r} not found")
+        svc.agent_repo.assert_deletable(agent_id)
         workspace_dir = workspace_dir_from_config_json(
             row.config_json, paths=svc.paths, agent_id=agent_id
         )

@@ -173,11 +173,14 @@ def _act(action: str, agent_id: str, as_user: str | None) -> None:
         fail_mosswork(exc)
     if action == "delete":
         from octop.cli.support.offline_ops import delete_agent_offline
+        from octop.infra.db.retention import RetainedResourceError
 
         try:
             delete_agent_offline(agent_id)
         except MossworkError as exc:
             fail_mosswork(exc)
+        except RetainedResourceError:
+            fail_mosswork(MossworkError.localized(ErrorCode.RESOURCE_RETAINED))
         click.echo("deleted")
         return
     try:

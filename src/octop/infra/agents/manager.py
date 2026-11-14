@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+import copy
 import json
 import logging
 import os
@@ -25,6 +26,7 @@ from octop.i18n.domains.agents import (
     NO_MODELS_CONFIGURED,
     format_agent_start_error,
 )
+from octop.infra.agents.execution_backend import ManagedExecutionBackend
 from octop.infra.agents.memory.backend import (
     memory_backend_from_agent_config,
     preserve_memory_layout,
@@ -79,6 +81,8 @@ from octop.infra.connectors.builder import (
 from octop.infra.connectors.service import ConnectorService
 from octop.infra.db.repos.audit import ACTOR_SYSTEM
 from octop.infra.errors import ErrorCode, MossworkError
+from octop.infra.identity.request_principal import CanonicalAuthenticatedRequest
+from octop.infra.native_host.context import HostUnavailable, _require_completion
 from octop.infra.skills.presentation import apply_skill_presentation, localize_skill_summary
 from octop.infra.skills.skill_package_store import SkillPackageStore
 from octop.infra.skills.workspace_catalog import (
@@ -448,6 +452,7 @@ class AgentManager:
         config: MossworkConfig | None = None,
         expert_catalog: ExpertCatalog | None = None,
         plugin_manager: PluginManager | None = None,
+        managed_backend: ManagedExecutionBackend | None = None,
     ) -> None:
         self._repos = repos
         self._paths = paths
@@ -457,6 +462,8 @@ class AgentManager:
         self.device_manager: Any = None
         self.employee_resources: Any = None
         self.execution: Any = None
+        self._managed_backend = managed_backend
+        self._managed_backend_started = False
         self.runtime_shards: Any = None
         self.runtime_last_used: dict[str, float] = {}
         self._runtime_config_dirty: set[str] = set()
@@ -576,6 +583,11 @@ class AgentManager:
         return self._teams
 
     async def boot(self, *, lazy: bool = False) -> None:
+        if self._managed_backend is not None:
+            self._managed_backend_started = False
+            await _require_completion(self._managed_backend.boot())
+            self._managed_backend_started = True
+            return
         self._tool_guard_rules.ensure_seeded()
         providers = self._providers.build_harness_configs()
         self._harness_manager = HarnessAgentManager(
@@ -628,6 +640,9 @@ class AgentManager:
                 )
 
     async def shutdown(self) -> None:
+        if self._managed_backend is not None:
+            self._managed_backend_started = False
+            await _require_completion(self._managed_backend.aclose())
         await self.memory_slim.close()
         self._reload_dirty.clear()
         for task in tuple(self._reload_tasks.values()):
@@ -907,6 +922,13 @@ class AgentManager:
 
     async def _abort_incomplete_create(self, agent_id: str) -> None:
         """Best-effort rollback after a failed create. Caller holds ``_lock``."""
+        from octop.infra.db.retention import RetainedResourceError
+
+        try:
+            self._repos.agent_repo.assert_deletable(agent_id)
+        except RetainedResourceError:
+            logger.warning("retaining incomplete canonical agent; destructive rollback refused")
+            return
         try:
             if self._harness_manager is not None:
                 await self._harness_manager.aremove_agent(agent_id)
@@ -1047,16 +1069,18 @@ class AgentManager:
         """Remove agent from DB, harness runtime, and workspace directory."""
         from octop.infra.users.expert_access import ExpertAccess
 
-        ExpertAccess(self._repos).assert_manage(agent_id)
         row = self._repos.agent_repo.get(agent_id)
         if row is None:
             raise MossworkError(ErrorCode.AGENT_NOT_FOUND, f"agent {agent_id!r} not found")
+        self._repos.agent_repo.assert_deletable(agent_id)
+        ExpertAccess(self._repos).assert_manage(agent_id)
         self._teams.assert_can_delete_agent(agent_id)
         from octop.infra.agents.teams import is_team_agent
 
         affected_teams: list[str] = []
         workspace_dir = self.resolve_workspace_dir(agent_id, persist_if_missing=False)
         async with self._lock:
+            self._repos.agent_repo.assert_deletable(agent_id)
             if not is_team_agent(row):
                 try:
                     affected_teams = self._teams.drop_member(agent_id)
@@ -1082,8 +1106,17 @@ class AgentManager:
             except Exception:
                 logger.exception("failed to reload team %s after dropping %s", team_id, agent_id)
 
-    async def start(self, agent_id: str) -> None:
+    async def start(
+        self, agent_id: str, *, admission: CanonicalAuthenticatedRequest | None = None
+    ) -> None:
         """Load agent into harness runtime (no-op config merge)."""
+        if self._managed_backend is not None:
+            async with self._lifecycle_lock_for(agent_id):
+                principal = await self._managed_effect_caller(agent_id, None, admission)
+                await _require_completion(
+                    self._require_managed_backend().start(agent_id, admission=principal)
+                )
+            return
         if self.runtime_shards is not None:
             row = self.get_row(agent_id)
             if row is not None:
@@ -1126,8 +1159,17 @@ class AgentManager:
         except KeyError:
             return None
 
-    async def stop(self, agent_id: str) -> None:
+    async def stop(
+        self, agent_id: str, *, admission: CanonicalAuthenticatedRequest | None = None
+    ) -> None:
         """Unload agent from harness runtime and persist ``last_state=stopped``."""
+        if self._managed_backend is not None:
+            async with self._lifecycle_lock_for(agent_id):
+                principal = await self._managed_effect_caller(agent_id, None, admission)
+                await _require_completion(
+                    self._require_managed_backend().stop(agent_id, admission=principal)
+                )
+            return
         async with self._lock:
             row = self._repos.agent_repo.get(agent_id)
             if row is None:
@@ -1531,6 +1573,8 @@ class AgentManager:
         running, or no checkpointer configured for it) — both are normal,
         expected states, not errors.
         """
+        self._repos.thread_repo.assert_deletable(thread_id)
+        self._repos.agent_repo.assert_deletable(agent_id)
         try:
             harness = self.get_agent(agent_id)
         except MossworkError:
@@ -1605,11 +1649,92 @@ class AgentManager:
         finally:
             self._end_invocation(agent_id)
 
-    async def stream(self, agent_id: str, request: dict[str, Any]) -> AsyncIterator[Any]:
+    @property
+    def uses_managed_backend(self) -> bool:
+        return self._managed_backend is not None
+
+    def _require_managed_backend(self) -> ManagedExecutionBackend:
+        if self._managed_backend is None or not self._managed_backend_started:
+            raise HostUnavailable("Selected managed product backend is unavailable")
+        return self._managed_backend
+
+    async def _managed_caller(
+        self, agent_id: str, thread_id: str | None, supplied: CanonicalAuthenticatedRequest | None
+    ) -> CanonicalAuthenticatedRequest | None:
+        from octop.infra.execution.admission import CurrentAdmissionRequired
+        from octop.infra.execution.service import current_execution
+
+        active = current_execution.get()
+        if active is not None and active.service.human_admissions is not None:
+            if active.run["agent_id"] != agent_id or (
+                thread_id is not None and active.run["thread_id"] != thread_id
+            ):
+                raise CurrentAdmissionRequired("original_request_selection_mismatch")
+            principal = await active.canonical_principal()
+            if supplied is not None and supplied is not principal:
+                raise CurrentAdmissionRequired("current_human_admission_changed")
+        else:
+            principal = supplied
+            service = getattr(self.execution, "service", None)
+            if getattr(service, "human_admissions", None) is not None and principal is None:
+                raise CurrentAdmissionRequired("current_human_admission_required")
+        if principal is not None:
+            if type(principal) is not CanonicalAuthenticatedRequest:
+                raise CurrentAdmissionRequired("current_human_admission_required")
+            await principal.revalidate()
+        return principal
+
+    async def _managed_effect_caller(
+        self, agent_id: str, thread_id: str | None, supplied: CanonicalAuthenticatedRequest | None
+    ) -> CanonicalAuthenticatedRequest:
+        from octop.infra.execution.admission import CurrentAdmissionRequired
+
+        principal = await self._managed_caller(agent_id, thread_id, supplied)
+        if principal is None:
+            raise CurrentAdmissionRequired("current_human_admission_required")
+        return principal
+
+    @asynccontextmanager
+    async def _track_managed_invocation(self, agent_id: str) -> AsyncIterator[None]:
+        # Product activity accounting only. The injected provider reauthorizes
+        # current canonical/native grants; legacy workspace preparation must not
+        # create another runtime before the selected provider is called.
+        await self._begin_invocation(agent_id)
+        try:
+            yield
+        finally:
+            self._end_invocation(agent_id)
+
+    async def stream(
+        self,
+        agent_id: str,
+        request: dict[str, Any],
+        *,
+        admission: CanonicalAuthenticatedRequest | None = None,
+    ) -> AsyncIterator[Any]:
         """Stream harness chunks (Langfuse tracing handled inside moss-harness)."""
         if self.execution is not None and self.execution.should_submit:
-            async for chunk in self.execution.manager_stream(agent_id, request):
+            async for chunk in self.execution.manager_stream(
+                agent_id, request, admission=admission
+            ):
                 yield chunk
+            return
+        if self._managed_backend is not None:
+            backend = self._require_managed_backend()
+            request = copy.deepcopy(request)
+            thread_id = str(request.get("thread_id") or "")
+            async with (
+                self._thread_execution_lock(agent_id, thread_id),
+                self._track_managed_invocation(agent_id),
+            ):
+                principal = await self._managed_caller(agent_id, thread_id, admission)
+                stream = (
+                    backend.stream(agent_id, request, admission=principal)
+                    if principal is not None
+                    else backend.stream(agent_id, request)
+                )
+                async for chunk in stream:
+                    yield chunk
             return
         if self._harness_manager is None:
             raise self._unavailable_error(agent_id)
@@ -1647,13 +1772,38 @@ class AgentManager:
                     yield chunk
             self._apply_pending_bootstrap_graph_refresh(agent_id)
 
-    async def call(self, agent_id: str, request: dict[str, Any]) -> dict[str, Any]:
+    async def call(
+        self,
+        agent_id: str,
+        request: dict[str, Any],
+        *,
+        admission: CanonicalAuthenticatedRequest | None = None,
+    ) -> dict[str, Any]:
         """Non-streaming harness invocation (one-shot agent call)."""
         if self.execution is not None and self.execution.should_submit:
-            async for chunk in self.execution.manager_stream(agent_id, request, call=True):
+            async for chunk in self.execution.manager_stream(
+                agent_id, request, call=True, admission=admission
+            ):
                 if chunk.get("type") == "execution.result":
                     return cast(dict[str, Any], chunk["result"])
             raise RuntimeError("execution result unavailable; inspect the durable task")
+        if self._managed_backend is not None:
+            backend = self._require_managed_backend()
+            request = copy.deepcopy(request)
+            thread_id = str(request.get("thread_id") or "")
+            async with (
+                self._thread_execution_lock(agent_id, thread_id),
+                self._track_managed_invocation(agent_id),
+            ):
+                principal = await self._managed_caller(agent_id, thread_id, admission)
+                result = (
+                    await backend.call(agent_id, request, admission=principal)
+                    if principal is not None
+                    else await backend.call(agent_id, request)
+                )
+                if not isinstance(result, dict):
+                    raise HostUnavailable("Selected managed backend result is unavailable")
+                return result
         if self._harness_manager is None:
             raise self._unavailable_error(agent_id)
         async with self._track_invocation(agent_id):
@@ -1675,8 +1825,26 @@ class AgentManager:
         agent_id: str,
         thread_id: str,
         decisions: list[dict[str, Any]],
+        *,
+        admission: CanonicalAuthenticatedRequest | None = None,
     ) -> AsyncIterator[Any]:
         """Resume a paused HITL interrupt for *thread_id*."""
+        if self._managed_backend is not None:
+            backend = self._require_managed_backend()
+            decisions = copy.deepcopy(decisions)
+            async with (
+                self._thread_execution_lock(agent_id, thread_id),
+                self._track_managed_invocation(agent_id),
+            ):
+                principal = await self._managed_caller(agent_id, thread_id, admission)
+                stream = (
+                    backend.resume_hitl(agent_id, thread_id, decisions, admission=principal)
+                    if principal is not None
+                    else backend.resume_hitl(agent_id, thread_id, decisions)
+                )
+                async for chunk in stream:
+                    yield chunk
+            return
         from octop.infra.devices.tasks import resumed_device_task
 
         if self._harness_manager is None:
@@ -1703,21 +1871,58 @@ class AgentManager:
 
     def cancel_stream(self, agent_id: str, thread_id: str) -> None:
         """Signal moss-harness to stop the active stream for *(agent_id, thread_id)*."""
+        if self._managed_backend is not None:
+            self._require_managed_backend().request_cancel(agent_id, thread_id)
+            return
         if self._harness_manager is not None:
             self._harness_manager.cancel(agent_id, thread_id)
 
     def get_thread_model(self, agent_id: str, thread_id: str) -> str | None:
+        if self._managed_backend is not None:
+            return self._require_managed_backend().get_thread_model(agent_id, thread_id)
         if self._harness_manager is None:
             return None
         return self._harness_manager.get_thread_model(agent_id, thread_id)
 
     def set_thread_model(self, agent_id: str, thread_id: str, model: str) -> None:
+        if self._managed_backend is not None:
+            raise HostUnavailable("Managed model changes require awaited current admission")
         if self._harness_manager is not None:
             self._harness_manager.set_thread_model(agent_id, thread_id, model)
 
     def clear_thread_model(self, agent_id: str, thread_id: str) -> None:
+        if self._managed_backend is not None:
+            raise HostUnavailable("Managed model changes require awaited current admission")
         if self._harness_manager is not None:
             self._harness_manager.clear_thread_model(agent_id, thread_id)
+
+    async def update_thread_model(
+        self,
+        agent_id: str,
+        thread_id: str,
+        model: str | None,
+        *,
+        admission: CanonicalAuthenticatedRequest | None = None,
+    ) -> None:
+        """Await the same selected provider with current human admission after the lock.
+
+        None clears the preference. Synchronous legacy slash callbacks cannot
+        supply this contract and refuse in managed mode; they schedule no task.
+        The provider still enforces exact current model/resource/native policy.
+        """
+        if model is not None and not isinstance(model, str):
+            raise TypeError("The selected model must be a string or None")
+        async with self._thread_execution_lock(agent_id, thread_id):
+            principal = await self._managed_effect_caller(agent_id, thread_id, admission)
+            backend = self._require_managed_backend()
+            if model is None:
+                await _require_completion(
+                    backend.clear_thread_model(agent_id, thread_id, admission=principal)
+                )
+            else:
+                await _require_completion(
+                    backend.set_thread_model(agent_id, thread_id, model, admission=principal)
+                )
 
     def resolve_fallback_model_ref(self) -> str | None:
         """Settings active model when usable, else the first enabled catalog model."""
@@ -1732,15 +1937,26 @@ class AgentManager:
     # Hot-reload — rebuild harness agents after config / provider changes
     # ------------------------------------------------------------------
 
-    async def reload(self, agent_id: str) -> None:
+    async def reload(
+        self, agent_id: str, *, admission: CanonicalAuthenticatedRequest | None = None
+    ) -> None:
         """Rebuild harness runtime for one agent (e.g. after plugin install)."""
-        await self._reload_agent(agent_id)
+        if self._managed_backend is not None:
+            await self._reload_agent(agent_id, admission=admission)
+        else:
+            await self._reload_agent(agent_id)
 
-    async def reload_all(self) -> None:
+    async def reload_all(self, *, admission: CanonicalAuthenticatedRequest | None = None) -> None:
         """Rebuild harness runtime for every enabled agent (bounded parallel)."""
         agent_ids = [
             row.agent_id for row in self._repos.agent_repo.list_all(include_disabled=False)
         ]
+        if self._managed_backend is not None:
+            # Preserve the first refusal/Unknown rather than the legacy bulk
+            # helper's log-and-continue result. Each target needs current grants.
+            for agent_id in agent_ids:
+                await self._reload_agent(agent_id, admission=admission)
+            return
         await self._reload_agents(agent_ids)
 
     def reload_mosswork_harnesss(self) -> None:
@@ -2996,8 +3212,15 @@ class AgentManager:
             logger.exception("Deferred bootstrap failed for agent %s", row.agent_id)
 
     async def _start_agent(
-        self, row: AgentRow, *, init_workspace: bool = True
+        self,
+        row: AgentRow,
+        *,
+        init_workspace: bool = True,
+        admission: CanonicalAuthenticatedRequest | None = None,
     ) -> HarnessAgent | None:
+        if self._managed_backend is not None:
+            await self.start(row.agent_id, admission=admission)
+            return None
         assert self._harness_manager is not None, "_start_agent called before boot()"
         if self.runtime_shards is not None:
             await asyncio.to_thread(self.runtime_shards.assert_user, row.user_id)
@@ -3387,7 +3610,23 @@ class AgentManager:
     # Internal — background reload worker
     # ------------------------------------------------------------------
 
-    async def _reload_agent(self, agent_id: str, *, except_run: str = "") -> None:
+    async def _reload_agent(
+        self,
+        agent_id: str,
+        *,
+        except_run: str = "",
+        admission: CanonicalAuthenticatedRequest | None = None,
+    ) -> None:
+        if self._managed_backend is not None:
+            async with self._lifecycle_lock_for(agent_id):
+                principal = await self._managed_effect_caller(agent_id, None, admission)
+                await _require_completion(
+                    self._require_managed_backend().reload(
+                        agent_id, except_run=except_run, admission=principal
+                    )
+                )
+                self._runtime_config_dirty.discard(agent_id)
+            return
         assert self._harness_manager is not None
         if self.runtime_shards is not None:
             row = self._repos.agent_repo.get(agent_id)
@@ -3837,7 +4076,7 @@ class AgentManager:
             device_policy,
             HistoryRolesMiddleware(),
             KnowledgeSearchHintMiddleware(),
-            BrowserProfileMiddleware(),
+            BrowserProfileMiddleware(self._paths.root),
             BinaryReadGuardMiddleware(),
             WorkspaceImageMaterializeMiddleware(workspace=ws),
             ThreadArtifactsMiddleware(

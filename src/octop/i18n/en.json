@@ -401,9 +401,12 @@
     "AGENT_NOT_FOUND": "Agent not found.",
     "MOSS_IDENTITY_INVALID": "Invalid personal Moss owner or Agent reference.",
     "MOSS_ACCESS_DENIED": "Moss access is not available for this organization member.",
+    "PHONE_AUTH_FAILED": "Unable to complete phone verification.",
+    "IDENTITY_REQUEST_INVALID": "Invalid identity request.",
     "AGENT_NOT_RUNNING": "This expert is not enabled.",
     "AGENT_FAILED": "Agent failed to start.",
     "AGENT_BUSY": "Agent is busy.",
+    "RESOURCE_RETAINED": "This resource and its history must be retained. Deletion is unavailable.",
     "MODEL_NOT_ASSIGNED": "This model is not assigned to this employee. Ask an administrator to assign available models.",
     "SANDBOX_MEMORY_EXHAUSTED": "The sandbox memory budget is full. Idle sandboxes are being reclaimed; please retry shortly.",
     "RUNTIME_UNAVAILABLE": "The expert runtime is temporarily unavailable. Please retry shortly.",
@@ -724,6 +727,7 @@
     "start_timeout": "This expert took too long to start (storage backend I/O). Try again, or switch it to a local workspace backend."
   },
   "stream_errors": {
+    "canonical_chat_frame_unavailable": "Use an existing thread and original request identity for this operation.",
     "stream_stall": "The model stopped sending content while the connection stayed open. Click Retry, or try again later with another model. If this happens often, check the provider status or ask an admin to review stream timeout settings.",
     "rate_limit": "The model provider rate-limited this request. Wait a moment and retry, or switch to another model.",
     "auth": "Model authentication failed. Check that the API key under Admin → Model Management is correct and still valid.",

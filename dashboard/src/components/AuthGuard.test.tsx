@@ -3,7 +3,7 @@ import { act, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { MemoryRouter, Route, Routes, useNavigate } from "react-router-dom";
 import { useEffect } from "react";
-import AuthGuard from "./AuthGuard";
+import { StandaloneAuthGuard as AuthGuard } from "./AuthGuard";
 import { useCurrentUser } from "../hooks/useCurrentUser";
 
 vi.mock("../api/modules/auth", () => ({

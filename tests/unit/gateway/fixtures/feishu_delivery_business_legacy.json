@@ -1,0 +1,140 @@
+{
+  "sourceCommit": "d0b84d4c8fd5905d9ec3f7c160f2ce633f535d0d",
+  "sourcePath": "src/server/mossImIdentity.ts",
+  "sourceSha256": "11580c5e309a241f1611fac56bffa7069f3172759abf0c7f015b403aeff13423",
+  "producer": "Exact pinned original configure/claim/setPointer/delivery on real Bun SQLite; assertRoute is a separately qualified successful policy port, no native/session assertion is claimed",
+  "consumerTightenings": [
+    "Current same-org verified human admin and signed admin:users, no foreign-org super_admin override",
+    "Mandatory canonical writer and actual native session assertion for new effect admission",
+    "Immutable delivery owner/ref/session and terminal states; no original unrestricted redispatch"
+  ],
+  "now": 2000000000000,
+  "values": {
+    "configure": {
+      "samePreservesRevision": true,
+      "tenantChangeRotatesRevision": true,
+      "repeatPreservesRevision": true,
+      "invalid": [
+        {
+          "appId": "cli_bad_app",
+          "tenantKey": "tenant-aa",
+          "scopes": ["*"],
+          "status": 400
+        },
+        {
+          "appId": "cli_appA",
+          "tenantKey": "short",
+          "scopes": ["*"],
+          "status": 400
+        },
+        {
+          "appId": "cli_appA",
+          "tenantKey": "tenant-aa",
+          "scopes": ["sessions:list"],
+          "status": 403
+        },
+        {
+          "appId": "cli_appA",
+          "tenantKey": "tenant-aa",
+          "scopes": [],
+          "status": 403
+        }
+      ]
+    },
+    "connection": {
+      "orgId": "4ce65010-7331-415a-abaa-4d47387d845e",
+      "ownerId": "c2cc8374-8cdf-4936-8967-d891fb500634",
+      "pluginId": "plugin-a",
+      "tenantKey": "tenant-aa",
+      "appId": "cli_appA",
+      "scope": "[\"4ce65010-7331-415a-abaa-4d47387d845e\",\"c2cc8374-8cdf-4936-8967-d891fb500634\",\"plugin-a\",\"tenant-aa\",\"cli_appA\",\"r1\"]"
+    },
+    "event": {
+      "senderId": "ou_member_a",
+      "messageId": "om_message_a",
+      "chatId": "oc_group"
+    },
+    "claimed": true,
+    "initial": {
+      "connection_scope": "[\"4ce65010-7331-415a-abaa-4d47387d845e\",\"c2cc8374-8cdf-4936-8967-d891fb500634\",\"plugin-a\",\"tenant-aa\",\"cli_appA\",\"r1\"]",
+      "message_id": "om_message_a",
+      "platform_user_id": "ou_member_a",
+      "chat_id": "oc_group",
+      "user_id": null,
+      "agent_ref": null,
+      "session_id": null,
+      "status": "claimed",
+      "created_at": 2000000000000,
+      "updated_at": 2000000000000
+    },
+    "duplicates": [
+      {
+        "status": "claimed",
+        "claimed": false
+      },
+      {
+        "status": "dispatching",
+        "claimed": false
+      },
+      {
+        "status": "completed",
+        "claimed": false
+      },
+      {
+        "status": "failed",
+        "claimed": false
+      },
+      {
+        "status": "unknown",
+        "claimed": false
+      }
+    ],
+    "pointer": {
+      "conversation_key": "moss-im:1e0ccd37e1282603488689893383cc285ded9ef62026d2bb9660f46ad5d4d39f",
+      "org_id": "4ce65010-7331-415a-abaa-4d47387d845e",
+      "user_id": "c2cc8374-8cdf-4936-8967-d891fb500634",
+      "agent_ref": "moss-agent:operator:WyI0Y2U2NTAxMC03MzMxLTQxNWEtYWJhYS00ZDQ3Mzg3ZDg0NWUiLCJjMmNjODM3NC04Y2RmLTQ5MzYtODk2Ny1kODkxZmI1MDA2MzQiXQ",
+      "connection_scope": "[\"4ce65010-7331-415a-abaa-4d47387d845e\",\"c2cc8374-8cdf-4936-8967-d891fb500634\",\"plugin-a\",\"tenant-aa\",\"cli_appA\",\"r1\"]",
+      "chat_id": "oc_group",
+      "session_id": "native-original-session",
+      "updated_at": 2000000000000
+    },
+    "conflict": 409,
+    "dispatching": {
+      "connection_scope": "[\"4ce65010-7331-415a-abaa-4d47387d845e\",\"c2cc8374-8cdf-4936-8967-d891fb500634\",\"plugin-a\",\"tenant-aa\",\"cli_appA\",\"r1\"]",
+      "message_id": "om_message_a",
+      "platform_user_id": "ou_member_a",
+      "chat_id": "oc_group",
+      "user_id": "c2cc8374-8cdf-4936-8967-d891fb500634",
+      "agent_ref": "moss-agent:operator:WyI0Y2U2NTAxMC03MzMxLTQxNWEtYWJhYS00ZDQ3Mzg3ZDg0NWUiLCJjMmNjODM3NC04Y2RmLTQ5MzYtODk2Ny1kODkxZmI1MDA2MzQiXQ",
+      "session_id": "native-original-session",
+      "status": "dispatching",
+      "created_at": 2000000000000,
+      "updated_at": 2000000000000
+    },
+    "completed": {
+      "connection_scope": "[\"4ce65010-7331-415a-abaa-4d47387d845e\",\"c2cc8374-8cdf-4936-8967-d891fb500634\",\"plugin-a\",\"tenant-aa\",\"cli_appA\",\"r1\"]",
+      "message_id": "om_message_a",
+      "platform_user_id": "ou_member_a",
+      "chat_id": "oc_group",
+      "user_id": "c2cc8374-8cdf-4936-8967-d891fb500634",
+      "agent_ref": "moss-agent:operator:WyI0Y2U2NTAxMC03MzMxLTQxNWEtYWJhYS00ZDQ3Mzg3ZDg0NWUiLCJjMmNjODM3NC04Y2RmLTQ5MzYtODk2Ny1kODkxZmI1MDA2MzQiXQ",
+      "session_id": "native-original-session",
+      "status": "completed",
+      "created_at": 2000000000000,
+      "updated_at": 2000000000000
+    },
+    "originalPermittedRedispatch": {
+      "connection_scope": "[\"4ce65010-7331-415a-abaa-4d47387d845e\",\"c2cc8374-8cdf-4936-8967-d891fb500634\",\"plugin-a\",\"tenant-aa\",\"cli_appA\",\"r1\"]",
+      "message_id": "om_message_a",
+      "platform_user_id": "ou_member_a",
+      "chat_id": "oc_group",
+      "user_id": "c2cc8374-8cdf-4936-8967-d891fb500634",
+      "agent_ref": "moss-agent:operator:WyI0Y2U2NTAxMC03MzMxLTQxNWEtYWJhYS00ZDQ3Mzg3ZDg0NWUiLCJjMmNjODM3NC04Y2RmLTQ5MzYtODk2Ny1kODkxZmI1MDA2MzQiXQ",
+      "session_id": "replacement-session",
+      "status": "dispatching",
+      "created_at": 2000000000000,
+      "updated_at": 2000000000000
+    }
+  }
+}

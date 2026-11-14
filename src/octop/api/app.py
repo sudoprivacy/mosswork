@@ -18,6 +18,19 @@ from octop.api.middleware.setup_lockdown import install as install_setup_lockdow
 from octop.api.openapi_meta import API_DESCRIPTION, OPENAPI_TAGS, configure_openapi
 from octop.branding import SERVER_NAME
 from octop.infra.errors import ErrorCode, MossworkError
+from octop.infra.execution.admission import CanonicalRunAdmissions
+from octop.infra.execution.service import ExecutionService
+from octop.infra.gateway.feishu_binding import CanonicalFeishuBindingService
+from octop.infra.gateway.feishu_delivery import CanonicalFeishuDeliveryService
+from octop.infra.identity.api_key_exchange import CanonicalApiKeyExchangeService
+from octop.infra.identity.canonical import CanonicalSnapshotService
+from octop.infra.identity.canonical_api_keys import CanonicalApiKeyService
+from octop.infra.identity.human_sessions import CanonicalHumanSessionService
+from octop.infra.identity.moss_entitlements import CanonicalMossEntitlementService
+from octop.infra.identity.organization_members import CanonicalOrganizationMemberService
+from octop.infra.identity.password_auth import CanonicalPasswordAuthService
+from octop.infra.identity.projection import CanonicalRequestIdentityResolver
+from octop.infra.identity.self_profile import CanonicalSelfProfileService
 from octop.infra.server import MossworkServer
 from octop.infra.utils.locale import resolve_request_locale
 
@@ -97,6 +110,7 @@ def _mount_routers(app: FastAPI, mounts: Sequence[_RouterMount]) -> None:
 
 def _install_exception_handlers(app: FastAPI) -> None:
     from octop.api.common.execution import execution_error_response
+    from octop.infra.db.retention import RetainedResourceError
     from octop.infra.execution.service import ExecutionConflict
 
     app.add_exception_handler(ExecutionConflict, execution_error_response)
@@ -116,6 +130,10 @@ def _install_exception_handlers(app: FastAPI) -> None:
         locale = resolve_request_locale(request)
         return JSONResponse(status_code=exc.status, content=exc.to_envelope(locale=locale))
 
+    @app.exception_handler(RetainedResourceError)
+    async def _retained(request: Request, exc: RetainedResourceError) -> JSONResponse:
+        return await _mosswork(request, MossworkError.localized(ErrorCode.RESOURCE_RETAINED))
+
     @app.exception_handler(Exception)
     async def _unhandled(request: Request, exc: Exception) -> JSONResponse:
         logger.exception("unhandled exception in %s", request.url.path)
@@ -124,7 +142,86 @@ def _install_exception_handlers(app: FastAPI) -> None:
         return JSONResponse(status_code=err.status, content=err.to_envelope())
 
 
-def build_app(server: MossworkServer) -> FastAPI:
+def build_app(
+    server: MossworkServer,
+    *,
+    canonical_identity: CanonicalSnapshotService | None = None,
+    canonical_sessions: CanonicalHumanSessionService | None = None,
+    canonical_entitlements: CanonicalMossEntitlementService | None = None,
+    canonical_feishu_bindings: CanonicalFeishuBindingService | None = None,
+    canonical_feishu_delivery: CanonicalFeishuDeliveryService | None = None,
+    canonical_requests: CanonicalRequestIdentityResolver | None = None,
+    canonical_members: CanonicalOrganizationMemberService | None = None,
+    canonical_password: CanonicalPasswordAuthService | None = None,
+    canonical_api_keys: CanonicalApiKeyService | None = None,
+    canonical_api_key_exchange: CanonicalApiKeyExchangeService | None = None,
+    canonical_profile: CanonicalSelfProfileService | None = None,
+    canonical_admissions: CanonicalRunAdmissions | None = None,
+) -> FastAPI:
+    if getattr(server, "canonical_configuration", None) is not None:
+        configured = server.canonical
+        supplied = locals()
+        if configured is None or (
+            any(
+                supplied[name] is not value
+                for name, value in configured.business.app_kwargs().items()
+            )
+            or canonical_admissions is not configured.admissions
+            or server.execution is not configured.execution
+        ):
+            raise ValueError("Canonical startup requires its configured business and admission")
+    if canonical_api_key_exchange is not None:
+        machine_issuer = canonical_api_key_exchange._issuer
+        if canonical_sessions is not None and canonical_sessions is not machine_issuer:
+            raise ValueError("Machine and human credentials must share the canonical issuer")
+        canonical_sessions = machine_issuer
+        if (
+            canonical_api_keys is not None
+            and canonical_api_keys is not canonical_api_key_exchange._keys
+        ):
+            raise ValueError("Machine exchange must use the injected canonical key lifecycle")
+        canonical_api_keys = canonical_api_key_exchange._keys
+    if canonical_password is not None:
+        password_issuer = canonical_password._issuer
+        if not isinstance(password_issuer, CanonicalHumanSessionService):
+            raise ValueError("Password login must use the maintained canonical human issuer")
+        if canonical_sessions is not None and canonical_sessions is not password_issuer:
+            raise ValueError("Canonical password and phone login must share the same issuer")
+        canonical_sessions = password_issuer
+    if canonical_sessions is not None:
+        if (
+            canonical_identity is not None
+            and canonical_identity is not canonical_sessions.snapshots
+        ):
+            raise ValueError(
+                "Canonical lifecycle and snapshots must use the same trusted authority"
+            )
+        canonical_identity = canonical_sessions.snapshots
+    for snapshots in (
+        canonical_entitlements._snapshots if canonical_entitlements is not None else None,
+        canonical_feishu_bindings._snapshots if canonical_feishu_bindings is not None else None,
+        canonical_feishu_delivery._snapshots if canonical_feishu_delivery is not None else None,
+        canonical_requests._snapshots if canonical_requests is not None else None,
+        canonical_members._snapshots if canonical_members is not None else None,
+        canonical_profile._snapshots if canonical_profile is not None else None,
+        canonical_api_keys._snapshots if canonical_api_keys is not None else None,
+    ):
+        if snapshots is not None:
+            if canonical_identity is not None and canonical_identity is not snapshots:
+                raise ValueError("Canonical adapters must use the same trusted authority")
+            canonical_identity = snapshots
+    if canonical_admissions is not None and (
+        type(canonical_admissions) is not CanonicalRunAdmissions
+        or type(canonical_requests) is not CanonicalRequestIdentityResolver
+        or type(server.execution) is not ExecutionService
+        or server.execution.human_admissions is not canonical_admissions
+        or server.execution.repo is not canonical_admissions.repo
+        or server.services is None
+        or canonical_admissions.repo.db is not server.services.db
+        or canonical_requests._projections._db is not server.services.db
+        or server._managed_backend is None
+    ):
+        raise ValueError("Canonical recovery requires the same configured managed queue")
     cfg = server.services.config if server.services else getattr(server, "config", None)
     enable_dashboard = cfg.enable_dashboard if cfg else True
     enable_api_docs = cfg.enable_api_docs if cfg else False
@@ -141,7 +238,134 @@ def build_app(server: MossworkServer) -> FastAPI:
     )
     configure_openapi(app)
     app.state.mosswork_server = server
+    app.state.canonical_identity = canonical_identity
+    app.state.canonical_sessions = canonical_sessions
+    app.state.canonical_entitlements = canonical_entitlements
+    app.state.canonical_feishu_bindings = canonical_feishu_bindings
+    app.state.canonical_feishu_delivery = canonical_feishu_delivery
+    app.state.canonical_requests = canonical_requests
+    app.state.canonical_admissions = canonical_admissions
+    app.state.canonical_members = canonical_members
+    app.state.canonical_password = canonical_password
+    app.state.canonical_api_keys = canonical_api_keys
+    app.state.canonical_api_key_exchange = canonical_api_key_exchange
+    app.state.canonical_profile = canonical_profile
     _install_exception_handlers(app)
+
+    if canonical_admissions is not None:
+        from octop.api.routers.canonical_executions import build_canonical_execution_router
+
+        assert canonical_requests is not None
+        app.include_router(
+            build_canonical_execution_router(server, canonical_requests, canonical_admissions),
+            prefix="/api/executions",
+            tags=["chat"],
+        )
+
+    from octop.api.routers.canonical_auth import build_identity_status_router
+
+    app.include_router(
+        build_identity_status_router(
+            canonical_enabled=canonical_identity is not None,
+            phone_login_available=lambda: (
+                canonical_sessions is not None and canonical_sessions.is_phone_login_available
+            ),
+            password_login_available=canonical_password is not None,
+        ),
+        prefix="/api/identity",
+        tags=["auth"],
+    )
+
+    if canonical_sessions is not None:
+        from octop.api.routers.canonical_auth import build_canonical_auth_router
+
+        app.include_router(
+            build_canonical_auth_router(canonical_sessions),
+            prefix="/api/identity",
+            tags=["auth"],
+        )
+
+    if canonical_password is not None:
+        from octop.api.routers.canonical_password import build_canonical_password_router
+
+        app.include_router(
+            build_canonical_password_router(canonical_password),
+            prefix="/api/identity",
+            tags=["auth"],
+        )
+
+    if canonical_api_key_exchange is not None:
+        from octop.api.routers.canonical_api_key_exchange import (
+            build_canonical_api_key_exchange_router,
+        )
+
+        app.include_router(
+            build_canonical_api_key_exchange_router(canonical_api_key_exchange),
+            prefix="/api/identity",
+            tags=["auth"],
+        )
+
+    if canonical_api_keys is not None:
+        from octop.api.routers.canonical_api_keys import build_canonical_api_keys_router
+
+        app.include_router(
+            build_canonical_api_keys_router(canonical_api_keys),
+            prefix="/api/identity",
+            tags=["auth"],
+        )
+
+    if canonical_profile is not None:
+        from octop.api.routers.canonical_profile import build_canonical_profile_router
+
+        app.include_router(
+            build_canonical_profile_router(canonical_profile),
+            prefix="/api/identity",
+            tags=["auth"],
+        )
+
+    if canonical_members is not None:
+        from octop.api.routers.canonical_members import build_canonical_members_router
+
+        app.include_router(
+            build_canonical_members_router(canonical_members),
+            prefix="/api/identity",
+            tags=["auth"],
+        )
+
+    if canonical_entitlements is not None:
+        from octop.api.routers.canonical_access import build_canonical_entitlement_router
+
+        app.include_router(
+            build_canonical_entitlement_router(canonical_entitlements),
+            prefix="/api/identity",
+            tags=["auth"],
+        )
+    if canonical_feishu_bindings is not None:
+        from octop.api.routers.canonical_access import build_canonical_feishu_binding_router
+
+        app.include_router(
+            build_canonical_feishu_binding_router(canonical_feishu_bindings),
+            prefix="/api/identity",
+            tags=["auth"],
+        )
+
+    if canonical_feishu_delivery is not None:
+        from octop.api.routers.canonical_access import build_canonical_feishu_connection_router
+
+        app.include_router(
+            build_canonical_feishu_connection_router(canonical_feishu_delivery),
+            prefix="/api/identity",
+            tags=["auth"],
+        )
+
+    if canonical_identity is not None:
+        from octop.api.routers.canonical_identity import build_canonical_identity_router
+
+        app.include_router(
+            build_canonical_identity_router(canonical_identity),
+            prefix="/api/identity",
+            tags=["auth"],
+        )
 
     if cfg and cfg.cors_origins:
         from octop.api.deps import ACCESS_TOKEN_RESPONSE_HEADER

@@ -96,14 +96,18 @@ describe("browser keyboard input", () => {
     expect(fireEvent.keyDown(input, { key: "Enter", code: "Enter" })).toBe(
       true,
     );
-    expect(onEvent).not.toHaveBeenCalled();
+    expect(onEvent.mock.calls).toEqual([[{ type: "compositionstart" }]]);
     fireEvent.compositionEnd(input, { data: "你好" });
     fireEvent.input(input, {
       target: { value: "你好" },
       data: "你好",
       inputType: "insertFromComposition",
     });
-    expect(onEvent.mock.calls).toEqual([[{ type: "type", text: "你好" }]]);
+    expect(onEvent.mock.calls).toEqual([
+      [{ type: "compositionstart" }],
+      [{ type: "type", text: "你好" }],
+      [{ type: "compositionend" }],
+    ]);
     expect(input).toHaveValue("");
   });
 
@@ -113,11 +117,11 @@ describe("browser keyboard input", () => {
       fireEvent.compositionStart(input);
       fireEvent.compositionEnd(input, { data: text });
     }
-    expect(onEvent.mock.calls.map(([event]) => event.text)).toEqual([
-      "中文",
-      "中文",
-      "👩‍💻",
-    ]);
+    expect(
+      onEvent.mock.calls
+        .filter(([event]) => event.type === "type")
+        .map(([event]) => event.text),
+    ).toEqual(["中文", "中文", "👩‍💻"]);
   });
 
   it("does not send cancelled compositions or IME setup keys", () => {
@@ -127,7 +131,10 @@ describe("browser keyboard input", () => {
     fireEvent.compositionStart(input);
     fireEvent.input(input, { target: { value: "pinyin" }, isComposing: true });
     fireEvent.compositionEnd(input, { data: "" });
-    expect(onEvent).not.toHaveBeenCalled();
+    expect(onEvent.mock.calls).toEqual([
+      [{ type: "compositionstart" }],
+      [{ type: "compositionend" }],
+    ]);
     expect(input).toHaveValue("");
   });
 

@@ -8,6 +8,7 @@ from dataclasses import dataclass, field
 
 from octop.infra.db.pool import DatabasePool
 from octop.infra.db.repos._base import DbRow, bool_int, map_rows, now_ts
+from octop.infra.db.retention import assert_thread_deletable
 from octop.infra.utils.thread_artifact import (
     MAX_THREAD_ARTIFACTS,
     ThreadArtifact,
@@ -344,8 +345,14 @@ class ThreadRepo:
                 ),
             )
 
+    def assert_deletable(self, thread_id: str) -> None:
+        """Refuse retained resources before conversation data is removed."""
+        with self._db.connect() as conn:
+            assert_thread_deletable(conn, thread_id)
+
     def delete(self, thread_id: str) -> None:
         with self._db.transaction() as conn:
+            assert_thread_deletable(conn, thread_id)
             conn.execute("DELETE FROM threads WHERE thread_id = ?", (thread_id,))
 
     def claim_server_execution(self, thread_id: str) -> None:

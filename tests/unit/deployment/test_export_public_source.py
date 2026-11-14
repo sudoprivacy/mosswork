@@ -102,6 +102,26 @@ def test_export_includes_dirty_and_untracked_source_but_not_private_material(
         exporter.export(root, target)
 
 
+def test_export_excludes_nested_local_caches_before_credential_scanning(tmp_path: Path) -> None:
+    root = tmp_path / "repo"
+    _repo(root)
+    cache_paths = (
+        ".cache/local-input.txt",
+        "dashboard/.cache/oracle-source.ts",
+        "tools/.cache/acceptance.json",
+    )
+    for name in cache_paths:
+        cached = root / name
+        cached.parent.mkdir(parents=True, exist_ok=True)
+        cached.write_text("-----BEGIN " + "PRIVATE KEY-----\n" + "A" * 64 + "\n")
+    target = tmp_path / "public"
+    exporter.export(root, target)
+    assert (target / "README.md").read_text() == "test\n"
+    assert all(not (target / name).exists() for name in cache_paths)
+    manifest = json.loads((target / "PUBLIC_SOURCE.json").read_text())
+    assert not any(".cache" in Path(row["path"]).parts for row in manifest["files"])
+
+
 def test_export_rejects_private_key_and_does_not_write_output(tmp_path: Path) -> None:
     root = tmp_path / "repo"
     _repo(root)
@@ -119,10 +139,12 @@ def test_export_preserves_project_ci_and_archives_unknown_workflows(tmp_path: Pa
     workflows.mkdir(parents=True)
     for name in (
         "mosswork-ci.yml",
+        "mosswork-dashboard-ci.yml",
         "mosswork-identity-ci.yml",
         "mosswork-release.yml",
         "mosswork-desktop-update.yml",
         "mosswork-cos-publish.yml",
+        "mosswork-browser-ci.yml",
         "auto-tag.yml",
     ):
         (workflows / name).write_text(f"name: {name}\n")
@@ -130,9 +152,12 @@ def test_export_preserves_project_ci_and_archives_unknown_workflows(tmp_path: Pa
     exporter.export(root, target)
     for name in (
         "mosswork-ci.yml",
+        "mosswork-dashboard-ci.yml",
         "mosswork-identity-ci.yml",
         "mosswork-release.yml",
         "mosswork-desktop-update.yml",
+        "mosswork-browser-ci.yml",
+        "mosswork-cos-publish.yml",
     ):
         assert (target / ".github/workflows" / name).is_file()
     assert (target / ".github/workflows/mosswork-cos-publish.yml").is_file()

@@ -126,7 +126,11 @@ export function setThreadExecutionMode(
   threadId: string,
   mode: "server" | "local" | null | undefined,
 ): void {
-  if (!threadId || !mode) return;
+  if (!threadId) return;
+  if (!mode) {
+    executionModeByThread.delete(threadId);
+    return;
+  }
   executionModeByThread.set(threadId, mode);
 }
 export function setThreadProjectBinding(
@@ -141,7 +145,11 @@ export function setThreadProjectBinding(
     | null
     | undefined,
 ): void {
-  if (!threadId || !binding?.project_id) return;
+  if (!threadId) return;
+  if (!binding?.project_id) {
+    projectBindingByThread.delete(threadId);
+    return;
+  }
   projectBindingByThread.set(threadId, binding);
 }
 function usesLocalRuntime(threadId: string): boolean {
@@ -1164,6 +1172,8 @@ export function removeSession(sessionId: string) {
   clearStreamActivity(sessionId);
   clearStreamWatchdog(sessionId);
   closeLiveSocket(sessionId, { intentional: true, userCancelled: true });
+  executionModeByThread.delete(sessionId);
+  projectBindingByThread.delete(sessionId);
 }
 
 /** Drop a session map key without destroying the underlying state object.

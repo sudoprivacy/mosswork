@@ -71,15 +71,17 @@ export default function MinimalRecordsHost() {
 
   const handleDeleteActive = useCallback(
     async (sessionId: string) => {
-      if (!resolvedAgentId || !sessionId) return;
+      if (!resolvedAgentId || !sessionId) return false;
       try {
         await mossworkThreadsApi.delete(resolvedAgentId, sessionId);
         emitSessionEvent({ kind: "sessionDeleted", sessionId });
         if (pathThreadId === sessionId) {
           navigate(`/chat/${resolvedAgentId}`, { replace: true });
         }
+        return true;
       } catch (error) {
         antMessage.error(apiErrorMessage(error, t("common.deleteFailed"), t));
+        return false;
       }
     },
     [navigate, pathThreadId, resolvedAgentId, t],
@@ -133,7 +135,7 @@ export default function MinimalRecordsHost() {
       onSelect={handleSelect}
       onAgentSelect={handleAgentSelect}
       onNewChat={handleNewChat}
-      onDeleteActive={(id) => void handleDeleteActive(id)}
+      onDeleteActive={handleDeleteActive}
       onRenameActive={handleRenameActive}
       onPinActive={handlePinActive}
       onFork={(id, agentId) => void handleFork(id, agentId)}

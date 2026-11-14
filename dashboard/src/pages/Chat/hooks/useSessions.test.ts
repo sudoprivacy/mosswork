@@ -9,12 +9,18 @@ import {
 } from "./useSessions";
 
 const listMock = vi.fn();
+const deleteMock = vi.fn();
+const deleteErrorMock = vi.fn();
+
+vi.mock("../../../utils/antdMessage", () => ({
+  message: { error: (...args: unknown[]) => deleteErrorMock(...args) },
+}));
 
 vi.mock("../../../api/modules/mossworkThreads", () => ({
   mossworkThreadsApi: {
     list: (...args: unknown[]) => listMock(...args),
     create: vi.fn(),
-    delete: vi.fn(),
+    delete: (...args: unknown[]) => deleteMock(...args),
     patch: vi.fn(),
     rename: vi.fn(),
     rebind: vi.fn(),
@@ -93,10 +99,31 @@ describe("useSessions agent switch", () => {
   beforeEach(() => {
     resetSessionStoreForTests();
     listMock.mockReset();
+    deleteMock.mockReset();
+    deleteErrorMock.mockReset();
   });
 
   afterEach(() => {
     resetSessionStoreForTests();
+  });
+
+  it("keeps retained history visible and shows the deletion refusal", async () => {
+    listMock.mockResolvedValue([threadRow("thr_retained")]);
+    deleteMock.mockRejectedValue(
+      new Error(
+        '409 - {"error":{"code":"RESOURCE_RETAINED","message":"History must be retained.","details":{}}}',
+      ),
+    );
+    const { result } = renderHook(() => useSessions("agent-a"));
+    await waitFor(() => expect(result.current.loading).toBe(false));
+    let deleted: boolean | undefined;
+    await act(async () => {
+      deleted = await result.current.deleteSession("thr_retained");
+    });
+    expect(deleted).toBe(false);
+    expect(result.current.sessions.map((s) => s.id)).toEqual(["thr_retained"]);
+    expect(deleteErrorMock).toHaveBeenCalledWith("History must be retained.");
+    expect(deleteMock).toHaveBeenCalledTimes(1);
   });
 
   it("clears previous-agent threads on the first render of a new agent", async () => {

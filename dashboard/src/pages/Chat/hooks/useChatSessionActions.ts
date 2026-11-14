@@ -137,7 +137,7 @@ export function useChatSessionActions({
   const handleDeleteSession = useCallback(
     async (id: string) => {
       const deleted = await deleteSession(id);
-      if (!deleted) return;
+      if (!deleted) return false;
       const agent = resolvedAgentId;
       if (id === activeThreadId && agent) {
         const remaining = sessions.filter((s) => s.id !== id);
@@ -149,6 +149,7 @@ export function useChatSessionActions({
           clearMessages();
         }
       }
+      return true;
     },
     [
       activeThreadId,

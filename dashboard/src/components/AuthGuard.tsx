@@ -1,6 +1,17 @@
+import {
+  CanonicalIdentityProvider,
+  useCanonicalAuthMode,
+  useCanonicalIdentity,
+} from "../hooks/useCanonicalIdentity";
+import {
+  CanonicalAccountScreen,
+  CanonicalMemberLogin,
+} from "../pages/Login/CanonicalLogin";
 import { useEffect, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { Spin } from "antd";
+import { Alert, Spin } from "antd";
+import { useTranslation } from "react-i18next";
+import { canonicalIdentityApi } from "../api/modules/canonicalIdentity";
 import {
   AUTH_TOKEN_CHANGED_EVENT,
   clearAuthToken,
@@ -15,6 +26,31 @@ import { tokenSessionIdentity } from "../utils/authSession";
 
 interface AuthGuardProps {
   children: React.ReactNode;
+  canonicalReview?: boolean;
+}
+
+function CanonicalReviewContent({
+  children,
+  phoneLoginAvailable,
+  passwordLoginAvailable,
+}: {
+  children: React.ReactNode;
+  phoneLoginAvailable: boolean;
+  passwordLoginAvailable: boolean;
+}) {
+  const session = useCanonicalIdentity();
+  if (session.isLoading || session.isPending) return <Spin fullscreen />;
+  if (!session.hasAccessToken || !session.identity || session.error) {
+    return (
+      <CanonicalAccountScreen
+        phoneLoginAvailable={phoneLoginAvailable}
+        passwordLoginAvailable={passwordLoginAvailable}
+      />
+    );
+  }
+  // This profile permits displaying the page. Each original review request
+  // still requires its independent current full-model and projection grants.
+  return children;
 }
 
 /**
@@ -39,7 +75,45 @@ interface AuthGuardProps {
  * navigate identity changes with the location, which would re-run the gate
  * on every sidebar click and flash a full-page spinner.
  */
-export default function AuthGuard({ children }: AuthGuardProps) {
+export default function AuthGuard({
+  children,
+  canonicalReview,
+}: AuthGuardProps) {
+  const { t } = useTranslation();
+  const { status, error, retry } = useCanonicalAuthMode();
+  if (error) return <BootOfflinePanel onRetry={retry} />;
+  if (!status) return <Spin fullscreen />;
+  if (status.mode === "canonical") {
+    if (canonicalReview) {
+      return (
+        <CanonicalIdentityProvider
+          passwordLogin={canonicalIdentityApi.passwordLogin}
+        >
+          <CanonicalReviewContent
+            phoneLoginAvailable={status.phone_login_available}
+            passwordLoginAvailable={status.password_login_available === true}
+          >
+            {children}
+          </CanonicalReviewContent>
+        </CanonicalIdentityProvider>
+      );
+    }
+    // The account shell has its own UUID profile. Integer runtime children
+    // remain unmounted until their real canonical/resource adapters are ready.
+    return (
+      <CanonicalMemberLogin
+        phoneLoginAvailable={status.phone_login_available}
+        passwordLoginAvailable={status.password_login_available === true}
+      />
+    );
+  }
+  if (canonicalReview) {
+    return <Alert type="error" message={t("humanReview.unavailable")} />;
+  }
+  return <StandaloneAuthGuard>{children}</StandaloneAuthGuard>;
+}
+
+export function StandaloneAuthGuard({ children }: AuthGuardProps) {
   const navigate = useNavigate();
   const navigateRef = useRef(navigate);
   navigateRef.current = navigate;

@@ -766,6 +766,7 @@ class UserManager:
         row = self._services.user_repo.get_by_username(username)
         if row is None:
             raise MossworkError(ErrorCode.NOT_FOUND, "user not found")
+        self._services.user_repo.assert_deletable(row.id)
         async with self._lock:
             self._users.pop(username, None)
         user_dir = self._services.paths.user_dir(row.username)

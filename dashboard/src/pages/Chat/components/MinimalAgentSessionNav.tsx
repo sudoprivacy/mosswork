@@ -19,6 +19,8 @@ import { mossworkThreadsApi } from "../../../api/modules/mossworkThreads";
 import { showConfirmModal } from "../../../utils/confirmModal";
 import { isAgentChatReady } from "../../../utils/agentError";
 import { isImeComposing } from "../../../utils/ime";
+import { message } from "../../../utils/antdMessage";
+import { apiErrorMessage } from "../../../utils/apiError";
 import { sortSessions, toSession, type Session } from "../hooks/useSessions";
 import { formatThreadTitle } from "../utils/threadTitle";
 import { onSessionEvent } from "../hooks/chatStore";
@@ -70,7 +72,7 @@ interface MinimalAgentSessionNavProps {
   onAgentSelect: (agentId: string) => void;
   /** Start a fresh (unsaved) chat with the given expert. */
   onNewChat: (agentId: string) => void;
-  onDeleteActive: (id: string) => void;
+  onDeleteActive: (id: string) => Promise<boolean>;
   onRenameActive: (id: string, name: string) => void;
   onPinActive: (id: string, pinned: boolean) => void;
   onFork: (id: string, agentId?: string | null) => void;
@@ -439,18 +441,19 @@ export default function MinimalAgentSessionNav({
   const handleDelete = useCallback(
     async (agentId: string, sessionId: string) => {
       if (agentId === activeAgentId) {
-        onDeleteActive(sessionId);
-        patchLocal(agentId, (prev) => prev.filter((s) => s.id !== sessionId));
+        if (await onDeleteActive(sessionId)) {
+          patchLocal(agentId, (prev) => prev.filter((s) => s.id !== sessionId));
+        }
         return;
       }
       try {
         await mossworkThreadsApi.delete(agentId, sessionId);
         patchLocal(agentId, (prev) => prev.filter((s) => s.id !== sessionId));
-      } catch {
-        /* ignore */
+      } catch (error) {
+        message.error(apiErrorMessage(error, t("common.deleteFailed"), t));
       }
     },
-    [activeAgentId, onDeleteActive, patchLocal],
+    [activeAgentId, onDeleteActive, patchLocal, t],
   );
 
   const handleRename = useCallback(
