@@ -353,8 +353,8 @@ def worktree_inputs(root: Path) -> dict[str, str]:
     return dict(worktree_helper().inputs(root))
 
 
-def unchanged_worker_pool_mismatch(root: Path) -> tuple[str, str, str] | None:
-    """Diagnose identical validated input before an unintended full pool change.
+def worker_pool_mismatch(root: Path) -> tuple[str, str, str, bool] | None:
+    """Diagnose a pool-only reset when existing Python history remains usable.
 
     This only refuses duplicate work. It never selects tests or accepts a graph;
     the original test gate still performs every reuse and execution check.
@@ -410,10 +410,16 @@ def unchanged_worker_pool_mismatch(root: Path) -> tuple[str, str, str] | None:
         if graph.parent.resolve() != storage.resolve():
             return None
         actual_cache = helper.cache_digest(graph)
-        if (
-            actual_cache is None
-            or actual_cache != previous.get("cache_digest")
-            or helper.inputs(root) != previous.get("inputs")
+        if actual_cache is None or actual_cache != previous.get("cache_digest"):
+            return None
+        previous_inputs = previous.get("inputs")
+        if not isinstance(previous_inputs, dict):
+            return None
+        current_inputs = helper.inputs(root)
+        same_source = current_inputs == previous_inputs
+        python_only = getattr(helper, "python_only", None)
+        if not same_source and (
+            not callable(python_only) or not python_only(previous_inputs, current_inputs)
         ):
             return None
         environment = {key: value for key, value in os.environ.items() if key not in GIT_CONTEXT}
@@ -460,7 +466,7 @@ print('MOSSWORK_POOL_ENVIRONMENT: ' + json.dumps(dict(environment=helper.environ
             return None
         current = json.loads(result.stdout)
         if current["environment"] == previous.get("environment"):
-            return recorded, requested, str(original)
+            return recorded, requested, str(original), same_source
         previous_variables = previous.get("environment_variables", {})
         changed = sorted(
             name
@@ -980,15 +986,18 @@ def main() -> int:
         else:
             print("WORKTREE_VALIDATION: " + json.dumps(plan, ensure_ascii=True), flush=True)
         if selected == "full":
-            if mismatch := unchanged_worker_pool_mismatch(root):
-                recorded, requested, original = mismatch
+            if mismatch := worker_pool_mismatch(root):
+                recorded, requested, original, same_source = mismatch
+                source_scope = "unchanged source" if same_source else "eligible Python changes"
                 raise ValueError(
-                    f"No tests ran: unchanged source and verified history at {original} "
+                    f"No tests ran: {source_scope} and verified history at {original} "
                     f"used {recorded} worker(s), but this command requests {requested}. "
                     f"Keep PYTEST_JOBS={recorded} process-locally through Make and the commit "
                     "to reuse the original checked history. If the pool change is intentional, "
                     f"run make test-current PYTEST_JOBS={requested} to execute and record the "
-                    "required full suite with that pool, then retry. No graph was copied or accepted."
+                    "required full suite with that pool, then retry. No graph was copied or accepted. "
+                    "This refusal does not accept current source changes; new, changed, failed "
+                    "and unexecuted cases remain required."
                 )
             if args.worktree:
                 print(
