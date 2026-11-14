@@ -859,8 +859,14 @@ def test_ci_scope_binds_the_checked_merge_and_requires_its_history_and_recipe(
     if kind == "unknown-recipe":
         path = ".github/workflows/mosswork-ci.yml"
         source = (repo / path).read_text(encoding="utf-8")
-        assert "timeout-minutes: 10" in source
-        stage(repo, path, source.replace("timeout-minutes: 10", "timeout-minutes: 11", 1))
+        assert "timeout-minutes: ${{ matrix.timeout_minutes }}" in source
+        stage(
+            repo,
+            path,
+            source.replace(
+                "timeout-minutes: ${{ matrix.timeout_minutes }}", "timeout-minutes: 11", 1
+            ),
+        )
     ci_commit(repo, "accepted base advancement")
     base = git(repo, "rev-parse", "HEAD")
     git(repo, "checkout", "-qb", "feature", common)
@@ -948,9 +954,23 @@ def test_ci_scope_cli_uses_commits_without_inheriting_or_mutating_an_index(
     assert result.returncode == 0, result.stdout + result.stderr
     plan = json.loads(result.stdout.removeprefix("CI_SCOPE: "))
     assert plan["runtime_matrix"] is False and plan["paths"] == ["Makefile"]
-    assert output.read_text(encoding="utf-8") == (
-        "runtime_matrix=false\nwindows_validation=false\nvalidator_regressions=true\n"
-    )
+    output_lines = output.read_text(encoding="utf-8").splitlines()
+    assert output_lines[:3] == [
+        "runtime_matrix=false",
+        "windows_validation=false",
+        "validator_regressions=true",
+    ]
+    assert len(output_lines) == 4
+    assert json.loads(output_lines[3].removeprefix("check_matrix=")) == {
+        "include": [
+            {
+                "suite": "release",
+                "os": "ubuntu-24.04",
+                "check_name": "release-checks",
+                "timeout_minutes": 360,
+            }
+        ]
+    }
     assert (repo / ".git/index").read_bytes() == index_before
     assert git(repo, "rev-parse", "HEAD") == head
 
@@ -1002,7 +1022,10 @@ def test_windows_tool_scope_keeps_runtime_jobs_for_unqualified_workflow(
         path = ".github/workflows/mosswork-ci.yml"
         source = (SOURCE / path).read_text(encoding="utf-8")
         old, new = {
-            "changed": ("    timeout-minutes: 10\n", "    timeout-minutes: 11\n"),
+            "changed": (
+                "    timeout-minutes: ${{ matrix.timeout_minutes }}\n",
+                "    timeout-minutes: 11\n",
+            ),
             "output-commented": (
                 "      windows_validation: ${{ steps.scope.outputs.windows_validation }}",
                 "#       windows_validation: ${{ steps.scope.outputs.windows_validation }}",
@@ -1013,18 +1036,16 @@ def test_windows_tool_scope_keeps_runtime_jobs_for_unqualified_workflow(
                 "      - name: Removed independent tool check",
             ),
             "linux-tool-selection": (
-                "        if: needs.ci-scope.outputs.windows_validation == 'true'\n",
+                "        if: ${{ matrix.suite == 'release' && (needs.ci-scope.outputs.windows_validation == 'true') }}\n",
                 "        if: false\n",
             ),
             "linux-history": (
-                "          # The tool route verifies both PR inputs against this merge checkout.\n"
-                "          fetch-depth: 2",
-                "          # The tool route verifies both PR inputs against this merge checkout.\n"
-                "          fetch-depth: 1",
+                "    steps:\n      - uses: actions/checkout@v4\n        with:\n          fetch-depth: 2\n      - uses: astral-sh/setup-uv@v6",
+                "    steps:\n      - uses: actions/checkout@v4\n        with:\n          fetch-depth: 1\n      - uses: astral-sh/setup-uv@v6",
             ),
             "linux-selection": (
-                "  release-checks:\n    needs: ci-scope",
-                "  release-checks:\n    needs: other-selector",
+                "    needs: ci-scope\n    strategy:\n",
+                "    needs: other-selector\n    strategy:\n",
             ),
         }[workflow]
         assert old in source
@@ -1406,3 +1427,41 @@ def test_nonregular_product_payload_keeps_validator_regressions(repo: Path) -> N
     git(repo, "add", ".")
     ci_commit(repo, "linked product input")
     assert gate.ci_plan(repo, base, git(repo, "rev-parse", "HEAD"))["validator_regressions"] is True
+
+
+@pytest.mark.parametrize(
+    "runtime,windows", [(False, False), (False, True), (True, False), (True, True)]
+)
+def test_native_fail_fast_matrix_preserves_required_names_platforms_and_budgets(runtime, windows):
+    plan = gate.CiPlan(
+        runtime_matrix=runtime,
+        windows_validation=windows,
+        validator_regressions=True,
+        checked_head="",
+        paths=[],
+        reason="fixture",
+    )
+    include = json.loads(gate.ci_check_matrix(plan))["include"]
+    expected = [("release-checks", "ubuntu-24.04", 360)]
+    if runtime:
+        expected += [
+            (f"ACP runtime observations ({os})", os, 20)
+            for os in ("ubuntu-24.04", "windows-2022", "macos-15-intel")
+        ]
+        expected += [
+            (f"Packaged Sudograph connector interoperability ({os})", os, 360)
+            for os in ("ubuntu-24.04", "windows-2022")
+        ]
+    if windows:
+        expected += [("Windows validation tools", "windows-2022", 10)]
+    assert [(row["check_name"], row["os"], row["timeout_minutes"]) for row in include] == expected
+    assert len({row["check_name"] for row in include}) == len(include)
+    workflow = (SOURCE / ".github/workflows/mosswork-ci.yml").read_text(encoding="utf-8")
+    assert "      check_matrix: ${{ steps.scope.outputs.check_matrix }}" in workflow
+    assert (
+        "      fail-fast: true\n      matrix: ${{ fromJSON(needs.ci-scope.outputs.check_matrix) }}"
+        in workflow
+    )
+    assert "    name: ${{ matrix.check_name }}" in workflow
+    assert "    timeout-minutes: ${{ matrix.timeout_minutes }}" in workflow
+    assert "continue-on-error" not in workflow

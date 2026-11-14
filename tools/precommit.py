@@ -74,7 +74,7 @@ WINDOWS_VALIDATION_INPUTS = frozenset(
     }
 )
 WINDOWS_VALIDATION_RECIPE_SHA256 = (
-    "072ac56ee4a39c8a22b9127f54706712e6d8c174f15ca08a809d4944645a75ef"
+    "2fb9a56593c48bca93bcc9364634e3ec0ed15ba7a14c826df142c3afae531d44"
 )
 
 
@@ -140,15 +140,56 @@ def windows_validation_recipe(root: Path, head: str, environment: dict[str, str]
     except UnicodeDecodeError:
         return False
     blocks = []
-    for job in ("ci-scope", "windows-validation-tools", "release-checks"):
+    for job in ("ci-scope", "release-checks"):
         if len(re.findall(r"(?m)^  " + job + r":", source)) != 1:
             return False
         block = re.search(r"(?ms)^  " + job + r":\n.*?(?=^  [A-Za-z0-9_-]+:|\Z)", source)
         if block is None:
             return False
         blocks.append((block.group(0).rstrip() + "\n").encode("utf-8"))
-    # Bind the selector, its output wiring and both complete tool jobs together.
+    # Bind the selector, its output wiring and the complete shared matrix together.
     return hashlib.sha256(b"\0".join(blocks)).hexdigest() == WINDOWS_VALIDATION_RECIPE_SHA256
+
+
+def ci_check_matrix(plan: CiPlan) -> str:
+    """Keep required checks in one fail-fast matrix with their original budgets."""
+    checks = [
+        {
+            "suite": "release",
+            "os": "ubuntu-24.04",
+            "check_name": "release-checks",
+            "timeout_minutes": 360,
+        }
+    ]
+    if plan["runtime_matrix"]:
+        checks.extend(
+            {
+                "suite": "acp",
+                "os": platform,
+                "check_name": f"ACP runtime observations ({platform})",
+                "timeout_minutes": 20,
+            }
+            for platform in ("ubuntu-24.04", "windows-2022", "macos-15-intel")
+        )
+        checks.extend(
+            {
+                "suite": "interop",
+                "os": platform,
+                "check_name": f"Packaged Sudograph connector interoperability ({platform})",
+                "timeout_minutes": 360,
+            }
+            for platform in ("ubuntu-24.04", "windows-2022")
+        )
+    if plan["windows_validation"]:
+        checks.append(
+            {
+                "suite": "tools",
+                "os": "windows-2022",
+                "check_name": "Windows validation tools",
+                "timeout_minutes": 10,
+            }
+        )
+    return json.dumps({"include": checks}, separators=(",", ":"))
 
 
 def ci_plan(root: Path, base: str, head: str) -> CiPlan:
@@ -851,6 +892,8 @@ def main() -> int:
                         + str(ci_selection["windows_validation"]).lower()
                         + "\nvalidator_regressions="
                         + str(ci_selection["validator_regressions"]).lower()
+                        + "\ncheck_matrix="
+                        + ci_check_matrix(ci_selection)
                         + "\n"
                     )
             return 0
