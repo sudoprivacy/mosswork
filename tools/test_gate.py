@@ -391,22 +391,38 @@ def cache_digest(path: Path) -> dict[str, str] | None:
     return result
 
 
-def python_only(previous: dict[str, str], current: dict[str, str]) -> bool:
+def full_test_inputs(previous: dict[str, str], current: dict[str, str]) -> list[str]:
+    """Name inputs that cannot use the existing actual Python dependency graph."""
     changed = {p for p in previous.keys() | current.keys() if previous.get(p) != current.get(p)}
-    for name in changed:
+    blocked = []
+    for name in sorted(changed):
         path = Path(name)
-        if path.suffix != ".py" or path.name == "conftest.py":
-            return False
         package_source = (
             len(path.parts) >= 4 and path.parts[0] == "packages" and path.parts[2] == "src"
         )
-        if not (name.startswith(("src/", "tests/")) or package_source) or name.startswith(
-            "tests/support/"
-        ):
-            return False
-        if name.startswith("tests/") and (name not in previous or name not in current):
-            return False
-    return True
+        eligible = (
+            path.suffix == ".py"
+            and path.name != "conftest.py"
+            and (name.startswith(("src/", "tests/")) or package_source)
+            and not name.startswith("tests/support/")
+        )
+        if eligible and name.startswith("tests/"):
+            # Testmon discovers new ordinary modules and runs their unseen cases.
+            # Removals and new fixture/helper files retain the full original run.
+            eligible = name in current and (
+                name in previous
+                or (
+                    name.startswith(("tests/unit/", "tests/integration/"))
+                    and path.name.startswith("test_")
+                )
+            )
+        if not eligible:
+            blocked.append(name)
+    return blocked
+
+
+def python_only(previous: dict[str, str], current: dict[str, str]) -> bool:
+    return not full_test_inputs(previous, current)
 
 
 def run(
@@ -501,6 +517,7 @@ def run_locked(
         and previous.get("cache_digest") == cache_digest(graph)
         and previous.get("cache_digest") is not None
     )
+    blocked_inputs = full_test_inputs(previous.get("inputs", {}), before)
     pending = storage / "incomplete.json"
     reusable = bool(
         not force_full
@@ -509,7 +526,7 @@ def run_locked(
         and previous.get("root") == str(root)
         and previous.get("environment") == env
         and valid_graph
-        and python_only(previous.get("inputs", {}), before)
+        and not blocked_inputs
     )
     mode = "affected" if reusable else "full"
     reason = (
@@ -538,8 +555,12 @@ def run_locked(
             reason = "no verified history in this worktree"
         elif not valid_graph:
             reason = "private graph missing or content changed"
-        elif not python_only(previous.get("inputs", {}), before):
-            reason = "configuration, unknown input or test inventory changed"
+        elif blocked_inputs:
+            reason = "configuration, unknown input or test inventory changed: " + json.dumps(
+                blocked_inputs[:20], ensure_ascii=True
+            )
+            if len(blocked_inputs) > 20:
+                reason += f" (+{len(blocked_inputs) - 20} more inputs)"
         if require_reuse:
             raise ValueError(
                 "Reusable history unavailable: "
