@@ -170,6 +170,7 @@ fs.appendFileSync('../.git/command-trace',mode+'\\n');
 if(mode==='typecheck'){
   require('assert').deepStrictEqual(process.argv.slice(3),['-b','--force']);
   if(control.types)process.exit(18);
+  if(control.generated){fs.mkdirSync('node_modules/.tmp',{recursive:true});fs.writeFileSync('node_modules/'+control.generated,control.content||'compiler output');}
 }
 if(mode==='test'&&control.source)fs.writeFileSync('public/marker.svg','mutation');
 if(mode==='test'&&control.index)cp.execFileSync('git',['add','--','dashboard/public/marker.svg'],{cwd:'..'});
@@ -286,6 +287,34 @@ def test_actual_type_failure_stops_before_tests_and_prevents_old_success_reuse(n
     repaired = frontend(root)
     assert repaired.returncode == 0, (repaired.stdout, repaired.stderr)
     assert trace(root) == ["typecheck", "test", "build", "typecheck", "typecheck", "test", "build"]
+
+
+@pytest.mark.parametrize(
+    "generated",
+    [".tmp/tsconfig.app.tsbuildinfo", ".tmp/tsconfig.node.tsbuildinfo", ".tmp/runtime.cjs"],
+)
+def test_actual_compiler_cache_outputs_preserve_installed_code_guards(npm_repository, generated):
+    root = npm_repository
+    control = root / ".git/control.json"
+    control.write_text(json.dumps({"generated": generated}), encoding="utf-8")
+    first = frontend(root)
+    if generated.endswith("runtime.cjs"):
+        assert first.returncode == 1
+        assert "Installed frontend code changed" in first.stderr
+        return
+    assert first.returncode == 0, (first.stdout, first.stderr)
+    second = frontend(root)
+    assert second.returncode == 0, (second.stdout, second.stderr)
+    assert "reusing" in second.stdout + second.stderr
+    assert trace(root) == ["typecheck", "test", "build"]
+    # Modified compiler state cannot reuse success; the forced check runs again.
+    (root / "dashboard/node_modules" / generated).write_text("changed cache", encoding="utf-8")
+    control.write_text(
+        json.dumps({"generated": generated, "content": "new output"}), encoding="utf-8"
+    )
+    third = frontend(root)
+    assert third.returncode == 0, (third.stdout, third.stderr)
+    assert trace(root) == ["typecheck", "test", "build", "typecheck", "test", "build"]
 
 
 @pytest.mark.parametrize("kind", ["source", "index"])

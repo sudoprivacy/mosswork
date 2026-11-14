@@ -114,9 +114,15 @@ def installed_modules(root: Path) -> dict[str, Any]:
                 raise ValueError("Installed dependency leaves this dependency tree")
             with open(entry.path, "rb") as handle:
                 payload = hashlib.file_digest(handle, "sha256").digest()
-            target = (
-                cache if relative.split("/", 1)[0] in {".vite", ".vite-temp", ".cache"} else sources
-            )
+            generated = relative.split("/", 1)[0] in {
+                ".vite",
+                ".vite-temp",
+                ".cache",
+            } or relative in {
+                ".tmp/tsconfig.app.tsbuildinfo",
+                ".tmp/tsconfig.node.tsbuildinfo",
+            }
+            target = cache if generated else sources
             link = os.readlink(entry.path).encode() if linked else b""
             target.update(relative.encode() + b"\0" + link + b"\0" + payload)
             count += 1
