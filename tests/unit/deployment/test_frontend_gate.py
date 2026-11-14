@@ -146,7 +146,8 @@ def test_incomplete_staging_refuses_before_commands_without_index_edit(repositor
 
 
 @pytest.fixture
-def npm_repository(repository):
+def npm_repository(repository, monkeypatch):
+    monkeypatch.setenv("npm_config_offline", "true")
     root = repository
     (root / ".gitignore").write_text(
         "dashboard/node_modules/\nsrc/octop/dashboard/\n", encoding="utf-8"
@@ -166,6 +167,10 @@ def npm_repository(repository):
         """const fs=require('fs'),cp=require('child_process');
 const mode=process.argv[2], control=JSON.parse(fs.readFileSync('../.git/control.json','utf8'));
 fs.appendFileSync('../.git/command-trace',mode+'\\n');
+if(mode==='typecheck'){
+  require('assert').deepStrictEqual(process.argv.slice(3),['-b','--force']);
+  if(control.types)process.exit(18);
+}
 if(mode==='test'&&control.source)fs.writeFileSync('public/marker.svg','mutation');
 if(mode==='test'&&control.index)cp.execFileSync('git',['add','--','dashboard/public/marker.svg'],{cwd:'..'});
 if(mode==='test'&&control.fail)process.exit(17);
@@ -175,6 +180,15 @@ if(mode==='build'){fs.mkdirSync('../src/octop/dashboard',{recursive:true});fs.wr
     )
     (dashboard / "node_modules").mkdir()
     (dashboard / "node_modules/.package-lock.json").write_text("{}", encoding="utf-8")
+    binaries = dashboard / "node_modules/.bin"
+    binaries.mkdir()
+    (binaries / "tsc").write_text(
+        '#!/bin/sh\nexec node runner.cjs typecheck "$@"\n', encoding="utf-8"
+    )
+    (binaries / "tsc").chmod(0o755)
+    (binaries / "tsc.cmd").write_text(
+        "@echo off\r\nnode runner.cjs typecheck %*\r\n", encoding="utf-8"
+    )
     (dashboard / "public").mkdir()
     (dashboard / "public/marker.svg").write_text("accepted", encoding="utf-8")
     git(root, "add", ".")
@@ -224,15 +238,15 @@ def test_actual_npm_build_output_and_same_source_reuse(npm_repository):
     root = npm_repository
     first = frontend(root)
     assert first.returncode == 0, (first.stdout, first.stderr)
-    assert trace(root) == ["test", "build"]
+    assert trace(root) == ["typecheck", "test", "build"]
     second = frontend(root)
     assert second.returncode == 0, (second.stdout, second.stderr)
-    assert trace(root) == ["test", "build"]
+    assert trace(root) == ["typecheck", "test", "build"]
     assert "reusing" in second.stdout + second.stderr
     (root / "dashboard/public/marker.svg").write_text("changed candidate", encoding="utf-8")
     third = frontend(root)
     assert third.returncode == 0, (third.stdout, third.stderr)
-    assert trace(root) == ["test", "build", "test", "build"]
+    assert trace(root) == ["typecheck", "test", "build", "typecheck", "test", "build"]
 
 
 def test_actual_failed_npm_stops_build_and_prevents_old_success_reuse(npm_repository):
@@ -243,11 +257,35 @@ def test_actual_failed_npm_stops_build_and_prevents_old_success_reuse(npm_reposi
     failed = frontend(root)
     assert failed.returncode == 1
     assert "later checks were not run" in failed.stderr
-    assert trace(root) == ["test", "build", "test"]
+    assert trace(root) == ["typecheck", "test", "build", "typecheck", "test"]
     (root / ".git/control.json").write_text("{}", encoding="utf-8")
     repaired = frontend(root)
     assert repaired.returncode == 0, (repaired.stdout, repaired.stderr)
-    assert trace(root) == ["test", "build", "test", "test", "build"]
+    assert trace(root) == [
+        "typecheck",
+        "test",
+        "build",
+        "typecheck",
+        "test",
+        "typecheck",
+        "test",
+        "build",
+    ]
+
+
+def test_actual_type_failure_stops_before_tests_and_prevents_old_success_reuse(npm_repository):
+    root = npm_repository
+    assert frontend(root).returncode == 0
+    (root / "dashboard/public/marker.svg").write_text("new candidate", encoding="utf-8")
+    (root / ".git/control.json").write_text('{"types":true}', encoding="utf-8")
+    failed = frontend(root)
+    assert failed.returncode == 1
+    assert "later checks were not run" in failed.stderr
+    assert trace(root) == ["typecheck", "test", "build", "typecheck"]
+    (root / ".git/control.json").write_text("{}", encoding="utf-8")
+    repaired = frontend(root)
+    assert repaired.returncode == 0, (repaired.stdout, repaired.stderr)
+    assert trace(root) == ["typecheck", "test", "build", "typecheck", "typecheck", "test", "build"]
 
 
 @pytest.mark.parametrize("kind", ["source", "index"])
@@ -257,7 +295,7 @@ def test_actual_source_or_index_drift_stops_before_build(npm_repository, kind):
     result = frontend(root)
     assert result.returncode == 1
     assert "changed during frontend validation" in result.stderr
-    assert trace(root) == ["test"]
+    assert trace(root) == ["typecheck", "test"]
 
 
 def test_actual_make_then_git_hook_reuses_one_frontend_result(npm_repository):
@@ -301,7 +339,7 @@ def test_actual_make_then_git_hook_reuses_one_frontend_result(npm_repository):
         timeout=30,
     )
     assert first.returncode == 0, (first.stdout, first.stderr)
-    assert trace(root) == ["test", "build"]
+    assert trace(root) == ["typecheck", "test", "build"]
     git(root, "add", "dashboard/public/marker.svg")
     second = subprocess.run(
         ["git", "commit", "-m", "actual frontend hook"],
@@ -314,7 +352,7 @@ def test_actual_make_then_git_hook_reuses_one_frontend_result(npm_repository):
     )
     assert second.returncode == 0, (second.stdout, second.stderr)
     assert "FRONTEND_GATE_RECEIPT:" in second.stdout + second.stderr
-    assert trace(root) == ["test", "build"], (second.stdout, second.stderr)
+    assert trace(root) == ["typecheck", "test", "build"], (second.stdout, second.stderr)
 
 
 def test_successful_empty_git_shell_cannot_replace_frontend_validation(npm_repository):
@@ -351,7 +389,7 @@ def test_changed_installed_module_executes_fresh_tests(npm_repository):
         "original",
         "changed",
     ]
-    assert trace(root) == ["test", "build", "test", "build"]
+    assert trace(root) == ["typecheck", "test", "build", "typecheck", "test", "build"]
 
 
 @pytest.mark.parametrize("kind", ["missing-original", "modified-original", "invalid-history"])
@@ -364,7 +402,7 @@ def test_missing_or_corrupt_actual_proof_runs_fresh_checks(npm_repository, kind)
     # Exercise reuse of a reused result too: it must retain the original checks.
     second = frontend(root)
     assert second.returncode == 0, (second.stdout, second.stderr)
-    assert trace(root) == ["test", "build"]
+    assert trace(root) == ["typecheck", "test", "build"]
     if kind == "missing-original":
         Path(original).unlink()
     elif kind == "modified-original":
@@ -373,7 +411,7 @@ def test_missing_or_corrupt_actual_proof_runs_fresh_checks(npm_repository, kind)
         (storage / "history.json").write_text("[]", encoding="utf-8")
     third = frontend(root)
     assert third.returncode == 0, (third.stdout, third.stderr)
-    assert trace(root) == ["test", "build", "test", "build"]
+    assert trace(root) == ["typecheck", "test", "build", "typecheck", "test", "build"]
 
 
 def test_frontend_dispatcher_plan_works_without_site_packages(repository):
@@ -405,4 +443,4 @@ def test_actual_frontend_entry_loads_without_site_packages(npm_repository):
         timeout=30,
     )
     assert result.returncode == 0, (result.stdout, result.stderr)
-    assert trace(root) == ["test", "build"]
+    assert trace(root) == ["typecheck", "test", "build"]

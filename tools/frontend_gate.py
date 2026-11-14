@@ -66,7 +66,11 @@ def commands(root: Path, changed: list[str]) -> list[list[str]]:
         checks.append([npx, "eslint", *sources])
     if formatted:
         checks.append([npx, "prettier", "--check", *formatted])
-    return checks + [[npm, "test", "--", "--maxWorkers=2", "--bail=1"], [npm, "run", "build"]]
+    return checks + [
+        [npx, "tsc", "-b", "--force"],
+        [npm, "test", "--", "--maxWorkers=2", "--bail=1"],
+        [npm, "run", "build"],
+    ]
 
 
 def raw_sources(inputs: dict[str, str]) -> dict[str, str]:
@@ -263,7 +267,7 @@ def validate(root: Path, changed: list[str], gate: Any) -> int:
                 )
             else:
                 print(
-                    "FRONTEND_GATE: full frontend tests, changed-file lint/format and TypeScript/Vite build. Backend tests are outside this frontend-only profile; mixed/unknown inputs require the application gate.",
+                    "FRONTEND_GATE: changed-file lint/format, current-source TypeScript check, full frontend tests and Vite build. Type errors stop before tests; mixed/unknown inputs require the application gate.",
                     flush=True,
                 )
                 for argv in checks:
