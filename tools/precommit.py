@@ -852,6 +852,8 @@ def ci_tools(root: Path, base: str, head: str) -> None:
             ],
         ]
         for check in checks:
+            if check[:4] == ["uv", "run", "--frozen", "pytest"]:
+                check = [*check, "-n", "2"]
             run_commands(root, [check], result["checks"])
             if ci_checkout(root) != before:
                 raise ValueError(

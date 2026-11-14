@@ -6,6 +6,7 @@ import ast
 import importlib.util
 import json
 import os
+import shlex
 import shutil
 import subprocess
 import sys
@@ -1776,3 +1777,88 @@ def test_project_dispatcher_preserves_full_gate_parent_path(
     assert "[pre-commit] Dispatcher: " in result.stdout + result.stderr
     assert (result.returncode == 0) is (failed_tool == "none"), result.stdout + result.stderr
     assert (git(repo, "rev-parse", "HEAD") != before) is (failed_tool == "none")
+
+
+@pytest.mark.parametrize("outcome", ["success", "failure"])
+def test_independent_ci_tools_use_two_real_workers_and_keep_failure_refusal(
+    repo: Path, tmp_path: Path, monkeypatch: pytest.MonkeyPatch, outcome: str
+) -> None:
+    """Actual pytest workers; export shims isolate only this transport control."""
+    for name in gate.TOOL_FILES:
+        stage(repo, name, "# Private validator export/static shim\n")
+    stage(
+        repo,
+        "pyproject.toml",
+        '[project]\nname="private-ci-pool"\nversion="0.0.0"\n'
+        '[tool.pytest.ini_options]\naddopts="--maxfail=1 --maxschedchunk=1"\n',
+    )
+    output = tmp_path / "actual-ci-pool"
+    output.mkdir()
+    for index in range(2):
+        stage(
+            repo,
+            f"tests/private_pool/test_case_{index}.py",
+            "import json,os\nfrom pathlib import Path\n\ndef test_case(request):\n"
+            f"    target=Path(os.environ['CI_POOL_OUTPUT'])/'worker-{index}.json'\n"
+            "    target.write_text(json.dumps({'worker':getattr(request.config,'workerinput',{}).get('workerid','serial')}),encoding='utf-8')\n"
+            f"    assert os.environ['CI_POOL_FAIL'] != '1' or {index} != 0\n",
+        )
+    seed_windows_validation_workflow(repo)
+    base = git(repo, "rev-parse", "HEAD")
+    stage(repo, "tools/frontend_gate.py", "# Current independent validator edit\n")
+    ci_commit(repo, "actual CI tool-pool candidate")
+    for key, value in {
+        "UV_NO_SYNC": "1",
+        "UV_PROJECT_ENVIRONMENT": sys.prefix,
+        "UV_PYTHON": sys.executable,
+        "VIRTUAL_ENV": sys.prefix,
+        "PYTHONDONTWRITEBYTECODE": "1",
+        "PYTEST_DISABLE_PLUGIN_AUTOLOAD": "1",
+        "PYTEST_ADDOPTS": shlex.join(
+            [
+                "-p",
+                "xdist.plugin",
+                "-o",
+                "cache_dir=" + (output / "pytest-cache").as_posix(),
+                "--junitxml=" + (output / "actual-cases.xml").as_posix(),
+            ]
+        ),
+        "RUNNER_TEMP": str(output),
+        "CI_POOL_OUTPUT": str(output),
+        "CI_POOL_FAIL": "1" if outcome == "failure" else "0",
+    }.items():
+        monkeypatch.setenv(key, value)
+    monkeypatch.setattr(
+        gate,
+        "commands",
+        lambda selected, changed=None: [
+            ["uv", "run", "--frozen", "pytest", "tests/private_pool", "-q"]
+        ],
+    )
+    index = (repo / ".git/index").read_bytes()
+    if outcome == "failure":
+        with pytest.raises(ValueError, match="exited"):
+            gate.ci_tools(repo, base, git(repo, "rev-parse", "HEAD"))
+    else:
+        gate.ci_tools(repo, base, git(repo, "rev-parse", "HEAD"))
+    receipts = list(output.glob("mosswork-ci-tools-*/receipt.json"))
+    assert len(receipts) == 1
+    receipt = json.loads(receipts[0].read_text(encoding="utf-8"))
+    assert receipt["passed"] is (outcome == "success")
+    assert receipt["checks"][0]["argv"][-2:] == ["-n", "2"]
+    assert (repo / ".git/index").read_bytes() == index
+    if outcome == "success":
+        recorded = [json.loads(p.read_text(encoding="utf-8")) for p in output.glob("worker-*.json")]
+        assert {r["worker"] for r in recorded} == {"gw0", "gw1"}
+        cases = list(ET.parse(output / "actual-cases.xml").iter("testcase"))
+        assert len(cases) == 2
+        assert not any(
+            c.find("failure") is not None
+            or c.find("error") is not None
+            or c.find("skipped") is not None
+            for c in cases
+        )
+        assert len(receipt["checks"]) == 3
+    else:
+        assert len(receipt["checks"]) == 1
+        assert receipt["checks"][0]["returncode"] != 0
