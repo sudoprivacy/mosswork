@@ -67,7 +67,8 @@ def environment(legacy_db: Path, product: SqlitePool) -> _Environment:
     # initialization here is fixture setup, never part of the composition.
     with sqlite3.connect(legacy_db) as db:
         db.executescript(
-            _PHONE["schema"]
+            "BEGIN;"
+            + _PHONE["schema"]
             + _POLICY["schema"]["policies"]
             + ";"
             + _POLICY["schema"]["profiles"]

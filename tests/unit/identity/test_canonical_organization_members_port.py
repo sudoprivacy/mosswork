@@ -42,7 +42,7 @@ _TABLES = _ORACLE["tables"]
 def members(sessions: _Environment) -> CanonicalOrganizationMemberService:
     with sqlite3.connect(sessions.path) as db:
         # Exact original DDL/column additions, fixture initialization only.
-        db.executescript(_ORACLE["supplementalSchema"])
+        db.executescript("BEGIN;" + _ORACLE["supplementalSchema"])
     return CanonicalOrganizationMemberService(
         sessions.path,
         sessions.service.snapshots,
