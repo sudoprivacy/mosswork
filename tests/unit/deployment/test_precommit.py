@@ -23,7 +23,7 @@ SPEC.loader.exec_module(gate)
 
 
 @pytest.fixture
-def actual_tool_history(tmp_path):
+def actual_tool_history(tmp_path, request):
     """Real Git/uv/checker processes with only the private command provider replaced.
 
     The production transport, proof engine and dispatcher guards are unchanged.
@@ -93,6 +93,42 @@ def actual_tool_history(tmp_path):
         PYTHONDONTWRITEBYTECODE="1",
         PYTHONIOENCODING="utf-8",
     )
+
+    launch_mode = getattr(request, "param", None)
+    if launch_mode is not None:
+        # Real independent uv projects reproduce a foreign caller environment.
+        (root / "pyproject.toml").write_text(
+            '[project]\nname = "private-launch-fixture"\nversion = "0.0.0"\n'
+            f'requires-python = "=={sys.version_info.major}.{sys.version_info.minor}.*"\n'
+            "dependencies = []\n",
+            encoding="utf-8",
+        )
+        for name in ("UV_NO_SYNC", "UV_PROJECT_ENVIRONMENT", "UV_PYTHON"):
+            environment.pop(name, None)
+        foreign = tmp_path / "foreign environment"
+        for argv, directory in (
+            (["uv", "venv", str(foreign), "--python", sys.executable, "--offline"], root),
+            (["uv", "lock", "--offline"], root),
+            (["uv", "sync", "--locked", "--offline"], root),
+        ):
+            outcome = subprocess.run(
+                argv,
+                cwd=directory,
+                env=environment,
+                capture_output=True,
+                text=True,
+                encoding="utf-8",
+                timeout=60,
+            )
+            assert outcome.returncode == 0, outcome.stdout + outcome.stderr
+        bin_dir = "Scripts" if os.name == "nt" else "bin"
+        python_name = "python.exe" if os.name == "nt" else "python"
+        environment["VIRTUAL_ENV"] = str(foreign)
+        environment["PATH"] += os.pathsep + str(foreign / bin_dir)
+        if launch_mode == "explicit-python":
+            environment["UV_PYTHON"] = str(root / ".venv" / bin_dir / python_name)
+        elif launch_mode == "explicit-environment":
+            environment["UV_PROJECT_ENVIRONMENT"] = str(root / ".venv")
 
     def fixture_git(*arguments, hooks=False):
         return subprocess.run(
@@ -1465,3 +1501,114 @@ def test_native_fail_fast_matrix_preserves_required_names_platforms_and_budgets(
     assert "    name: ${{ matrix.check_name }}" in workflow
     assert "    timeout-minutes: ${{ matrix.timeout_minutes }}" in workflow
     assert "continue-on-error" not in workflow
+
+
+@pytest.mark.parametrize(
+    "actual_tool_history", ["mixed", "explicit-python", "explicit-environment"], indirect=True
+)
+def test_tools_bootstrap_preserves_foreign_path_and_explicit_uv_choices(actual_tool_history):
+    root, candidate, environment, fixture_git, run, history, executions = actual_tool_history
+    first = run()
+    assert first.returncode == 0, first.stdout + first.stderr
+    original = history()
+    assert original["passed"] and original["complete"] and executions() == ["ran"]
+    proof = Path(original["attempt"])
+    proof_bytes = proof.read_bytes()
+    fixture_git("add", "--", str(candidate.relative_to(root)))
+    committed = run(commit=True)
+    output = committed.stdout + committed.stderr
+    assert history()["passed"] and proof.read_bytes() == proof_bytes
+    if "UV_PYTHON" in environment or "UV_PROJECT_ENVIRONMENT" in environment:
+        assert "[pre-commit] Dispatcher: uv run --no-project python" in output
+        assert len(executions()) in {1, 2}
+    else:
+        dispatch = output.split("[pre-commit] Dispatcher: ", 1)[1].splitlines()[0]
+        selected = Path(dispatch)
+        assert selected.is_file() and selected.parent.parent == root / ".venv"
+        assert executions() == ["ran"]
+        assert history()["reused"]["attempt"] == str(proof)
+
+
+@pytest.mark.parametrize("failed_tool", ["none", "make", "npm"])
+def test_project_dispatcher_preserves_full_gate_parent_path(
+    repo: Path, tmp_path: Path, failed_tool: str
+) -> None:
+    import shlex
+
+    install_dispatcher(repo)
+    (repo / "dashboard").mkdir()
+    stage(repo, "src/config.py", "value = 1\n")
+    before = git(repo, "rev-parse", "HEAD")
+    environment = {
+        key: value
+        for key, value in os.environ.items()
+        if key not in {"UV_PYTHON", "UV_PROJECT_ENVIRONMENT", "UV_NO_SYNC"}
+    }
+    venv = subprocess.run(
+        ["uv", "venv", str(repo / ".venv"), "--python", sys.executable, "--offline"],
+        cwd=repo,
+        env=environment,
+        capture_output=True,
+        text=True,
+        encoding="utf-8",
+        timeout=60,
+    )
+    assert venv.returncode == 0, venv.stdout + venv.stderr
+    shims = tmp_path / "validators"
+    shims.mkdir()
+    log = tmp_path / "commands.jsonl"
+    parent_path = tmp_path / "caller-path.json"
+    capture = tmp_path / "capture_parent.py"
+    capture.write_text(
+        "import json, os\nfrom pathlib import Path\n"
+        "Path(os.environ['GATE_TEST_PARENT_PATH']).write_text(json.dumps(os.environ['PATH']), encoding='utf-8')\n",
+        encoding="utf-8",
+    )
+    hook = repo / ".githooks/pre-commit"
+    source = hook.read_text(encoding="utf-8")
+    marker = 'cd "$ROOT"\n'
+    assert source.count(marker) == 1
+    capture_command = (
+        shlex.quote(Path(sys.executable).as_posix()) + " " + shlex.quote(capture.as_posix())
+    )
+    hook.write_text(source.replace(marker, marker + capture_command + "\n"), encoding="utf-8")
+    git(repo, "add", ".githooks/pre-commit")
+    for name in ("make", "npm"):
+        shim = shims / name
+        shim.write_text(
+            "#!/usr/bin/env python\nimport json, os, sys\nfrom pathlib import Path\n"
+            "assert 'GIT_INDEX_FILE' not in os.environ\n"
+            "tool = Path(sys.argv[0]).name\n"
+            "with open(os.environ['GATE_TEST_LOG'], 'a', encoding='utf-8') as log:\n"
+            "    log.write(json.dumps({'tool': tool, 'argv': sys.argv[1:], 'path': os.environ['PATH']})+'\\n')\n"
+            "raise SystemExit(7 if tool == os.environ['GATE_TEST_FAIL'] else 0)\n",
+            encoding="utf-8",
+            newline="\n",
+        )
+        shim.chmod(0o755)
+    environment.update(
+        PATH=str(shims) + os.pathsep + environment["PATH"],
+        GATE_TEST_LOG=str(log),
+        GATE_TEST_PARENT_PATH=str(parent_path),
+        GATE_TEST_FAIL=failed_tool,
+    )
+    result = subprocess.run(
+        ["git", "-c", "core.hooksPath=.githooks", "commit", "-m", "full parent PATH control"],
+        cwd=repo,
+        env=environment,
+        capture_output=True,
+        text=True,
+        encoding="utf-8",
+        timeout=60,
+    )
+    calls = [json.loads(line) for line in log.read_text(encoding="utf-8").splitlines()]
+    expected = [{"tool": "make", "argv": ["precommit"]}]
+    if failed_tool != "make":
+        expected.append({"tool": "npm", "argv": ["run", "build"]})
+    assert [{k: v for k, v in call.items() if k != "path"} for call in calls] == expected
+    assert all(
+        call["path"] == json.loads(parent_path.read_text(encoding="utf-8")) for call in calls
+    )
+    assert "[pre-commit] Dispatcher: " in result.stdout + result.stderr
+    assert (result.returncode == 0) is (failed_tool == "none"), result.stdout + result.stderr
+    assert (git(repo, "rev-parse", "HEAD") != before) is (failed_tool == "none")
