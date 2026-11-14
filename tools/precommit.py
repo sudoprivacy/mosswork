@@ -592,6 +592,101 @@ def run_commands(root: Path, checks: list[list[str]], results: list[dict[str, An
             )
 
 
+def default_git_index(root: Path) -> bool:
+    """Keep alternate-index commits on the original fresh-check path."""
+    try:
+        argv = ["git", "rev-parse", "--path-format=absolute", "--git-path", "index"]
+        clean = {key: value for key, value in os.environ.items() if key not in GIT_CONTEXT}
+        current = subprocess.check_output(argv, cwd=root).decode().strip()
+        default = subprocess.check_output(argv, cwd=root, env=clean).decode().strip()
+        return Path(current).resolve() == Path(default).resolve()
+    except (OSError, ValueError, subprocess.CalledProcessError):
+        return False
+
+
+def independent_tool_checks(
+    root: Path,
+    changed: list[str],
+    args: argparse.Namespace,
+    result: dict[str, Any],
+    receipt: Path,
+) -> bool:
+    """Use the existing exact-input proof engine in a frozen Git launch context."""
+    helper_path = root / "tools/test_gate.py"
+    engine_path = root / "tools/frontend_gate.py"
+    if not helper_path.is_file() or not engine_path.is_file() or not default_git_index(root):
+        print(
+            "TOOLS_GATE: unproven launch/index; original fresh tool checks remain required",
+            flush=True,
+        )
+        return False
+    helper = worktree_helper()
+    options = {"profile": "tools", "worktree": args.worktree, "commands": result["commands"]}
+    if not args.git_context:
+        status = helper.git_launch_context(root, sys.argv[1:], options, entry="tools/precommit.py")
+        if status is None:
+            return False
+        if status:
+            raise ValueError(
+                f"Original tools validation refused ({status}); retain its receipt above"
+            )
+        child_result = json.loads(receipt.read_text(encoding="utf-8"))
+        if (
+            not isinstance(child_result, dict)
+            or child_result.get("profile") != "tools"
+            or child_result.get("passed") is not True
+            or child_result.get("commands") != result["commands"]
+            or child_result.get("candidate_digest") != candidate(root)
+        ):
+            raise ValueError(
+                "The original tools launch did not publish this candidate's actual result"
+            )
+        result.update(child_result)
+        return True
+    spec = importlib.util.spec_from_file_location("mosswork_exact_tool_validation", engine_path)
+    assert spec is not None and spec.loader is not None
+    engine = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(engine)
+    try:
+        engine.tool_modules()
+    except (OSError, ValueError) as error:
+        print("TOOLS_GATE: " + str(error) + "; execute original fresh checks", flush=True)
+        return False
+    complete, base, _ = worktree_paths(root)
+    indexed_source = args.worktree or (
+        not helper.git(root, "diff", "--name-only", "--no-ext-diff", "--no-textconv", "-z")
+        and not helper.git(root, "ls-files", "--others", "--exclude-standard", "-z")
+    )
+    eligible = base is not None and profile(root, complete) == "tools" and indexed_source
+    actual: dict[str, Any] = {}
+    status = engine.validate(
+        root,
+        changed,
+        helper,
+        tool_checks=result["commands"],
+        reuse_allowed=eligible,
+        outcome=actual,
+    )
+    original = Path(actual["attempt"])
+    original_bytes = original.read_bytes()
+    if json.loads(original_bytes) != actual:
+        raise ValueError("The actual tools receipt changed; retain it and validate again")
+    result["tool_validation"] = {
+        "receipt": str(original),
+        "sha256": hashlib.sha256(original_bytes).hexdigest(),
+        "reused_from": actual.get("reused"),
+        "checks_executed": len(actual["checks"]),
+    }
+    result["checks"].extend(
+        {"argv": item["argv"], "returncode": item["exitCode"]}
+        for item in actual["checks"]
+        if "exitCode" in item
+    )
+    if status:
+        raise ValueError("Original tool checks failed; retain the actual TOOLS_GATE_RECEIPT")
+    return True
+
+
 def ci_checkout(root: Path) -> str:
     """Require a clean CI checkout without refreshing or borrowing a Git index."""
     environment = {key: value for key, value in os.environ.items() if key not in GIT_CONTEXT}
@@ -690,6 +785,8 @@ def ci_tools(root: Path, base: str, head: str) -> None:
 
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("--git-context", action="store_true", help=argparse.SUPPRESS)
+    parser.add_argument("--launch-id", default=None, help=argparse.SUPPRESS)
     parser.add_argument(
         "--worktree",
         action="store_true",
@@ -710,6 +807,16 @@ def main() -> int:
         help="Run existing Windows tool validators for an eligible committed diff",
     )
     args = parser.parse_args()
+    if args.git_context != (args.launch_id is not None) or (
+        args.launch_id is not None
+        and (
+            re.fullmatch(r"[a-f0-9]{32}", args.launch_id) is None
+            or args.plan
+            or args.ci_plan is not None
+            or args.ci_tools is not None
+        )
+    ):
+        parser.error("Invalid internal tools launch identity")
     if args.worktree and (args.ci_plan is not None or args.ci_tools is not None):
         parser.error(
             "--worktree is local validation; use --ci-plan/--ci-tools for committed CI inputs"
@@ -762,6 +869,8 @@ def main() -> int:
     else:
         changed = staged_paths(root)
     selected = profile(root, changed)
+    if args.git_context and selected != "tools":
+        parser.error("The internal tools launch requires an actual independent tools candidate")
     if selected == "frontend":
         complete, frontend_base, frontend_reason = worktree_paths(root)
         if frontend_base is None or not frontend_only(root, complete):
@@ -866,11 +975,16 @@ def main() -> int:
             raise ValueError("\n".join(errors))
         if changed:
             result["checks"].append({"name": "documentation and expert references", "passed": True})
-        run_commands(root, commands(selected, changed), result["checks"])
+        handled = selected == "tools" and independent_tool_checks(
+            root, changed, args, result, receipt
+        )
+        if not handled:
+            run_commands(root, commands(selected, changed), result["checks"])
         if selected == "frontend":
             after = worktree_inputs(root)
+            assert snapshot is not None
 
-            def authored(values):
+            def authored(values: dict[str, str]) -> dict[str, str]:
                 return {
                     name: value
                     for name, value in values.items()
@@ -903,6 +1017,13 @@ def main() -> int:
             )
         else:
             print(f"[pre-commit] {selected} checks passed", flush=True)
+        if args.launch_id is not None:
+            worktree_helper().complete_git_launch(
+                root,
+                args.launch_id,
+                {"profile": "tools", "worktree": args.worktree, "commands": result["commands"]},
+                entry="tools/precommit.py",
+            )
         return 0
     except (OSError, ValueError, subprocess.CalledProcessError) as error:
         result["error"] = str(error)

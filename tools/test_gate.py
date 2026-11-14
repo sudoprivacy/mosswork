@@ -34,6 +34,11 @@ VOLATILE_ENV = GIT_CONTEXT | {
     "CODEX_TOOL_CALL_ID",
     "MOSSWORK_TEST_REQUIRE_REUSE",
 }
+VALIDATION_STORAGE = {
+    "tools/test_gate.py": "mosswork-test-gate",
+    "tools/frontend_gate.py": "mosswork-frontend-gate",
+    "tools/precommit.py": "mosswork-tools-gate",
+}
 
 
 def git_launch_context(
@@ -41,7 +46,8 @@ def git_launch_context(
 ) -> int | None:
     """Use the same Git shell for Make and commits, preserving Git policy inputs."""
     frontend = entry == "tools/frontend_gate.py"
-    if entry not in {"tools/test_gate.py", "tools/frontend_gate.py"}:
+    tools = entry == "tools/precommit.py"
+    if entry not in VALIDATION_STORAGE:
         raise ValueError("Unknown validation entry")
     hook = root / ".githooks/test-gate"
     if not hook.is_file():
@@ -52,8 +58,9 @@ def git_launch_context(
         if top != root:
             return None
         before = inputs(root)
-        storage = Path(git(root, "rev-parse", "--absolute-git-dir").decode().strip()) / (
-            "mosswork-frontend-gate" if frontend else "mosswork-test-gate"
+        storage = (
+            Path(git(root, "rev-parse", "--absolute-git-dir").decode().strip())
+            / VALIDATION_STORAGE[entry]
         )
         storage.mkdir(exist_ok=True)
     except (OSError, ValueError, subprocess.CalledProcessError):
@@ -88,7 +95,7 @@ def git_launch_context(
     argv += [
         "test-gate",
         "--",
-        sys.executable,
+        *(["uv", "run", "--frozen", "python"] if tools else [sys.executable]),
         str(root / entry),
         "--git-context",
         "--launch-id",
@@ -135,14 +142,12 @@ def git_launch_context(
 def complete_git_launch(
     root: Path, launch_id: str, options: dict[str, Any], *, entry: str = "tools/test_gate.py"
 ) -> None:
-    if (
-        entry not in {"tools/test_gate.py", "tools/frontend_gate.py"}
-        or re.fullmatch(r"[a-f0-9]{32}", launch_id) is None
-    ):
+    if entry not in VALIDATION_STORAGE or re.fullmatch(r"[a-f0-9]{32}", launch_id) is None:
         raise ValueError("Invalid validation launch completion")
     root = root.resolve()
-    storage = Path(git(root, "rev-parse", "--absolute-git-dir").decode().strip()) / (
-        "mosswork-frontend-gate" if entry == "tools/frontend_gate.py" else "mosswork-test-gate"
+    storage = (
+        Path(git(root, "rev-parse", "--absolute-git-dir").decode().strip())
+        / VALIDATION_STORAGE[entry]
     )
     with (storage / ("launch-" + launch_id + ".json")).open("x", encoding="utf-8") as marker:
         json.dump({"launch_id": launch_id, "root": str(root), "options": options}, marker)
