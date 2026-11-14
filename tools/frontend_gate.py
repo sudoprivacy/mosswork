@@ -47,7 +47,7 @@ def frontend_path(name: str) -> bool:
     ) or name == "dashboard/index.html"
 
 
-def commands(root: Path, changed: list[str]) -> list[list[str]]:
+def commands(root: Path, changed: list[str], node: Path) -> list[list[str]]:
     sources = [
         n.removeprefix("dashboard/")
         for n in changed
@@ -61,13 +61,16 @@ def commands(root: Path, changed: list[str]) -> list[list[str]]:
     ]
     npm = "npm.cmd" if os.name == "nt" else "npm"
     npx = "npx.cmd" if os.name == "nt" else "npx"
+    compiler = root / "dashboard/node_modules/typescript/bin/tsc"
+    if not compiler.is_file():
+        raise ValueError("Owned TypeScript installation is missing; run npm ci in this dashboard")
     checks = []
     if sources:
         checks.append([npx, "eslint", *sources])
     if formatted:
         checks.append([npx, "prettier", "--check", *formatted])
     return checks + [
-        [npx, "tsc", "-b", "--force"],
+        [str(node), str(compiler), "-b", "--force"],
         [npm, "test", "--", "--maxWorkers=2", "--bail=1"],
         [npm, "run", "build"],
     ]
@@ -148,13 +151,19 @@ def validate(root: Path, changed: list[str], gate: Any) -> int:
         index_before = gate.git(root, "ls-files", "--stage", "-z")
 
         def installed() -> dict[str, str]:
-            return {
-                "node": subprocess.check_output(["node", "--version"], cwd=root).decode().strip(),
-                "node_executable": subprocess.check_output(
-                    ["node", "-p", "process.execPath"], cwd=root
+            metadata = json.loads(
+                subprocess.check_output(
+                    [
+                        "node",
+                        "-p",
+                        "JSON.stringify({node:process.version,node_executable:process.execPath})",
+                    ],
+                    cwd=root,
                 )
-                .decode()
-                .strip(),
+            )
+            return {
+                "node": metadata["node"],
+                "node_executable": metadata["node_executable"],
                 "installed_lock": hashlib.sha256(
                     (root / "dashboard/node_modules/.package-lock.json").read_bytes()
                 ).hexdigest(),
@@ -166,7 +175,7 @@ def validate(root: Path, changed: list[str], gate: Any) -> int:
             versions["node_payload"] = hashlib.file_digest(handle, "sha256").hexdigest()
         modules = installed_modules(root)
         environment = gate.digest({"parent": gate.environment("2"), **versions})
-        checks = commands(root, changed)
+        checks = commands(root, changed, node)
         recipe = gate.digest(checks)
         prior = None
         history = storage / "history.json"

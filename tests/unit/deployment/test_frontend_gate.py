@@ -181,14 +181,11 @@ if(mode==='build'){fs.mkdirSync('../src/octop/dashboard',{recursive:true});fs.wr
     )
     (dashboard / "node_modules").mkdir()
     (dashboard / "node_modules/.package-lock.json").write_text("{}", encoding="utf-8")
-    binaries = dashboard / "node_modules/.bin"
-    binaries.mkdir()
-    (binaries / "tsc").write_text(
-        '#!/bin/sh\nexec node runner.cjs typecheck "$@"\n', encoding="utf-8"
-    )
-    (binaries / "tsc").chmod(0o755)
-    (binaries / "tsc.cmd").write_text(
-        "@echo off\r\nnode runner.cjs typecheck %*\r\n", encoding="utf-8"
+    compiler = dashboard / "node_modules/typescript/bin/tsc"
+    compiler.parent.mkdir(parents=True)
+    compiler.write_text(
+        "process.argv.splice(2,0,'typecheck');require('../../../runner.cjs');\n",
+        encoding="utf-8",
     )
     (dashboard / "public").mkdir()
     (dashboard / "public/marker.svg").write_text("accepted", encoding="utf-8")
@@ -207,15 +204,21 @@ def frontend(root):
         if key not in {"GIT_DIR", "GIT_WORK_TREE", "GIT_INDEX_FILE", "GIT_COMMON_DIR", "GIT_PREFIX"}
     }
     environment["PYTHONDONTWRITEBYTECODE"] = "1"
-    return subprocess.run(
-        [sys.executable, str(root / "tools/frontend_gate.py")],
-        cwd=root,
-        env=environment,
-        capture_output=True,
-        text=True,
-        encoding="utf-8",
-        timeout=30,
-    )
+    try:
+        return subprocess.run(
+            [sys.executable, str(root / "tools/frontend_gate.py")],
+            cwd=root,
+            env=environment,
+            capture_output=True,
+            text=True,
+            encoding="utf-8",
+            timeout=30,
+        )
+    except subprocess.TimeoutExpired:
+        history = root / ".git/mosswork-frontend-gate/history.json"
+        if history.is_file():
+            print("FRONTEND_FIXTURE_TIMEOUT_STATE: " + history.read_text(encoding="utf-8"))
+        raise
 
 
 def trace(root):
@@ -248,6 +251,15 @@ def test_actual_npm_build_output_and_same_source_reuse(npm_repository):
     third = frontend(root)
     assert third.returncode == 0, (third.stdout, third.stderr)
     assert trace(root) == ["typecheck", "test", "build", "typecheck", "test", "build"]
+
+
+def test_missing_owned_typescript_refuses_before_any_tests(npm_repository):
+    root = npm_repository
+    (root / "dashboard/node_modules/typescript/bin/tsc").unlink()
+    result = frontend(root)
+    assert result.returncode == 1
+    assert "Owned TypeScript installation is missing" in result.stderr
+    assert not (root / ".git/command-trace").exists()
 
 
 def test_actual_failed_npm_stops_build_and_prevents_old_success_reuse(npm_repository):
