@@ -146,7 +146,8 @@ def test_incomplete_staging_refuses_before_commands_without_index_edit(repositor
 
 
 @pytest.fixture
-def npm_repository(repository):
+def npm_repository(repository, monkeypatch):
+    monkeypatch.setenv("npm_config_offline", "true")
     root = repository
     (root / ".gitignore").write_text(
         "dashboard/node_modules/\nsrc/octop/dashboard/\n", encoding="utf-8"
@@ -166,6 +167,11 @@ def npm_repository(repository):
         """const fs=require('fs'),cp=require('child_process');
 const mode=process.argv[2], control=JSON.parse(fs.readFileSync('../.git/control.json','utf8'));
 fs.appendFileSync('../.git/command-trace',mode+'\\n');
+if(mode==='typecheck'){
+  require('assert').deepStrictEqual(process.argv.slice(3),['-b','--force']);
+  if(control.types)process.exit(18);
+  if(control.generated){fs.mkdirSync('node_modules/.tmp',{recursive:true});fs.writeFileSync('node_modules/'+control.generated,control.content||'compiler output');}
+}
 if(mode==='test'&&control.source)fs.writeFileSync('public/marker.svg','mutation');
 if(mode==='test'&&control.index)cp.execFileSync('git',['add','--','dashboard/public/marker.svg'],{cwd:'..'});
 if(mode==='test'&&control.fail)process.exit(17);
@@ -175,6 +181,12 @@ if(mode==='build'){fs.mkdirSync('../src/octop/dashboard',{recursive:true});fs.wr
     )
     (dashboard / "node_modules").mkdir()
     (dashboard / "node_modules/.package-lock.json").write_text("{}", encoding="utf-8")
+    compiler = dashboard / "node_modules/typescript/bin/tsc"
+    compiler.parent.mkdir(parents=True)
+    compiler.write_text(
+        "process.argv.splice(2,0,'typecheck');require('../../../runner.cjs');\n",
+        encoding="utf-8",
+    )
     (dashboard / "public").mkdir()
     (dashboard / "public/marker.svg").write_text("accepted", encoding="utf-8")
     git(root, "add", ".")
@@ -192,15 +204,21 @@ def frontend(root):
         if key not in {"GIT_DIR", "GIT_WORK_TREE", "GIT_INDEX_FILE", "GIT_COMMON_DIR", "GIT_PREFIX"}
     }
     environment["PYTHONDONTWRITEBYTECODE"] = "1"
-    return subprocess.run(
-        [sys.executable, str(root / "tools/frontend_gate.py")],
-        cwd=root,
-        env=environment,
-        capture_output=True,
-        text=True,
-        encoding="utf-8",
-        timeout=30,
-    )
+    try:
+        return subprocess.run(
+            [sys.executable, str(root / "tools/frontend_gate.py")],
+            cwd=root,
+            env=environment,
+            capture_output=True,
+            text=True,
+            encoding="utf-8",
+            timeout=30,
+        )
+    except subprocess.TimeoutExpired:
+        history = root / ".git/mosswork-frontend-gate/history.json"
+        if history.is_file():
+            print("FRONTEND_FIXTURE_TIMEOUT_STATE: " + history.read_text(encoding="utf-8"))
+        raise
 
 
 def trace(root):
@@ -224,15 +242,24 @@ def test_actual_npm_build_output_and_same_source_reuse(npm_repository):
     root = npm_repository
     first = frontend(root)
     assert first.returncode == 0, (first.stdout, first.stderr)
-    assert trace(root) == ["test", "build"]
+    assert trace(root) == ["typecheck", "test", "build"]
     second = frontend(root)
     assert second.returncode == 0, (second.stdout, second.stderr)
-    assert trace(root) == ["test", "build"]
+    assert trace(root) == ["typecheck", "test", "build"]
     assert "reusing" in second.stdout + second.stderr
     (root / "dashboard/public/marker.svg").write_text("changed candidate", encoding="utf-8")
     third = frontend(root)
     assert third.returncode == 0, (third.stdout, third.stderr)
-    assert trace(root) == ["test", "build", "test", "build"]
+    assert trace(root) == ["typecheck", "test", "build", "typecheck", "test", "build"]
+
+
+def test_missing_owned_typescript_refuses_before_any_tests(npm_repository):
+    root = npm_repository
+    (root / "dashboard/node_modules/typescript/bin/tsc").unlink()
+    result = frontend(root)
+    assert result.returncode == 1
+    assert "Owned TypeScript installation is missing" in result.stderr
+    assert not (root / ".git/command-trace").exists()
 
 
 def test_actual_failed_npm_stops_build_and_prevents_old_success_reuse(npm_repository):
@@ -243,11 +270,63 @@ def test_actual_failed_npm_stops_build_and_prevents_old_success_reuse(npm_reposi
     failed = frontend(root)
     assert failed.returncode == 1
     assert "later checks were not run" in failed.stderr
-    assert trace(root) == ["test", "build", "test"]
+    assert trace(root) == ["typecheck", "test", "build", "typecheck", "test"]
     (root / ".git/control.json").write_text("{}", encoding="utf-8")
     repaired = frontend(root)
     assert repaired.returncode == 0, (repaired.stdout, repaired.stderr)
-    assert trace(root) == ["test", "build", "test", "test", "build"]
+    assert trace(root) == [
+        "typecheck",
+        "test",
+        "build",
+        "typecheck",
+        "test",
+        "typecheck",
+        "test",
+        "build",
+    ]
+
+
+def test_actual_type_failure_stops_before_tests_and_prevents_old_success_reuse(npm_repository):
+    root = npm_repository
+    assert frontend(root).returncode == 0
+    (root / "dashboard/public/marker.svg").write_text("new candidate", encoding="utf-8")
+    (root / ".git/control.json").write_text('{"types":true}', encoding="utf-8")
+    failed = frontend(root)
+    assert failed.returncode == 1
+    assert "later checks were not run" in failed.stderr
+    assert trace(root) == ["typecheck", "test", "build", "typecheck"]
+    (root / ".git/control.json").write_text("{}", encoding="utf-8")
+    repaired = frontend(root)
+    assert repaired.returncode == 0, (repaired.stdout, repaired.stderr)
+    assert trace(root) == ["typecheck", "test", "build", "typecheck", "typecheck", "test", "build"]
+
+
+@pytest.mark.parametrize(
+    "generated",
+    [".tmp/tsconfig.app.tsbuildinfo", ".tmp/tsconfig.node.tsbuildinfo", ".tmp/runtime.cjs"],
+)
+def test_actual_compiler_cache_outputs_preserve_installed_code_guards(npm_repository, generated):
+    root = npm_repository
+    control = root / ".git/control.json"
+    control.write_text(json.dumps({"generated": generated}), encoding="utf-8")
+    first = frontend(root)
+    if generated.endswith("runtime.cjs"):
+        assert first.returncode == 1
+        assert "Installed frontend code changed" in first.stderr
+        return
+    assert first.returncode == 0, (first.stdout, first.stderr)
+    second = frontend(root)
+    assert second.returncode == 0, (second.stdout, second.stderr)
+    assert "reusing" in second.stdout + second.stderr
+    assert trace(root) == ["typecheck", "test", "build"]
+    # Modified compiler state cannot reuse success; the forced check runs again.
+    (root / "dashboard/node_modules" / generated).write_text("changed cache", encoding="utf-8")
+    control.write_text(
+        json.dumps({"generated": generated, "content": "new output"}), encoding="utf-8"
+    )
+    third = frontend(root)
+    assert third.returncode == 0, (third.stdout, third.stderr)
+    assert trace(root) == ["typecheck", "test", "build", "typecheck", "test", "build"]
 
 
 @pytest.mark.parametrize("kind", ["source", "index"])
@@ -257,7 +336,7 @@ def test_actual_source_or_index_drift_stops_before_build(npm_repository, kind):
     result = frontend(root)
     assert result.returncode == 1
     assert "changed during frontend validation" in result.stderr
-    assert trace(root) == ["test"]
+    assert trace(root) == ["typecheck", "test"]
 
 
 def test_actual_make_then_git_hook_reuses_one_frontend_result(npm_repository):
@@ -301,7 +380,7 @@ def test_actual_make_then_git_hook_reuses_one_frontend_result(npm_repository):
         timeout=30,
     )
     assert first.returncode == 0, (first.stdout, first.stderr)
-    assert trace(root) == ["test", "build"]
+    assert trace(root) == ["typecheck", "test", "build"]
     git(root, "add", "dashboard/public/marker.svg")
     second = subprocess.run(
         ["git", "commit", "-m", "actual frontend hook"],
@@ -314,7 +393,7 @@ def test_actual_make_then_git_hook_reuses_one_frontend_result(npm_repository):
     )
     assert second.returncode == 0, (second.stdout, second.stderr)
     assert "FRONTEND_GATE_RECEIPT:" in second.stdout + second.stderr
-    assert trace(root) == ["test", "build"], (second.stdout, second.stderr)
+    assert trace(root) == ["typecheck", "test", "build"], (second.stdout, second.stderr)
 
 
 def test_successful_empty_git_shell_cannot_replace_frontend_validation(npm_repository):
@@ -351,7 +430,7 @@ def test_changed_installed_module_executes_fresh_tests(npm_repository):
         "original",
         "changed",
     ]
-    assert trace(root) == ["test", "build", "test", "build"]
+    assert trace(root) == ["typecheck", "test", "build", "typecheck", "test", "build"]
 
 
 @pytest.mark.parametrize("kind", ["missing-original", "modified-original", "invalid-history"])
@@ -364,7 +443,7 @@ def test_missing_or_corrupt_actual_proof_runs_fresh_checks(npm_repository, kind)
     # Exercise reuse of a reused result too: it must retain the original checks.
     second = frontend(root)
     assert second.returncode == 0, (second.stdout, second.stderr)
-    assert trace(root) == ["test", "build"]
+    assert trace(root) == ["typecheck", "test", "build"]
     if kind == "missing-original":
         Path(original).unlink()
     elif kind == "modified-original":
@@ -373,7 +452,7 @@ def test_missing_or_corrupt_actual_proof_runs_fresh_checks(npm_repository, kind)
         (storage / "history.json").write_text("[]", encoding="utf-8")
     third = frontend(root)
     assert third.returncode == 0, (third.stdout, third.stderr)
-    assert trace(root) == ["test", "build", "test", "build"]
+    assert trace(root) == ["typecheck", "test", "build", "typecheck", "test", "build"]
 
 
 def test_frontend_dispatcher_plan_works_without_site_packages(repository):
@@ -405,4 +484,4 @@ def test_actual_frontend_entry_loads_without_site_packages(npm_repository):
         timeout=30,
     )
     assert result.returncode == 0, (result.stdout, result.stderr)
-    assert trace(root) == ["test", "build"]
+    assert trace(root) == ["typecheck", "test", "build"]

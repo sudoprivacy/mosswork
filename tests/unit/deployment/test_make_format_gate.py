@@ -105,6 +105,9 @@ with open(os.environ["FORMAT_TRACE"], "a", encoding="utf-8") as output:
 if kind == "backend":
     sys.exit(subprocess.run([sys.executable, "-m", *args]).returncode)
 assert Path.cwd() == root / "dashboard"
+if kind == "typescript":
+    assert args == ["tsc", "-b", "--force"], args
+    sys.exit(19 if os.environ.get("CONTROL_TYPES_FAIL") == "1" else 0)
 assert args[:1] == ["run"]
 path = root / "dashboard/package.json"
 if args[1] == "format":
@@ -119,14 +122,15 @@ else:
     )
     interpreter = Path(sys.executable).as_posix()
     control = dispatcher.as_posix()
-    (root / "bin/npm").write_text(
-        "#!/bin/sh\nexec " + shlex.join([interpreter, control, "frontend"]) + ' "$@"\n',
-        encoding="utf-8",
-    )
-    (root / "bin/npm").chmod(0o755)
-    (root / "bin/npm.cmd").write_text(
-        f'@echo off\r\n"{interpreter}" "{control}" frontend %*\r\n', encoding="utf-8"
-    )
+    for executable, kind in (("npm", "frontend"), ("npx", "typescript")):
+        (root / "bin" / executable).write_text(
+            "#!/bin/sh\nexec " + shlex.join([interpreter, control, kind]) + ' "$@"\n',
+            encoding="utf-8",
+        )
+        (root / "bin" / executable).chmod(0o755)
+        (root / "bin" / (executable + ".cmd")).write_text(
+            f'@echo off\r\n"{interpreter}" "{control}" {kind} %*\r\n', encoding="utf-8"
+        )
     environment = {
         key: value
         for key, value in os.environ.items()
@@ -157,7 +161,9 @@ else:
     def snapshot() -> dict[str, str]:
         return {str(path): hashlib.sha256(path.read_bytes()).hexdigest() for path in inputs}
 
-    def run(goal: str, label: str, *extra: str) -> tuple[subprocess.CompletedProcess, list[dict]]:
+    def run(
+        goal: str, label: str, *extra: str, types_fail: bool = False
+    ) -> tuple[subprocess.CompletedProcess, list[dict]]:
         trace = root / f"{label}.jsonl"
         result = subprocess.run(
             [
@@ -174,6 +180,7 @@ else:
                 **environment,
                 "FORMAT_TRACE": str(trace),
                 "FORMAT_MARKER": str(root / f"{label}.executed"),
+                "CONTROL_TYPES_FAIL": "1" if types_fail else "0",
             },
             capture_output=True,
             text=True,
@@ -198,6 +205,7 @@ else:
         assert "make format-all" in result.stdout
         assert snapshot() == before and git("ls-files", "--stage", "-z") == index
         assert not any(row["args"][:1] in (["mypy"], ["pytest"]) for row in calls), calls
+        assert not any(row["kind"] == "typescript" for row in calls), calls
         repaired, _ = run("format-all", problem + "-repair")
         assert repaired.returncode == 0, repaired.stdout + repaired.stderr
         git("add", ".")
@@ -207,11 +215,24 @@ else:
         assert "available fixes" not in positive.stdout + positive.stderr
         assert snapshot() == before and git("ls-files", "--stage", "-z") == index
         assert ["mypy", "src/octop"] in [row["args"] for row in calls]
+        kinds = [row["kind"] for row in calls]
+        assert kinds.count("typescript") == 1
+        assert kinds.index("typescript") < next(
+            index for index, row in enumerate(calls) if row["args"][:1] == ["mypy"]
+        )
         pytest_args = [row["args"] for row in calls if row["args"][:1] == ["pytest"]]
         assert len(pytest_args) == 1
         # Both entries require a complete run without matching source-bound history.
         assert "--testmon-noselect" in pytest_args[0]
         assert ("-m" in pytest_args[0]) is (target == "all")
+
+    before, index = snapshot(), git("ls-files", "--stage", "-z")
+    refused, calls = run(target, "type-error-refused", types_fail=True)
+    assert refused.returncode != 0, refused.stdout + refused.stderr
+    assert any(row["args"] == ["tsc", "-b", "--force"] for row in calls)
+    assert not any(row["args"][:1] in (["mypy"], ["pytest"]) for row in calls), calls
+    assert not (root / "type-error-refused.executed").exists()
+    assert snapshot() == before and git("ls-files", "--stage", "-z") == index
 
     # Restore automatic formatting as a prerequisite: the old behavior runs
     # validators successfully while changing the frozen input's raw bytes.
