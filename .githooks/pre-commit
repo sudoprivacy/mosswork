@@ -14,7 +14,18 @@ fi
 ROOT="$(git rev-parse --show-toplevel)"
 cd "$ROOT"
 
-if uv run --no-project python tools/precommit.py; then
+# Keep a foreign caller virtualenv from changing PATH before frozen validation.
+# Explicit uv interpreter/environment choices retain their original launch route.
+dispatcher=(uv run --no-project python)
+if [[ -z "${UV_PROJECT_ENVIRONMENT:-}" && -z "${UV_PYTHON:-}" ]]; then
+  if [[ -x "$ROOT/.venv/Scripts/python.exe" ]]; then
+    dispatcher=("$ROOT/.venv/Scripts/python.exe")
+  elif [[ -x "$ROOT/.venv/bin/python" ]]; then
+    dispatcher=("$ROOT/.venv/bin/python")
+  fi
+fi
+echo "[pre-commit] Dispatcher: ${dispatcher[*]}"
+if "${dispatcher[@]}" tools/precommit.py; then
   exit 0
 else
   scoped_status=$?

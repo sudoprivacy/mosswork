@@ -23,7 +23,7 @@ SPEC.loader.exec_module(gate)
 
 
 @pytest.fixture
-def actual_tool_history(tmp_path):
+def actual_tool_history(tmp_path, request):
     """Real Git/uv/checker processes with only the private command provider replaced.
 
     The production transport, proof engine and dispatcher guards are unchanged.
@@ -93,6 +93,42 @@ def actual_tool_history(tmp_path):
         PYTHONDONTWRITEBYTECODE="1",
         PYTHONIOENCODING="utf-8",
     )
+
+    launch_mode = getattr(request, "param", None)
+    if launch_mode is not None:
+        # Real independent uv projects reproduce a foreign caller environment.
+        (root / "pyproject.toml").write_text(
+            '[project]\nname = "private-launch-fixture"\nversion = "0.0.0"\n'
+            f'requires-python = "=={sys.version_info.major}.{sys.version_info.minor}.*"\n'
+            "dependencies = []\n",
+            encoding="utf-8",
+        )
+        for name in ("UV_NO_SYNC", "UV_PROJECT_ENVIRONMENT", "UV_PYTHON"):
+            environment.pop(name, None)
+        foreign = tmp_path / "foreign environment"
+        for argv, directory in (
+            (["uv", "venv", str(foreign), "--python", sys.executable, "--offline"], root),
+            (["uv", "lock", "--offline"], root),
+            (["uv", "sync", "--locked", "--offline"], root),
+        ):
+            outcome = subprocess.run(
+                argv,
+                cwd=directory,
+                env=environment,
+                capture_output=True,
+                text=True,
+                encoding="utf-8",
+                timeout=60,
+            )
+            assert outcome.returncode == 0, outcome.stdout + outcome.stderr
+        bin_dir = "Scripts" if os.name == "nt" else "bin"
+        python_name = "python.exe" if os.name == "nt" else "python"
+        environment["VIRTUAL_ENV"] = str(foreign)
+        environment["PATH"] += os.pathsep + str(foreign / bin_dir)
+        if launch_mode == "explicit-python":
+            environment["UV_PYTHON"] = str(root / ".venv" / bin_dir / python_name)
+        elif launch_mode == "explicit-environment":
+            environment["UV_PROJECT_ENVIRONMENT"] = str(root / ".venv")
 
     def fixture_git(*arguments, hooks=False):
         return subprocess.run(
@@ -1465,3 +1501,29 @@ def test_native_fail_fast_matrix_preserves_required_names_platforms_and_budgets(
     assert "    name: ${{ matrix.check_name }}" in workflow
     assert "    timeout-minutes: ${{ matrix.timeout_minutes }}" in workflow
     assert "continue-on-error" not in workflow
+
+
+@pytest.mark.parametrize(
+    "actual_tool_history", ["mixed", "explicit-python", "explicit-environment"], indirect=True
+)
+def test_tools_bootstrap_preserves_foreign_path_and_explicit_uv_choices(actual_tool_history):
+    root, candidate, environment, fixture_git, run, history, executions = actual_tool_history
+    first = run()
+    assert first.returncode == 0, first.stdout + first.stderr
+    original = history()
+    assert original["passed"] and original["complete"] and executions() == ["ran"]
+    proof = Path(original["attempt"])
+    proof_bytes = proof.read_bytes()
+    fixture_git("add", "--", str(candidate.relative_to(root)))
+    committed = run(commit=True)
+    output = committed.stdout + committed.stderr
+    assert history()["passed"] and proof.read_bytes() == proof_bytes
+    if "UV_PYTHON" in environment or "UV_PROJECT_ENVIRONMENT" in environment:
+        assert "[pre-commit] Dispatcher: uv run --no-project python" in output
+        assert len(executions()) in {1, 2}
+    else:
+        dispatch = output.split("[pre-commit] Dispatcher: ", 1)[1].splitlines()[0]
+        selected = Path(dispatch)
+        assert selected.is_file() and selected.parent.parent == root / ".venv"
+        assert executions() == ["ran"]
+        assert history()["reused"]["attempt"] == str(proof)
