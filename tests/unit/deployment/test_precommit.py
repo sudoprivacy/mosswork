@@ -530,9 +530,9 @@ def test_unproven_pool_history_retains_original_full_route(pool_hint_repo, kind)
     root, environment, _ = pool_hint_repo
     storage = root / ".git/mosswork-test-gate"
     if kind == "source":
-        source = root / "src/first.py"
-        source.write_text(source.read_text() + "# Changed after validation\n", encoding="utf-8")
-        subprocess.run(["git", "add", "src/first.py"], cwd=root, env=environment, check=True)
+        source = root / "settings.json"
+        source.write_text('{"changed": true}\n', encoding="utf-8")
+        subprocess.run(["git", "add", "settings.json"], cwd=root, env=environment, check=True)
     elif kind == "environment":
         environment["MOSSWORK_REAL_TEST_INPUT"] = "changed"
     elif kind == "incomplete":
@@ -555,6 +555,108 @@ def test_unproven_pool_history_retains_original_full_route(pool_hint_repo, kind)
     )
     assert result.returncode == gate.FULL_CHECKS, result.stdout + result.stderr
     assert "Application gate: make precommit" in result.stdout
+    assert (root / "output/observed").read_bytes() == marker
+
+
+@pytest.mark.parametrize("change", ["python_body", "python_comment", "new_module"])
+@pytest.mark.parametrize("entry", ["commit", "worktree"])
+def test_pool_hint_preserves_required_python_changes_before_an_unintended_full_run(
+    request, change, entry
+):
+    root, environment, execute = request.getfixturevalue("pool_hint_repo")
+    if change == "new_module":
+        changed = root / "tests/unit/test_added_pool.py"
+        changed.parent.mkdir(parents=True)
+        changed.write_text(
+            "from pathlib import Path\n\ndef test_added():\n"
+            "    with Path('output/observed').open('a') as f: f.write('added\\n')\n"
+            "    assert False\n\ndef test_pending():\n"
+            "    with Path('output/observed').open('a') as f: f.write('pending\\n')\n",
+            encoding="utf-8",
+        )
+    else:
+        changed = root / "src/first.py"
+        if change == "python_body":
+            changed.write_text("def value():\n    return 99\n", encoding="utf-8")
+        else:
+            changed.write_text(
+                changed.read_text(encoding="utf-8") + "# Another candidate comment\n",
+                encoding="utf-8",
+            )
+    if entry == "commit":
+        subprocess.run(
+            ["git", "add", str(changed.relative_to(root))], cwd=root, env=environment, check=True
+        )
+    storage = root / ".git/mosswork-test-gate"
+    original = {p.name: p.read_bytes() for p in storage.iterdir() if p.is_file()}
+    marker = (root / "output/observed").read_bytes()
+    index = git(root, "ls-files", "--stage")
+    result = subprocess.run(
+        [sys.executable, "tools/precommit.py", *(["--worktree"] if entry == "worktree" else [])],
+        cwd=root,
+        env=environment,
+        capture_output=True,
+        text=True,
+        encoding="utf-8",
+        timeout=30,
+    )
+    (root / "output/eligible-pool-cli.json").write_text(
+        json.dumps(
+            {"returncode": result.returncode, "stdout": result.stdout, "stderr": result.stderr}
+        ),
+        encoding="utf-8",
+    )
+    assert result.returncode == 1, result.stdout + result.stderr
+    assert "eligible Python changes" in result.stderr and "PYTEST_JOBS=1" in result.stderr
+    assert "does not accept current source changes" in result.stderr
+    assert "make test-current PYTEST_JOBS=2" in result.stderr
+    assert (root / "output/observed").read_bytes() == marker
+    assert {p.name: p.read_bytes() for p in storage.iterdir() if p.is_file()} == original
+    assert git(root, "ls-files", "--stage") == index
+    receipt_name = (
+        "mosswork-worktree-validation.json" if entry == "worktree" else "mosswork-precommit.json"
+    )
+    receipt = json.loads((root / ".git" / receipt_name).read_text(encoding="utf-8"))
+    assert receipt["passed"] is False and receipt["checks"] == []
+    same_pool = {**environment, "PYTEST_JOBS": "1"}
+    current, plan, observed = execute(root, same_pool, "same-pool-current-source")
+    if change == "python_comment":
+        assert current.returncode == 0 and plan["mode"] == "affected" and observed == []
+    else:
+        assert current.returncode != 0, current.stdout + current.stderr
+        assert observed == (["first"] if change == "python_body" else ["added"])
+        if change == "python_body":
+            changed.write_text("def value():\n    return 1 + 0\n", encoding="utf-8")
+        else:
+            changed.write_text(
+                changed.read_text(encoding="utf-8").replace("assert False", "assert True"),
+                encoding="utf-8",
+            )
+        repaired, repaired_plan, observed = execute(root, same_pool, "same-pool-repaired-source")
+        assert repaired.returncode == 0 and repaired_plan["mode"] == "affected"
+        assert sorted(observed) == (["first"] if change == "python_body" else ["added", "pending"])
+
+
+@pytest.mark.parametrize("condition", ["environment", "configuration"])
+def test_python_pool_hint_retains_other_required_full_validation(request, condition):
+    root, environment, _ = request.getfixturevalue("pool_hint_repo")
+    (root / "src/first.py").write_text("def value():\n    return 99\n", encoding="utf-8")
+    if condition == "environment":
+        environment["MOSSWORK_REAL_TEST_INPUT"] = "new-context"
+    else:
+        (root / "settings.json").write_text('{"new": true}\n', encoding="utf-8")
+    marker = (root / "output/observed").read_bytes()
+    result = subprocess.run(
+        [sys.executable, "tools/precommit.py", "--worktree"],
+        cwd=root,
+        env=environment,
+        capture_output=True,
+        text=True,
+        encoding="utf-8",
+        timeout=30,
+    )
+    assert result.returncode == gate.FULL_CHECKS, result.stdout + result.stderr
+    assert "Full application validation is required" in result.stdout
     assert (root / "output/observed").read_bytes() == marker
 
 
