@@ -17,15 +17,26 @@ cd "$ROOT"
 # Keep a foreign caller virtualenv from changing PATH before frozen validation.
 # Explicit uv interpreter/environment choices retain their original launch route.
 dispatcher=(uv run --no-project python)
+dispatcher_bin=""
 if [[ -z "${UV_PROJECT_ENVIRONMENT:-}" && -z "${UV_PYTHON:-}" ]]; then
   if [[ -x "$ROOT/.venv/Scripts/python.exe" ]]; then
-    dispatcher=("$ROOT/.venv/Scripts/python.exe")
+    dispatcher_bin="$ROOT/.venv/Scripts"
+    dispatcher=("$dispatcher_bin/python.exe")
   elif [[ -x "$ROOT/.venv/bin/python" ]]; then
-    dispatcher=("$ROOT/.venv/bin/python")
+    dispatcher_bin="$ROOT/.venv/bin"
+    dispatcher=("$dispatcher_bin/python")
   fi
 fi
 echo "[pre-commit] Dispatcher: ${dispatcher[*]}"
-if "${dispatcher[@]}" tools/precommit.py; then
+# Match uv's project-interpreter PATH in this child only. The later full gate
+# must inherit its original caller PATH after the dispatcher returns exit 3.
+if (
+  if [[ -n "$dispatcher_bin" ]]; then
+    dispatcher_path="$(cd "$dispatcher_bin" && pwd)"
+    export PATH="$dispatcher_path:$PATH"
+  fi
+  "${dispatcher[@]}" tools/precommit.py
+); then
   exit 0
 else
   scoped_status=$?

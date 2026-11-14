@@ -1527,3 +1527,88 @@ def test_tools_bootstrap_preserves_foreign_path_and_explicit_uv_choices(actual_t
         assert selected.is_file() and selected.parent.parent == root / ".venv"
         assert executions() == ["ran"]
         assert history()["reused"]["attempt"] == str(proof)
+
+
+@pytest.mark.parametrize("failed_tool", ["none", "make", "npm"])
+def test_project_dispatcher_preserves_full_gate_parent_path(
+    repo: Path, tmp_path: Path, failed_tool: str
+) -> None:
+    import shlex
+
+    install_dispatcher(repo)
+    (repo / "dashboard").mkdir()
+    stage(repo, "src/config.py", "value = 1\n")
+    before = git(repo, "rev-parse", "HEAD")
+    environment = {
+        key: value
+        for key, value in os.environ.items()
+        if key not in {"UV_PYTHON", "UV_PROJECT_ENVIRONMENT", "UV_NO_SYNC"}
+    }
+    venv = subprocess.run(
+        ["uv", "venv", str(repo / ".venv"), "--python", sys.executable, "--offline"],
+        cwd=repo,
+        env=environment,
+        capture_output=True,
+        text=True,
+        encoding="utf-8",
+        timeout=60,
+    )
+    assert venv.returncode == 0, venv.stdout + venv.stderr
+    shims = tmp_path / "validators"
+    shims.mkdir()
+    log = tmp_path / "commands.jsonl"
+    parent_path = tmp_path / "caller-path.json"
+    capture = tmp_path / "capture_parent.py"
+    capture.write_text(
+        "import json, os\nfrom pathlib import Path\n"
+        "Path(os.environ['GATE_TEST_PARENT_PATH']).write_text(json.dumps(os.environ['PATH']), encoding='utf-8')\n",
+        encoding="utf-8",
+    )
+    hook = repo / ".githooks/pre-commit"
+    source = hook.read_text(encoding="utf-8")
+    marker = 'cd "$ROOT"\n'
+    assert source.count(marker) == 1
+    capture_command = (
+        shlex.quote(Path(sys.executable).as_posix()) + " " + shlex.quote(capture.as_posix())
+    )
+    hook.write_text(source.replace(marker, marker + capture_command + "\n"), encoding="utf-8")
+    git(repo, "add", ".githooks/pre-commit")
+    for name in ("make", "npm"):
+        shim = shims / name
+        shim.write_text(
+            "#!/usr/bin/env python\nimport json, os, sys\nfrom pathlib import Path\n"
+            "assert 'GIT_INDEX_FILE' not in os.environ\n"
+            "tool = Path(sys.argv[0]).name\n"
+            "with open(os.environ['GATE_TEST_LOG'], 'a', encoding='utf-8') as log:\n"
+            "    log.write(json.dumps({'tool': tool, 'argv': sys.argv[1:], 'path': os.environ['PATH']})+'\\n')\n"
+            "raise SystemExit(7 if tool == os.environ['GATE_TEST_FAIL'] else 0)\n",
+            encoding="utf-8",
+            newline="\n",
+        )
+        shim.chmod(0o755)
+    environment.update(
+        PATH=str(shims) + os.pathsep + environment["PATH"],
+        GATE_TEST_LOG=str(log),
+        GATE_TEST_PARENT_PATH=str(parent_path),
+        GATE_TEST_FAIL=failed_tool,
+    )
+    result = subprocess.run(
+        ["git", "-c", "core.hooksPath=.githooks", "commit", "-m", "full parent PATH control"],
+        cwd=repo,
+        env=environment,
+        capture_output=True,
+        text=True,
+        encoding="utf-8",
+        timeout=60,
+    )
+    calls = [json.loads(line) for line in log.read_text(encoding="utf-8").splitlines()]
+    expected = [{"tool": "make", "argv": ["precommit"]}]
+    if failed_tool != "make":
+        expected.append({"tool": "npm", "argv": ["run", "build"]})
+    assert [{k: v for k, v in call.items() if k != "path"} for call in calls] == expected
+    assert all(
+        call["path"] == json.loads(parent_path.read_text(encoding="utf-8")) for call in calls
+    )
+    assert "[pre-commit] Dispatcher: " in result.stdout + result.stderr
+    assert (result.returncode == 0) is (failed_tool == "none"), result.stdout + result.stderr
+    assert (git(repo, "rev-parse", "HEAD") != before) is (failed_tool == "none")
