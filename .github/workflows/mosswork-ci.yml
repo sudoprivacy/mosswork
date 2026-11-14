@@ -199,6 +199,9 @@ jobs:
       - name: Check shared fixture, cold CLI and offline catalog isolation
         run: |
           # Share two workers across the original two cohorts; startup and capacity keep their serial boundary.
+          shared_workers=()
+          if [ "$RUNNER_OS" = Linux ]; then shared_workers=(-n 2); fi
+          echo "CI_SHARED_WORKERS: runtime_os=$RUNNER_OS worker_args=${shared_workers[*]:-serial}"
           uv run --frozen pytest \
             tests/unit/connectors/test_qcc_grant.py \
             tests/unit/connectors/test_qcc_oauth_grant.py \
@@ -209,7 +212,7 @@ jobs:
             tests/unit/market \
             tests/integration/test_local_expert_market.py \
             tests/integration/test_local_skill_market.py \
-            -n 2 -q --junitxml "$RUNNER_TEMP/shared-market.xml"
+            "${shared_workers[@]}" -q --junitxml "$RUNNER_TEMP/shared-market.xml"
       - name: Check isolated dependencies and live worker fixtures
         run: |
           uv run --frozen pytest tests/unit/api/test_knowledge_bases.py tests/unit/company_runtime/test_desktop_capacity.py tests/unit/company_runtime/test_local_process.py tests/unit/infra/test_harness_config_imports.py -q --junitxml "$RUNNER_TEMP/shared-fixtures.xml"
