@@ -1497,6 +1497,131 @@
   }
 }
 
+/* Read-only release preview shown in the expert creation drawer. */
+.localReleasePreview {
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+  margin-top: 8px;
+}
+
+.localReleaseSection {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.localReleaseSectionTitle {
+  color: var(--fn-text-secondary);
+  font-size: 12px;
+  font-weight: 500;
+}
+
+.localReleaseHint {
+  margin: 0;
+  color: var(--fn-text-tertiary);
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+.localReleaseCards {
+  width: 100%;
+  overflow: hidden;
+  border: 1px solid var(--fn-card-border-normal);
+  border-radius: var(--fn-radius-md);
+
+  :global(.ant-collapse-item) {
+    border-bottom: 1px solid var(--fn-card-border-normal);
+
+    &:last-child {
+      border-bottom: none;
+    }
+  }
+
+  :global(.ant-collapse-header) {
+    align-items: center !important;
+    padding: 10px 12px !important;
+  }
+
+  :global(.ant-collapse-content-box) {
+    padding: 0 12px 12px !important;
+  }
+}
+
+.localReleaseCardLabel {
+  display: flex;
+  align-items: center;
+  min-width: 0;
+  gap: 12px;
+}
+
+.localReleaseEmoji {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  flex-shrink: 0;
+  border-radius: var(--fn-radius-sm);
+  background: var(--fn-bg-secondary);
+  font-size: 18px;
+  line-height: 1;
+}
+
+.localReleaseContent {
+  max-height: 220px;
+  overflow-y: auto;
+  margin: 0;
+  padding: 10px 12px;
+  border-radius: var(--fn-radius-sm);
+  background: var(--fn-bg-secondary, #f5f5f5);
+  color: var(--fn-text-secondary);
+  font-family: inherit;
+  font-size: 12px;
+  line-height: 1.55;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+.localReleaseSkillDetail {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.localReleaseDescription {
+  margin: 0;
+  color: var(--fn-text-secondary);
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+.localReleaseFilesTitle {
+  color: var(--fn-text-tertiary);
+  font-size: 12px;
+}
+
+.localReleaseFiles {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.localReleaseFile {
+  padding: 4px 8px;
+  border: 1px solid var(--fn-card-border-normal);
+  border-radius: 999px;
+  color: var(--fn-text-tertiary);
+  font-family: "SF Mono", Menlo, Consolas, monospace;
+  font-size: 11px;
+}
+
+.localReleaseEmpty {
+  padding: 8px 0;
+  color: var(--fn-text-tertiary);
+  font-size: 13px;
+}
+
 .drawerCancelBtn {
   padding: 7px 16px;
   font-size: 14px;

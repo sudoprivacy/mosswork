@@ -10,15 +10,12 @@ import {
   Input,
   Select,
   Spin,
-  Tag,
-  Typography,
 } from "antd";
 import { message } from "@/utils/antdMessage";
 
 import { request } from "../../../api/request";
 import {
   localExpertMarketApi,
-  type LocalExpertDetail,
   type LocalMarketExpert,
 } from "../../../api/modules/localExpertMarket";
 import { mossworkAgentsApi } from "../../../api/modules/mossworkAgents";
@@ -61,7 +58,12 @@ import {
   type ConversationMode,
 } from "../../Chat/utils/conversationMode";
 import type { ExpertSummary } from "./ExpertCard";
-import { groupExpertFiles, type NamedFileContent } from "./expertFileGroups";
+import {
+  groupExpertFiles,
+  type NamedFileContent,
+  type SkillFileGroup,
+  type SubagentFilePreview,
+} from "./expertFileGroups";
 import { metaForFile } from "./iconForName";
 import {
   buildBackendSpec,
@@ -109,6 +111,166 @@ interface ExpertDetail {
   file_contents?: FileContent[];
   welcome_message?: { zh?: string; en?: string };
   quick_prompts?: QuickPrompt[];
+}
+
+interface LocalReleasePreviewProps {
+  configFiles: NamedFileContent[];
+  skillGroups: SkillFileGroup[];
+  subagentFiles: SubagentFilePreview[];
+}
+
+function LocalReleasePreview({
+  configFiles,
+  skillGroups,
+  subagentFiles,
+}: LocalReleasePreviewProps) {
+  const { t } = useTranslation();
+  const renderContent = (content: string) => (
+    <pre className={styles.localReleaseContent}>{content}</pre>
+  );
+
+  return (
+    <div className={styles.localReleasePreview}>
+      <section className={styles.localReleaseSection}>
+        <div className={styles.localReleaseSectionTitle}>
+          {t("experts.mdFilesTitle")} ({configFiles.length})
+        </div>
+        <p className={styles.localReleaseHint}>
+          {t("experts.localMarket.previewPromptHint")}
+        </p>
+        {configFiles.length === 0 ? (
+          <div className={styles.localReleaseEmpty}>
+            {t("experts.noWorkspaceFiles")}
+          </div>
+        ) : (
+          <Collapse
+            className={styles.localReleaseCards}
+            items={configFiles.map((file) => {
+              const meta = metaForFile(file.name, t);
+              return {
+                key: file.name,
+                label: (
+                  <div className={styles.localReleaseCardLabel}>
+                    <div
+                      className={styles.fileIcon}
+                      style={{
+                        color: meta.color,
+                        background: `${meta.color}1a`,
+                      }}
+                    >
+                      {meta.icon}
+                    </div>
+                    <div className={styles.fileMeta}>
+                      <div className={styles.fileLabel}>{meta.label}</div>
+                      <div className={styles.filePath}>{file.name}</div>
+                    </div>
+                  </div>
+                ),
+                children: renderContent(file.content),
+              };
+            })}
+          />
+        )}
+      </section>
+
+      <section className={styles.localReleaseSection}>
+        <div className={styles.localReleaseSectionTitle}>
+          {t("experts.skillFilesTitle", { count: skillGroups.length })}
+        </div>
+        <p className={styles.localReleaseHint}>
+          {t("experts.localMarket.previewSkillHint")}
+        </p>
+        {skillGroups.length === 0 ? (
+          <div className={styles.localReleaseEmpty}>
+            {t("experts.noSkillFiles")}
+          </div>
+        ) : (
+          <Collapse
+            className={styles.localReleaseCards}
+            items={skillGroups.map((group) => ({
+              key: group.name,
+              label: (
+                <div className={styles.localReleaseCardLabel}>
+                  <div className={styles.localReleaseEmoji} aria-hidden="true">
+                    {group.emoji}
+                  </div>
+                  <div className={styles.fileMeta}>
+                    <div className={styles.fileLabel}>{group.displayName}</div>
+                    <div className={styles.filePath}>skills/{group.name}/</div>
+                  </div>
+                </div>
+              ),
+              children: (
+                <div className={styles.localReleaseSkillDetail}>
+                  {group.description ? (
+                    <p className={styles.localReleaseDescription}>
+                      {group.description}
+                    </p>
+                  ) : null}
+                  <div className={styles.localReleaseFilesTitle}>
+                    {t("experts.localMarket.previewFilesCount", {
+                      count: group.files.length,
+                    })}
+                  </div>
+                  <div className={styles.localReleaseFiles}>
+                    {group.files.map((file) => (
+                      <div key={file.name} className={styles.localReleaseFile}>
+                        {file.name.replace(`skills/${group.name}/`, "")}
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              ),
+            }))}
+          />
+        )}
+      </section>
+
+      <section className={styles.localReleaseSection}>
+        <div className={styles.localReleaseSectionTitle}>
+          {t("experts.subagentFilesTitle", { count: subagentFiles.length })}
+        </div>
+        <p className={styles.localReleaseHint}>
+          {t("experts.localMarket.previewSubagentHint")}
+        </p>
+        {subagentFiles.length === 0 ? (
+          <div className={styles.localReleaseEmpty}>
+            {t("experts.localMarket.noBundledSubagents")}
+          </div>
+        ) : (
+          <Collapse
+            className={styles.localReleaseCards}
+            items={subagentFiles.map((subagent) => ({
+              key: subagent.slug,
+              label: (
+                <div className={styles.localReleaseCardLabel}>
+                  <div className={styles.localReleaseEmoji} aria-hidden="true">
+                    {subagent.emoji}
+                  </div>
+                  <div className={styles.fileMeta}>
+                    <div className={styles.fileLabel}>{subagent.name}</div>
+                    <div className={styles.filePath}>
+                      agents/{subagent.slug}.md
+                    </div>
+                  </div>
+                </div>
+              ),
+              children: (
+                <>
+                  {subagent.description ? (
+                    <p className={styles.localReleaseDescription}>
+                      {subagent.description}
+                    </p>
+                  ) : null}
+                  {renderContent(subagent.file.content)}
+                </>
+              ),
+            }))}
+          />
+        )}
+      </section>
+    </div>
+  );
 }
 
 export type CreateFromTemplateSource =
@@ -268,9 +430,6 @@ export default function CreateFromExpertDrawer({
   const [pathMappings, setPathMappings] = useState<PathMapping[]>([]);
 
   const [fileContents, setFileContents] = useState<FileContent[]>([]);
-  const [lockedDependencies, setLockedDependencies] = useState<
-    LocalExpertDetail["lock"]
-  >([]);
   const [originalFileContents, setOriginalFileContents] = useState<
     FileContent[]
   >([]);
@@ -358,7 +517,6 @@ export default function CreateFromExpertDrawer({
 
     setPendingHubSkills([]);
     setPendingCopySkills([]);
-    setLockedDependencies([]);
     setLocalEditPath(null);
     setSubagentPickerOpen(false);
     setDetailPrompts(null);
@@ -385,9 +543,6 @@ export default function CreateFromExpertDrawer({
         setFileContents(
           source.kind === "local-market" ? files : ensurePromptFiles(files),
         );
-        if (source.kind === "local-market") {
-          setLockedDependencies((data as LocalExpertDetail).lock);
-        }
         setOriginalFileContents(files);
         setDetailPrompts(normalizeQuickPrompts(data.quick_prompts));
         const welcome = data.welcome_message;
@@ -618,7 +773,10 @@ export default function CreateFromExpertDrawer({
 
   const { configFiles, skillGroups, subagentFiles } =
     groupExpertFiles(fileContents);
-  const showFilePreview = !fixedRelease;
+  // Local market releases use the same grouped preview as built-in experts.
+  // Their files remain read-only because the install API preserves the exact
+  // published snapshot and rejects composer overrides.
+  const showFilePreview = true;
   const selectedSkillSlugs = useMemo(() => {
     const slugs = new Set(skillGroups.map((group) => group.name));
     for (const skill of pendingHubSkills) slugs.add(skill.skill_name);
@@ -911,56 +1069,17 @@ export default function CreateFromExpertDrawer({
         />
       </Form>
 
-      {fixedRelease && (
-        <Collapse
-          items={[
-            {
-              key: "release",
-              label: t("experts.mdFilesTitle"),
-              children: detailLoading ? (
-                <Spin />
-              ) : (
-                <div style={{ display: "grid", gap: 12 }}>
-                  <div>
-                    <Typography.Text strong>
-                      {t("experts.localMarket.lockedDependencies")}
-                    </Typography.Text>
-                    <div style={{ marginTop: 8 }}>
-                      {lockedDependencies.map((dependency) => (
-                        <Tag key={dependency.version_id}>
-                          {dependency.resource_id} · v{dependency.version}
-                        </Tag>
-                      ))}
-                    </div>
-                  </div>
-                  <Collapse
-                    items={fileContents.map((file) => ({
-                      key: file.name,
-                      label: file.name,
-                      children: (
-                        <pre
-                          style={{
-                            whiteSpace: "pre-wrap",
-                            maxHeight: 240,
-                            overflow: "auto",
-                          }}
-                        >
-                          {file.content}
-                        </pre>
-                      ),
-                    }))}
-                  />
-                </div>
-              ),
-            },
-          ]}
-        />
-      )}
       {showFilePreview &&
         (detailLoading ? (
           <div style={{ textAlign: "center", padding: "16px 0" }}>
             <Spin size="small" />
           </div>
+        ) : fixedRelease ? (
+          <LocalReleasePreview
+            configFiles={configFiles}
+            skillGroups={skillGroups}
+            subagentFiles={subagentFiles}
+          />
         ) : (
           <Collapse
             ghost
@@ -980,7 +1099,9 @@ export default function CreateFromExpertDrawer({
                         margin: "0 0 8px",
                       }}
                     >
-                      {t("experts.mdFilesEditHint")}
+                      {fixedRelease
+                        ? t("experts.localMarket.locked")
+                        : t("experts.mdFilesEditHint")}
                     </p>
                     {configFiles.length === 0 ? (
                       <div
@@ -1021,7 +1142,7 @@ export default function CreateFromExpertDrawer({
                                 </span>
                               </span>
                             ),
-                            extra: (
+                            extra: fixedRelease ? undefined : (
                               <Button
                                 type="link"
                                 size="small"
@@ -1073,17 +1194,19 @@ export default function CreateFromExpertDrawer({
                         count: skillGroups.length + pendingHubSkills.length,
                       })}
                     </span>
-                    <Button
-                      type="link"
-                      size="small"
-                      style={{ padding: 0, height: "auto" }}
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        setSkillPickerOpen(true);
-                      }}
-                    >
-                      {t("experts.addSkill")}
-                    </Button>
+                    {!fixedRelease && (
+                      <Button
+                        type="link"
+                        size="small"
+                        style={{ padding: 0, height: "auto" }}
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setSkillPickerOpen(true);
+                        }}
+                      >
+                        {t("experts.addSkill")}
+                      </Button>
+                    )}
                   </div>
                 ),
                 children: (
@@ -1095,7 +1218,9 @@ export default function CreateFromExpertDrawer({
                         margin: "0 0 8px",
                       }}
                     >
-                      {t("experts.skillFilesEditHint")}
+                      {fixedRelease
+                        ? t("experts.localMarket.locked")
+                        : t("experts.skillFilesEditHint")}
                     </p>
                     {skillGroups.length === 0 &&
                     pendingHubSkills.length === 0 ? (
@@ -1135,7 +1260,7 @@ export default function CreateFromExpertDrawer({
                               </span>
                             </span>
                           ),
-                          extra: (
+                          extra: fixedRelease ? undefined : (
                             <Button
                               type="link"
                               size="small"
@@ -1203,7 +1328,7 @@ export default function CreateFromExpertDrawer({
                                         </span>
                                       </span>
                                     ),
-                                    extra: (
+                                    extra: fixedRelease ? undefined : (
                                       <Button
                                         type="link"
                                         size="small"
@@ -1296,17 +1421,19 @@ export default function CreateFromExpertDrawer({
                         count: subagentFiles.length,
                       })}
                     </span>
-                    <Button
-                      type="link"
-                      size="small"
-                      style={{ padding: 0, height: "auto" }}
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        setSubagentPickerOpen(true);
-                      }}
-                    >
-                      {t("experts.addSubagent")}
-                    </Button>
+                    {!fixedRelease && (
+                      <Button
+                        type="link"
+                        size="small"
+                        style={{ padding: 0, height: "auto" }}
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setSubagentPickerOpen(true);
+                        }}
+                      >
+                        {t("experts.addSubagent")}
+                      </Button>
+                    )}
                   </div>
                 ),
                 children: (
@@ -1318,7 +1445,9 @@ export default function CreateFromExpertDrawer({
                         margin: "0 0 8px",
                       }}
                     >
-                      {t("experts.subagentFilesEditHint")}
+                      {fixedRelease
+                        ? t("experts.localMarket.locked")
+                        : t("experts.subagentFilesEditHint")}
                     </p>
                     {subagentFiles.length === 0 ? (
                       <div
@@ -1357,7 +1486,7 @@ export default function CreateFromExpertDrawer({
                               </span>
                             </span>
                           ),
-                          extra: (
+                          extra: fixedRelease ? undefined : (
                             <span style={{ display: "inline-flex", gap: 4 }}>
                               <Button
                                 type="link"

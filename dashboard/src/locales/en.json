@@ -1232,7 +1232,12 @@
       "immutableRelease": "Immutable release",
       "lockedDependencies": "Locked skill dependencies",
       "files": "Expert files",
-      "noFiles": "This release has no previewable text files"
+      "noFiles": "This release has no previewable text files",
+      "previewPromptHint": "These files define the expert's identity, behavior, and working style. Select a file to preview its rendered content.",
+      "previewSkillHint": "Bundled skills are installed with the expert and become available in its workspace after creation.",
+      "previewSubagentHint": "Bundled subagents are installed with the expert and can be delegated to when needed.",
+      "previewFilesCount": "{{count}} files included",
+      "noBundledSubagents": "This release has no bundled subagents"
     }
   },
   "subagents": {

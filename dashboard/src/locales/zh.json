@@ -1232,7 +1232,12 @@
       "immutableRelease": "固定发布版本",
       "lockedDependencies": "固定技能依赖",
       "files": "专家文件预览",
-      "noFiles": "该版本没有可预览的文本文件"
+      "noFiles": "该版本没有可预览的文本文件",
+      "previewPromptHint": "这些文件共同定义专家的身份、行为和工作方式。点击文件名查看渲染后的内容。",
+      "previewSkillHint": "该版本附带的技能会随专家一起安装，创建后可在专家工作区中使用。",
+      "previewSubagentHint": "该版本附带的子智能体会随专家一起安装，由主智能体按需调用。",
+      "previewFilesCount": "包含 {{count}} 个文件",
+      "noBundledSubagents": "该版本没有附带子智能体"
     }
   },
   "subagents": {
