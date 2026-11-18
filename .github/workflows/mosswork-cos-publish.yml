@@ -38,6 +38,8 @@ jobs:
           mkdir -p release
           gh release download "$RELEASE_TAG" --repo "$GITHUB_REPOSITORY" --dir release
       - name: Publish assets to Tencent COS
+        env:
+          VERIFY_PUBLIC_SIGNED_MAC: ${{ inputs.release_tag == vars.MOSSWORK_SIGNED_BOOTSTRAP_RELEASE_TAG }}
         run: |
           set -euo pipefail
           [[ -n "$TENCENT_SECRET_ID" && -n "$TENCENT_SECRET_KEY" ]] || {

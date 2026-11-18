@@ -205,3 +205,12 @@ def test_older_recovery_keeps_newer_feed_and_installer_aliases(publisher):
     assert (latest / "desktop-update.json").read_bytes() == current
     for alias in CLIENTS:
         assert (latest / alias).read_bytes() == b"newer installer"
+
+
+def test_signed_mac_requires_distribution_record_before_updating_latest(publisher, monkeypatch):
+    run, _base, storage, _payloads = publisher
+    monkeypatch.setenv("VERIFY_PUBLIC_SIGNED_MAC", "true")
+    result = run(with_updates=True)
+    assert result.returncode != 0
+    assert "mosswork-darwin-arm64-build.json" in result.stderr
+    assert not (storage / "mosswork/release/latest").exists()

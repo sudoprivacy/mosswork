@@ -185,6 +185,10 @@ publish_latest() {
     echo 'FAIL: cannot verify the existing desktop update channel' >&2
     return "$promotion"
   fi
+  local mac_image="$ASSETS_DIR/${latest_client_sources[0]}"
+  if [[ "${VERIFY_PUBLIC_SIGNED_MAC:-false}" == true ]]; then
+    python3 "$SCRIPT_DIR/verify_public_mac_download.py" "$mac_image"
+  fi
   echo "Publishing latest aliases to $LATEST_URL/"
   for file in "${asset_files[@]}"; do
     file_name="${file##*/}"
@@ -200,6 +204,9 @@ publish_latest() {
   for index in "${!latest_client_aliases[@]}"; do
     verify_remote_size "$ASSETS_DIR/${latest_client_sources[$index]}" "$LATEST_URL/${latest_client_aliases[$index]}" --download
   done
+  if [[ "${VERIFY_PUBLIC_SIGNED_MAC:-false}" == true ]]; then
+    python3 "$SCRIPT_DIR/verify_public_mac_download.py" "$mac_image" --check-button
+  fi
   if [[ -f "$ASSETS_DIR/desktop-update.json" ]]; then
     coscmd upload -H "$LATEST_HEADERS" "$ASSETS_DIR/desktop-update.json" "$LATEST_PATH/desktop-update.json"
   fi
