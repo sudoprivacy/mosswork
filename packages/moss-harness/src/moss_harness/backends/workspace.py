@@ -502,6 +502,21 @@ class BackendWorkspace:
             raise PermissionError(msg) from exc
         return resolved
 
+    def check_subdirectory(self, root: str, path: str) -> None:
+        """Reject symlinks that redirect a local conversation listing into another directory."""
+        if not _has_backend_mount(self._backend):
+            return
+        project = self._workspace_dir / root
+        if project.resolve() != project or not (project / path).resolve().is_relative_to(project):
+            raise PermissionError("Directory outside conversation workspace")
+
+    def tool_path(self, relative: str) -> str:
+        """Backend-visible key for a workspace-relative filesystem tool argument."""
+        key = self._backend_storage_key(relative)
+        if key is None:
+            raise ValueError(f"Path outside backend root directory: {relative}")
+        return key.replace("\\", "/")
+
     def _backend_storage_key(
         self,
         path: str | Path | None,

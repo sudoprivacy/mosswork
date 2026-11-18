@@ -9,6 +9,8 @@ import {
   Pencil,
   Trash2,
   GitFork,
+  PanelRightClose,
+  PanelRightOpen,
 } from "lucide-react";
 import { showConfirmModal } from "../../../utils/confirmModal";
 import type { Session } from "../hooks/useSessions";
@@ -18,6 +20,35 @@ import styles from "../index.module.less";
 import { DESKTOP_DRAG_REGION_CLASS } from "../../../utils/desktopChrome";
 import { isImeComposing } from "../../../utils/ime";
 import { useCollapseThinking } from "../hooks/useCollapseThinking";
+
+export function WorkspaceToggle({
+  expanded,
+  disabled,
+  onClick,
+}: {
+  expanded: boolean;
+  disabled?: boolean;
+  onClick: () => void;
+}) {
+  const { t } = useTranslation();
+  const label = t(
+    expanded ? "chat.threadDirectory.collapse" : "chat.threadDirectory.expand",
+  );
+  const Icon = expanded ? PanelRightClose : PanelRightOpen;
+  return (
+    <button
+      type="button"
+      className={styles.menuBtn}
+      title={label}
+      aria-label={label}
+      aria-expanded={expanded}
+      disabled={disabled}
+      onClick={onClick}
+    >
+      <Icon size={18} strokeWidth={1.8} aria-hidden />
+    </button>
+  );
+}
 
 interface ChatTitleBarProps {
   session: Session;
@@ -29,6 +60,8 @@ interface ChatTitleBarProps {
   forkDisabled?: boolean;
   forkDisabledHint?: string;
   isTeam?: boolean;
+  workspaceExpanded?: boolean;
+  onToggleWorkspace?: () => void;
 }
 
 export default function ChatTitleBar({
@@ -41,6 +74,8 @@ export default function ChatTitleBar({
   forkDisabled,
   forkDisabledHint,
   isTeam = false,
+  workspaceExpanded = false,
+  onToggleWorkspace,
 }: ChatTitleBarProps) {
   const { t } = useTranslation();
   const [collapseThinking, setCollapseThinking] = useCollapseThinking(isTeam);
@@ -202,6 +237,12 @@ export default function ChatTitleBar({
           </div>
         )}
       </div>
+      {onToggleWorkspace && (
+        <WorkspaceToggle
+          expanded={workspaceExpanded}
+          onClick={onToggleWorkspace}
+        />
+      )}
     </div>
   );
 }

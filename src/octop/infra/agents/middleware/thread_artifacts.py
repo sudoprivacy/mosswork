@@ -104,6 +104,10 @@ class ThreadArtifactsMiddleware(AgentMiddleware[Any, Any]):
         path = raw_args.get("file_path") or raw_args.get("path")
         if not isinstance(path, str) or not path.strip():
             return request
+        from moss_harness.backends.thread_directory import active_thread_directory
+
+        if active_thread_directory.get():
+            return request  # The harness already resolved this turn's workspace path.
         rewritten = workspace_plan_path(path.strip(), self._workspace_dir)
         if rewritten == path:
             return request

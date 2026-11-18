@@ -1443,6 +1443,11 @@ class HarnessAgent:
             SkillFilterMiddleware(config=cfg),
         ]
 
+        if cfg.thread_workspaces:
+            from moss_harness.middleware.thread_workspace import ThreadWorkspaceMiddleware
+
+            chain.insert(0, ThreadWorkspaceMiddleware(self._workspace))
+
         if cfg.tool_guard_enabled:
             from moss_harness.middleware.tool_guard import ToolGuardMiddleware
 
@@ -1660,6 +1665,59 @@ class HarnessAgent:
             spec["tools"] = [t for t in spec["tools"] if _tool_name_of(t) != ASK_USER_TOOL_NAME]
         return specs
 
+    def _graph_subagents(self, tools: list[Any], model: Any, skills: list[str]) -> list[Any]:
+        resolved_subagents = self._resolve_subagents(parent_tools=tools)
+        if not self._config.thread_workspaces:
+            return resolved_subagents
+
+        from deepagents.middleware.subagents import GENERAL_PURPOSE_SUBAGENT
+        from deepagents.profiles.harness.harness_profiles import _harness_profile_for_model
+
+        from moss_harness.middleware.thread_workspace import ThreadWorkspaceMiddleware
+
+        # Declarative subagents compile their own filesystem tools. Give them
+        # the same directory binding as the parent, including the implicit GP.
+        gp = _harness_profile_for_model(model, None).general_purpose_subagent
+        if (gp is None or gp.enabled is not False) and not any(
+            spec["name"] == GENERAL_PURPOSE_SUBAGENT["name"] for spec in resolved_subagents
+        ):
+            gp_spec = dict(GENERAL_PURPOSE_SUBAGENT)
+            if gp is not None and gp.description is not None:
+                gp_spec["description"] = gp.description
+            if gp is not None and gp.system_prompt is not None:
+                gp_spec["system_prompt"] = gp.system_prompt
+            resolved_subagents.append({**gp_spec, "skills": skills})
+        return [
+            {**spec, "middleware": [ThreadWorkspaceMiddleware(self._workspace), *spec.get("middleware", [])]}
+            if "runnable" not in spec and "graph_id" not in spec
+            else spec
+            for spec in resolved_subagents
+        ]
+
+    def _workspace_prompt(self) -> str:
+        if self._config.thread_workspaces:
+            return (
+                "Routine file tools and shell commands work in this conversation's own directory. "
+                "Use relative paths such as generated/notes.txt. Agent instructions, skills and "
+                "inbound attachments remain available at their original workspace paths."
+            )
+        work_dir = self._agent_visible_workspace_dir()
+        # Soft policy for the model only — no tool rewrite / resolve remapping.
+        work_dir_text = work_dir.as_posix()
+        return (
+            f"Your working directory is {work_dir_text}. "
+            "Keep routine filesystem tool paths (ls, read_file, write_file, "
+            "edit_file, glob, grep) inside this workspace — prefer relative paths "
+            f"such as `.` or `SOUL.md`, or paths under {work_dir_text} "
+            f"(e.g. `{work_dir_text.rstrip('/')}/notes.txt`). "
+            "Do not treat `/` as the workspace: `/` is the backend root "
+            "(often the user home directory on Windows). "
+            "Do not invent host home prefixes like `/home/...` or `/Users/...`. "
+            "Leave the workspace only when the user explicitly asks. "
+            "For new AI-generated artifacts, prefer a subdirectory such as "
+            "`generated/` over the workspace root."
+        )
+
     def _build_graph(
         self,
         *,
@@ -1681,22 +1739,7 @@ class HarnessAgent:
             "debug": cfg.debug,
         }
         base_prompt = cfg.system_prompt.rstrip() if cfg.system_prompt else ""
-        work_dir = self._agent_visible_workspace_dir()
-        # Soft policy for the model only — no tool rewrite / resolve remapping.
-        work_dir_text = work_dir.as_posix()
-        directive = (
-            f"Your working directory is {work_dir_text}. "
-            "Keep routine filesystem tool paths (ls, read_file, write_file, "
-            "edit_file, glob, grep) inside this workspace — prefer relative paths "
-            f"such as `.` or `SOUL.md`, or paths under {work_dir_text} "
-            f"(e.g. `{work_dir_text.rstrip('/')}/notes.txt`). "
-            "Do not treat `/` as the workspace: `/` is the backend root "
-            "(often the user home directory on Windows). "
-            "Do not invent host home prefixes like `/home/...` or `/Users/...`. "
-            "Leave the workspace only when the user explicitly asks. "
-            "For new AI-generated artifacts, prefer a subdirectory such as "
-            "`generated/` over the workspace root."
-        )
+        directive = self._workspace_prompt()
         if cfg.media_generation is None:
             directive += (
                 " Image and video generation tools are not configured in this runtime. "
@@ -1715,7 +1758,7 @@ class HarnessAgent:
         kwargs["system_prompt"] = (
             base_prompt + "\n\n" + directive + "\n\n" + render_slash_skill_prompt(language=cfg.language)
         ).strip()
-        resolved_subagents = self._resolve_subagents(parent_tools=tools)
+        resolved_subagents = self._graph_subagents(tools, kwargs["model"], skills)
         if resolved_subagents:
             kwargs["subagents"] = resolved_subagents
         if skills:

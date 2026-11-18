@@ -30,7 +30,7 @@ vi.mock("../../../components/BrowserWorkspace/ChatDockPanelShell", () => ({
   ),
 }));
 
-vi.mock("../../Agent/Workspace/components/WorkspaceDrawer", () => ({
+vi.mock("./ThreadWorkspacePanel", () => ({
   default: () => <div data-testid="workspace-drawer" />,
 }));
 

@@ -29,6 +29,7 @@ import { getApiUrl } from "../../../api/config";
 import { getAuthToken } from "../../../api/request";
 import { mossworkThreadsApi } from "../../../api/modules/mossworkThreads";
 import { isPendingThread } from "./useSessions";
+import { PENDING_THREAD_ID } from "../constants";
 import type { TokenUsage } from "../../../api/types";
 import { contextUsageFromState } from "../utils/contextUsage";
 import { buildDashboardChatWsUrl } from "../../../api/modules/wsChat";
@@ -110,53 +111,6 @@ function continueTokenOpts(state: SessionStreamState): {
 // ── Focused chat session (reconnect thrash only for the visible tab) ──────
 
 let focusedChatSessionId: string | null = null;
-
-// The server persists this contract on every thread. Unknown entries use the
-// server path so a newly-created Desktop server thread cannot accidentally
-// request a local directory.
-const executionModeByThread = new Map<string, "server" | "local">();
-const projectBindingByThread = new Map<
-  string,
-  {
-    project_id: string;
-    binding_revision: number;
-    grant_id?: string | null;
-    grant_version?: number | null;
-  }
->();
-export function setThreadExecutionMode(
-  threadId: string,
-  mode: "server" | "local" | null | undefined,
-): void {
-  if (!threadId) return;
-  if (!mode) {
-    executionModeByThread.delete(threadId);
-    return;
-  }
-  executionModeByThread.set(threadId, mode);
-}
-export function setThreadProjectBinding(
-  threadId: string,
-  binding:
-    | {
-        project_id: string;
-        binding_revision: number;
-        grant_id?: string | null;
-        grant_version?: number | null;
-      }
-    | null
-    | undefined,
-): void {
-  if (!threadId) return;
-  if (!binding?.project_id) {
-    projectBindingByThread.delete(threadId);
-    return;
-  }
-  projectBindingByThread.set(threadId, binding);
-}
-function usesLocalRuntime(threadId: string): boolean {
-  return isCompanyDesktop() && executionModeByThread.get(threadId) === "local";
-}
 
 /** Tell the store which chat thread the UI is currently showing. */
 export function setFocusedChatSession(sessionId: string | null): void {
@@ -1152,7 +1106,7 @@ function closeLiveSocket(
 
 /** Request cancellation without closing the stream or claiming completion. */
 export async function cancelStream(sessionId: string, agentId: string) {
-  if (usesLocalRuntime(sessionId)) {
+  if (isCompanyDesktop()) {
     const importing = localAttachmentImports.get(sessionId);
     if (
       importing &&
@@ -1207,8 +1161,6 @@ export function removeSession(sessionId: string) {
   clearStreamActivity(sessionId);
   clearStreamWatchdog(sessionId);
   closeLiveSocket(sessionId, { intentional: true, userCancelled: true });
-  executionModeByThread.delete(sessionId);
-  projectBindingByThread.delete(sessionId);
 }
 
 /** Drop a session map key without destroying the underlying state object.
@@ -1231,6 +1183,9 @@ export function detachSessionKey(sessionId: string): void {
 export function renameSessionKey(oldId: string, newId: string) {
   const state = sessionStates.get(oldId);
   if (state && oldId !== newId) {
+    // A newly created thread has no earlier page. Its optimistic first turn
+    // is already in this state when the server confirms the thread ID.
+    if (oldId === PENDING_THREAD_ID) state.historyHydrated = true;
     sessionStates.set(newId, state);
     // Move live socket + resume bookkeeping to the canonical thread id so
     // loadHistory / attachThread for *newId* still see the open stream.
@@ -2808,7 +2763,7 @@ export async function attachThread(
   if (!agentId || !threadId || threadId === "__empty__") return;
   // Local tasks own their native stream. Opening history must never subscribe
   // to the server execution loop or replay a task after a WebView restart.
-  if (usesLocalRuntime(threadId)) {
+  if (isCompanyDesktop()) {
     await attachLocalRuntime(sessionId, threadId, onStreamEnd);
     return;
   }
@@ -3419,8 +3374,7 @@ export async function sendTurn(
   state.streamId = "";
   state.streamBlockType = "";
   beginStream(state, sessionId);
-  const routingThreadId = threadId || sessionId;
-  state.localPreparing = usesLocalRuntime(routingThreadId);
+  state.localPreparing = isCompanyDesktop();
   state.runUsage = null;
   usageSamplesByState.delete(state);
   notify(state);
@@ -3454,8 +3408,8 @@ export async function sendTurn(
     onStreamEnd?.();
   };
 
-  if (usesLocalRuntime(routingThreadId)) {
-    const localThreadId = routingThreadId.trim();
+  if (isCompanyDesktop()) {
+    const localThreadId = (threadId || sessionId).trim();
     localStreams.add(sessionId);
     const beforeEdit = editMessageId ? state.messages : undefined;
     const editToken = editingLocalSessions.get(sessionId);
@@ -3578,9 +3532,6 @@ export async function sendTurn(
           ...(reasoningEffort ? { reasoning_effort: reasoningEffort } : {}),
           ...(conversationMode ? { conversation_mode: conversationMode } : {}),
           ...(hitlPolicy ? { hitl_policy: hitlPolicy } : {}),
-          ...(projectBindingByThread.has(localThreadId)
-            ? projectBindingByThread.get(localThreadId)
-            : {}),
         },
         (event) => {
           if (state.abortController !== controller) return;
@@ -3746,7 +3697,7 @@ export async function resumeHitl(
   pendingId?: string,
 ): Promise<void> {
   const state = getOrCreate(sessionId);
-  if (usesLocalRuntime(threadId)) {
+  if (isCompanyDesktop()) {
     const runtime = window.__mossworkRuntime;
     if (pendingId?.startsWith("local-") && runtime?.resumeHitl) {
       try {
@@ -4365,7 +4316,7 @@ export function sendSteerWhileBusy(
       : undefined;
   if (!trimmed && !attachments) return "empty";
   const state = getOrCreate(sessionId);
-  const company = usesLocalRuntime(sessionId);
+  const company = isCompanyDesktop();
   const runtime = company ? window.__mossworkRuntime : undefined;
   const live = liveSockets.get(sessionId);
   if (company) {
@@ -4459,7 +4410,7 @@ export function withdrawCommittedSteer(
   if (!state.activeTurnId || pending.pendingId === pending.clientPendingId) {
     return "pending_ack";
   }
-  if (usesLocalRuntime(sessionId)) {
+  if (isCompanyDesktop()) {
     const runtime = window.__mossworkRuntime;
     if (!runtime?.removeSteer) return "pending_ack";
     state.pendingSteers = state.pendingSteers.map((item) =>

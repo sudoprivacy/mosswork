@@ -1757,6 +1757,16 @@
     "openTrajectory": "运行轨迹",
     "openPhone": "打开远程手机",
     "openWorkspace": "工作区",
+    "threadDirectory": {
+      "expand": "展开工作区",
+      "collapse": "收起工作区",
+      "server": "moss-server",
+      "desktop": "本机",
+      "reveal": "打开文件夹",
+      "legacy": "此前会话文件",
+      "desktopRequired": "请在运行此会话的电脑上用桌面客户端打开工作区。",
+      "pending": "首次在本机运行时会创建会话目录。"
+    },
     "editFileCard": "编辑了{{count}}个文件",
     "fileWorkspace": "工作区文件",
     "fileWorkspaceHint": "专家已生成或编辑文件",

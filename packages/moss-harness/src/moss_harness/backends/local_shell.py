@@ -19,6 +19,7 @@ from typing import Any
 from deepagents.backends import LocalShellBackend
 from deepagents.backends.protocol import ExecuteResponse
 
+from moss_harness.backends.thread_directory import active_thread_directory
 from moss_harness.runtime_env import resolve_local_execute_env
 
 # Quoted absolute path, or bare absolute token (heuristic; not a full shell parser).
@@ -260,8 +261,8 @@ class HarnessLocalShellBackend(LocalShellBackend):
 
     def _host_execute_cwd(self) -> Path:
         if self._workspace_dir is not None and self._workspace_dir.is_dir():
-            return self._workspace_dir
-        return Path(self.cwd)
+            return self._workspace_dir / active_thread_directory.get()
+        return Path(self.cwd) / active_thread_directory.get()
 
     def _present_execute_response(self, response: ExecuteResponse) -> ExecuteResponse:
         if not self.virtual_mode or is_host_root(self.cwd):

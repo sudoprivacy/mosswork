@@ -1,4 +1,5 @@
 import asyncio
+import hashlib
 import json
 import sys
 from pathlib import Path
@@ -15,53 +16,38 @@ from octop.infra.company_runtime.runtime import EnterpriseRuntime
 from tests.support.http import serve_http
 
 
-@pytest.mark.parametrize("with_project", [False, True])
-async def test_explicit_local_thread_preserves_project_admission_fields(
-    company, tmp_path, with_project
+@pytest.mark.parametrize("existing_project", [None, "saved-project"])
+async def test_desktop_task_uses_thread_folder_or_existing_project(
+    company, tmp_path, existing_project
 ):
-    from octop.infra.company_runtime.client import CompanyServiceError
     from tests.unit.company_runtime.test_memory_approvals import native_runtime
 
-    server, client, _, _ = company
+    server, client, _, owner = company
     install_agent(server)
-    created = await client.request("threads", {"agent_id": "expert", "execution_mode": "local"})
-    thread = created["thread_id"]
-    assert created["execution_mode"] == "local"
+    thread = (await client.request("threads", {"agent_id": "expert"}))["thread_id"]
     runtime = native_runtime(client, tmp_path, [])
-    params = {
-        "task_id": "explicit-local-project",
-        "thread_id": thread,
-        "agent_id": "expert",
-        "text": "Create the local report",
-    }
-    project = {
-        "project_id": "fixture-owned-project",
-        "binding_revision": 7,
-        "grant_id": "fixture-project-grant",
-        "grant_version": 3,
-    }
+    task = {"agent_id": "expert", "thread_id": thread, "text": "Create the local report"}
     try:
-        if not with_project:
-            with pytest.raises(CompanyServiceError, match="project_binding_required"):
-                await runtime.start(params)
-            assert server.services.company_runtime_repo.task(params["task_id"]) is None
-            return
-        await runtime.start({**params, **project})
+        if existing_project:
+            # A v31 client has already used a named folder for this conversation.
+            with server.services.db.transaction() as conn:
+                installation = hashlib.sha256(runtime.installation_token.encode()).hexdigest()
+                conn.execute(
+                    "INSERT INTO company_runtime_threads VALUES(?,?,?,?,?,?,?)",
+                    (thread, owner, "expert", "device0", thread, installation, 0),
+                )
+                conn.execute(
+                    "INSERT INTO thread_project_bindings "
+                    "(thread_id,owner_user_id,agent_id,project_id,display_name,created_at,updated_at) "
+                    "VALUES (?,?,?,?,?,?,?)",
+                    (thread, owner, "expert", existing_project, existing_project, 0, 0),
+                )
+        await runtime.start({**task, "task_id": "native-report"})
         await asyncio.wait_for(runtime.work[thread], 15)
         assert runtime.tasks[thread]["status"] == "completed"
-        assert (runtime.workspace / project["project_id"] / "report.txt").read_text() == (
+        assert (runtime.workspace / (existing_project or thread) / "report.txt").read_text() == (
             "local report 42"
         )
-        with server.services.db.connect() as conn:
-            row = conn.execute(
-                "SELECT project_id,binding_revision,grant_id,grant_version "
-                "FROM thread_project_bindings WHERE thread_id=?",
-                (thread,),
-            ).fetchone()
-        assert dict(row) == project
-        stored = server.services.company_runtime_repo.task(params["task_id"])
-        request = json.loads(stored["request_json"])
-        assert {key: request[key] for key in project} == project
     finally:
         await runtime.close()
 

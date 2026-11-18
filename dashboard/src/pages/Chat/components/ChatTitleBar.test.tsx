@@ -1,6 +1,6 @@
 import { fireEvent, render, screen } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
-import ChatTitleBar from "./ChatTitleBar";
+import ChatTitleBar, { WorkspaceToggle } from "./ChatTitleBar";
 import type { Session } from "../hooks/useSessions";
 
 const session: Session = {
@@ -14,6 +14,28 @@ const session: Session = {
 const noop = vi.fn();
 
 describe("ChatTitleBar", () => {
+  it("shows the workspace action that matches the current panel state", () => {
+    const toggle = vi.fn();
+    const { rerender } = render(
+      <WorkspaceToggle expanded={false} onClick={toggle} />,
+    );
+    const button = screen.getByRole("button", {
+      name: "chat.threadDirectory.expand",
+    });
+    expect(button).toHaveAttribute("aria-expanded", "false");
+    expect(
+      button.querySelector(".lucide-panel-right-open"),
+    ).toBeInTheDocument();
+    fireEvent.click(button);
+    expect(toggle).toHaveBeenCalledOnce();
+    rerender(<WorkspaceToggle expanded onClick={toggle} />);
+    expect(button).toHaveAccessibleName("chat.threadDirectory.collapse");
+    expect(button).toHaveAttribute("aria-expanded", "true");
+    expect(
+      button.querySelector(".lucide-panel-right-close"),
+    ).toBeInTheDocument();
+  });
+
   it("keeps the more menu beside the title edit control", () => {
     render(
       <ChatTitleBar

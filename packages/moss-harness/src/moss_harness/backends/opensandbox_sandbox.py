@@ -28,6 +28,8 @@ from deepagents.backends.protocol import (
 )
 from deepagents.backends.sandbox import BaseSandbox
 
+from moss_harness.backends.thread_directory import active_thread_directory
+
 logger = logging.getLogger(__name__)
 
 _DEFAULT_IMAGE = "python:3.12"
@@ -137,6 +139,9 @@ class OpenSandbox(BaseSandbox):
         *,
         timeout: int | None = None,
     ) -> ExecuteResponse:
+        directory = active_thread_directory.get()
+        if directory:
+            command = f"cd {shlex.quote('/' + directory)} || exit 1\n{command}"
         effective = timeout if timeout is not None else self._default_timeout
         opts = None
         try:
@@ -167,6 +172,11 @@ class OpenSandbox(BaseSandbox):
             exit_code=int(getattr(execution, "exit_code", 0) or 0),
             truncated=False,
         )
+
+    def mkdir_path(self, path: str) -> None:
+        result = self.execute(f"mkdir -p {shlex.quote(path)}")
+        if result.exit_code not in (0, None):
+            raise OSError(result.output)
 
     def upload_files(self, files: list[tuple[str, bytes]]) -> list[FileUploadResponse]:
         from opensandbox.models.filesystem import WriteEntry

@@ -11,7 +11,6 @@ import {
   Globe,
   FilePen,
   Terminal,
-  FolderOpen,
   Activity,
 } from "lucide-react";
 import { Alert, Button, Tooltip } from "antd";
@@ -94,7 +93,7 @@ import {
   dockTabIdForToolCall,
 } from "./ChatToolDockContext";
 import ChatSidebarPanel from "./components/ChatSidebarPanel";
-import ChatTitleBar from "./components/ChatTitleBar";
+import ChatTitleBar, { WorkspaceToggle } from "./components/ChatTitleBar";
 import TeamChatBadge from "./components/TeamChatBadge";
 import ComposerTodoProgress from "./components/ComposerTodoProgress";
 import ModelStatusBanner from "./components/ModelStatusBanner";
@@ -436,12 +435,8 @@ function ChatPageInner() {
     focusToolUiTab,
     closeTab: closeDockTab,
     setActiveTab: setDockActiveTab,
-  } = useChatDockPanel(
-    isMobile,
-    resolvedAgentId,
-    activeThreadId,
-    !sharedExpertViewer,
-  );
+  } = useChatDockPanel(isMobile, resolvedAgentId, activeThreadId);
+  const workspaceExpanded = dockOpen && activeTabId === "workspace";
 
   const chromeCheckInFlightRef = useRef(false);
   const bridgeConnectionId =
@@ -515,9 +510,7 @@ function ChatPageInner() {
       onOpenBrowser: handleOpenBrowserTab,
     };
     if (!sharedExpertViewer) {
-      handlers.onOpenWorkspace = openWorkspaceTab;
-      handlers.workspaceDisabled = !agentChatReady;
-      handlers.workspaceDisabledHint = t("workspace.requiresRunning");
+      if (activeThreadId) handlers.onOpenWorkspace = openWorkspaceTab;
       handlers.onOpenFiles = openFileList;
     }
     if (canTerminal) {
@@ -525,14 +518,13 @@ function ChatPageInner() {
     }
     return handlers;
   }, [
-    agentChatReady,
+    activeThreadId,
     canTerminal,
     handleOpenBrowserTab,
     openFileList,
     openTerminalTab,
     openWorkspaceTab,
     sharedExpertViewer,
-    t,
   ]);
 
   const closeToolUiPanel = useCallback(
@@ -557,7 +549,9 @@ function ChatPageInner() {
 
   const companyHistoryReadOnly =
     Boolean(activeAgent?.history_only) ||
-    (!isCompanyDesktop() && composerSession?.executionMode === "local");
+    (isCompanyDesktop() &&
+      composerSession?.executionLocation === "server" &&
+      Boolean(composerSession.hasMessages));
 
   const panelFilePaths = useMemo(() => {
     const fromTabs = openTabs
@@ -949,22 +943,6 @@ function ChatPageInner() {
     clearQueued();
     startNewChat();
   }, [clearQueued, startNewChat]);
-
-  const handleContinueServer = useCallback(async () => {
-    if (!resolvedAgentId || !activeThreadId) return;
-    try {
-      const created = await mossworkThreadsApi.continueServer(
-        resolvedAgentId,
-        activeThreadId,
-      );
-      await ensureThreadInList(created.thread_id);
-      navigate(`/chat/${resolvedAgentId}/${created.thread_id}`);
-    } catch (error) {
-      antMessage.error(
-        error instanceof Error ? error.message : "继续到服务端失败",
-      );
-    }
-  }, [activeThreadId, ensureThreadInList, navigate, resolvedAgentId]);
 
   useEffect(() => {
     if (!pageVisible) return;
@@ -1463,19 +1441,11 @@ function ChatPageInner() {
                     >
                       <ProfileIcon size={18} strokeWidth={1.8} />
                     </button>
-                    <button
-                      className={styles.menuBtn}
+                    <WorkspaceToggle
                       onClick={toggleWorkspacePanel}
-                      disabled={!agentChatReady}
-                      title={
-                        agentChatReady
-                          ? t("chat.openWorkspace", "工作区")
-                          : t("workspace.requiresRunning")
-                      }
-                      aria-label={t("chat.openWorkspace", "工作区")}
-                    >
-                      <FolderOpen size={18} strokeWidth={1.8} />
-                    </button>
+                      disabled={!activeThreadId}
+                      expanded={workspaceExpanded}
+                    />
                     <button
                       className={styles.menuBtn}
                       onClick={() => void handleToggleBrowserPanel()}
@@ -1516,6 +1486,10 @@ function ChatPageInner() {
                 forkDisabled={sessionForkDisabled}
                 forkDisabledHint={sessionForkDisabledHint}
                 isTeam={isTeamChat}
+                workspaceExpanded={workspaceExpanded}
+                onToggleWorkspace={
+                  sharedExpertViewer ? undefined : toggleWorkspacePanel
+                }
               />
             )}
 
@@ -1645,27 +1619,6 @@ function ChatPageInner() {
                             aria-label={profileOpenLabel}
                           >
                             <ProfileIcon size={20} strokeWidth={2.1} />
-                          </button>
-                        </span>
-                      </Tooltip>
-                      <Tooltip
-                        title={
-                          agentChatReady
-                            ? t("chat.openWorkspace", "工作区")
-                            : t("workspace.requiresRunning")
-                        }
-                        mouseEnterDelay={0.35}
-                        placement="left"
-                      >
-                        <span className={styles.chatFloatBtnWrap}>
-                          <button
-                            type="button"
-                            className={styles.chatFloatBtn}
-                            disabled={!agentChatReady}
-                            onClick={toggleWorkspacePanel}
-                            aria-label={t("chat.openWorkspace", "工作区")}
-                          >
-                            <FolderOpen size={20} strokeWidth={2.1} />
                           </button>
                         </span>
                       </Tooltip>
@@ -1872,13 +1825,11 @@ function ChatPageInner() {
                 message={
                   activeAgent?.history_only
                     ? t("expertAccess.historyOnlyHint")
-                    : "此会话为本地执行，会话历史可查看但不能在 Web 端执行。"
+                    : "此会话的历史由服务器执行，仅供查看。请新建会话开始本机任务。"
                 }
                 action={
                   activeAgent?.history_only ? undefined : (
-                    <Button onClick={() => void handleContinueServer()}>
-                      在服务端继续
-                    </Button>
+                    <Button onClick={handleNewChat}>新建本机会话</Button>
                   )
                 }
               />

@@ -594,6 +594,7 @@ class HarnessAgentConfig:
     # (legacy). Persona markdown such as ``AGENTS.md`` always stays at the
     # workspace root.
     system_files_path: str = ""
+    thread_workspaces: bool = False
     skills_dir: str | Path | Sequence[str | Path] | None = None
     # Slug or frontmatter ``name`` values hidden from the skills system prompt only.
     skills_disabled: frozenset[str] = field(default_factory=frozenset)
@@ -1051,6 +1052,7 @@ class HarnessAgentConfig:
             "name": self.name,
             "workspace_dir": _path_to_str(self.workspace_dir),
             "system_files_path": self.system_files_path,
+            "thread_workspaces": self.thread_workspaces,
             "skills_dir": _path_dirs_to_jsonable(self.skills_dir),
             "skills_disabled": sorted(self.skills_disabled),
             "tools_disabled": sorted(self.tools_disabled),

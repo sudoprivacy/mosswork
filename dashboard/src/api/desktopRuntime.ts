@@ -58,10 +58,6 @@ export interface RuntimeStart {
   reasoning_effort?: string;
   conversation_mode?: string;
   hitl_policy?: { mode: string; tools?: string[] } | null;
-  project_id?: string;
-  binding_revision?: number;
-  grant_id?: string | null;
-  grant_version?: number | null;
 }
 export interface DesktopRuntimeBridge {
   version: 1;
@@ -102,6 +98,16 @@ export interface DesktopRuntimeBridge {
     client_pending_id: string;
     pending_id: string;
   }): Promise<Record<string, unknown>>;
+  threadWorkspace?(params: {
+    thread_id: string;
+    agent_id: string;
+    token: string;
+    path: string;
+    reveal?: boolean;
+  }): Promise<{
+    root: string;
+    entries: import("./modules/mossworkThreads").ThreadDirectoryEntry[];
+  } | null>;
   reveal(params: { path: string; sha256?: string }): Promise<void>;
   previewImage?(params: {
     path: string;

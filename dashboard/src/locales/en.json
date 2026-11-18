@@ -1757,6 +1757,16 @@
     "openTrajectory": "Trajectory",
     "openPhone": "Open remote phone",
     "openWorkspace": "Workspace",
+    "threadDirectory": {
+      "expand": "Expand workspace",
+      "collapse": "Collapse workspace",
+      "server": "Server",
+      "desktop": "This computer",
+      "reveal": "Open folder",
+      "legacy": "Earlier conversation files",
+      "desktopRequired": "Open this workspace in the desktop client on the computer that ran the conversation.",
+      "pending": "The local folder will be created when the first turn starts."
+    },
     "editFileCard": "Edited {{count}} files",
     "fileWorkspace": "Workspace files",
     "fileWorkspaceHint": "Agent created or edited a file",

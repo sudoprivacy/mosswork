@@ -9,9 +9,6 @@ const mocks = vi.hoisted(() => ({
 vi.mock("../api/modules/mossworkThreads", () => ({
   mossworkThreadsApi: { create: mocks.create, rebind: mocks.rebind },
 }));
-vi.mock("../pages/Chat/hooks/chatStore", () => ({
-  setThreadExecutionMode: vi.fn(),
-}));
 vi.mock("../pages/Chat/hooks/useChat", () => ({
   useChat: (threadId: string | null) => ({
     messages: threadId ? [{ id: threadId }] : [],

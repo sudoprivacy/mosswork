@@ -35,7 +35,7 @@ import { resolveBrowserProfile } from "../../../utils/browserProfile";
 import type { DockTab, DockTabId } from "../hooks/useChatDockPanel";
 import { dockFileBasename } from "../utils/dockFilePath";
 import styles from "../index.module.less";
-import WorkspaceDrawer from "../../Agent/Workspace/components/WorkspaceDrawer";
+import ThreadWorkspacePanel from "./ThreadWorkspacePanel";
 import ChatDockFileList from "./ChatDockFileList";
 import FilePanelContent from "./FilePanelContent";
 import KnowledgeCitationPanelContent from "./KnowledgeCitationPanelContent";
@@ -211,9 +211,6 @@ const ChatDockPanel: React.FC<ChatDockPanelProps> = ({
   const { t } = useTranslation();
   const currentUser = useCurrentUser();
   const [addTabMenuOpen, setAddTabMenuOpen] = useState(false);
-  const [workspaceMounted, setWorkspaceMounted] = useState(
-    openTabs.some((tab) => tab.kind === "workspace"),
-  );
   const [browserMounted, setBrowserMounted] = useState(
     openTabs.some((tab) => tab.kind === "browser"),
   );
@@ -245,10 +242,8 @@ const ChatDockPanel: React.FC<ChatDockPanelProps> = ({
   >({});
 
   useEffect(() => {
-    const hasWorkspace = openTabs.some((tab) => tab.kind === "workspace");
     const hasBrowser = openTabs.some((tab) => tab.kind === "browser");
     const hasTerminal = openTabs.some((tab) => tab.kind === "terminal");
-    setWorkspaceMounted(hasWorkspace);
     setBrowserMounted(hasBrowser);
     setTerminalMounted(hasTerminal);
     const openFileById = new Map(
@@ -582,21 +577,14 @@ const ChatDockPanel: React.FC<ChatDockPanelProps> = ({
           );
         })}
 
-        {workspaceMounted && (
-          <div
-            className={styles.dockTabBody}
-            hidden={activeTab?.kind !== "workspace"}
-            style={{
-              display: activeTab?.kind === "workspace" ? "flex" : "none",
-            }}
-          >
-            <WorkspaceDrawer
-              agentId={agentId}
-              open
-              onClose={() => onCloseTab("workspace")}
-              embedded
-            />
-          </div>
+        {surfaceVisible && threadId && activeTab?.kind === "workspace" && (
+          <ThreadWorkspacePanel
+            key={JSON.stringify([agentId, threadId])}
+            agentId={agentId}
+            threadId={threadId}
+            streaming={isStreamingTurn}
+            onOpenFile={onOpenFile}
+          />
         )}
 
         {browserMounted && (
