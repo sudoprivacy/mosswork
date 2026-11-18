@@ -104,6 +104,55 @@ func TestBootstrapCommitsSameOriginPageBeforeStrictCookieNavigation(t *testing.T
 	}
 }
 
+func TestPackagedAccountPageUsesTheSelectedPublicLoginMode(t *testing.T) {
+	mode := "canonical"
+	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Header.Get("Authorization") != "" || r.Header.Get("Cookie") != "" || r.Method != "GET" {
+			t.Error("credentials reached a public sign-in probe")
+		}
+		switch r.URL.Path {
+		case "/api/identity/status":
+			if mode == "canonical" {
+				io.WriteString(w, `{"mode":"canonical","phone_login_available":true,"password_login_available":false}`)
+			} else {
+				w.WriteHeader(http.StatusUnauthorized)
+			}
+		case "/api/setup/status":
+			if mode == "blocked" {
+				w.WriteHeader(http.StatusForbidden)
+				return
+			}
+			io.WriteString(w, `{"setup_required":false}`)
+		case "/api/auth/captcha":
+			io.WriteString(w, `{"provider":"slider"}`)
+		default:
+			t.Errorf("unexpected request %s", r.URL.Path)
+		}
+	}))
+	defer upstream.Close()
+	s, err := Start(upstream.URL, bundle(t), t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer s.Close()
+	target := s.Origin + "/api/identity/status"
+	if code, _ := read(t, http.DefaultClient, target); code != 403 {
+		t.Fatal(code)
+	}
+	client := connect(t, s)
+	if code, body := read(t, client, target); code != 200 || !strings.Contains(body, `"mode":"canonical"`) {
+		t.Fatal(code, body)
+	}
+	mode = "legacy"
+	if code, body := read(t, client, target); code != 200 || !strings.Contains(body, `"mode":"standalone"`) {
+		t.Fatal(code, body)
+	}
+	mode = "blocked"
+	if code, _ := read(t, client, target); code != 503 {
+		t.Fatal(code)
+	}
+}
+
 func TestBootstrapStillRejectsForeignRequests(t *testing.T) {
 	s, err := Start("https://company.example", bundle(t), t.TempDir())
 	if err != nil {

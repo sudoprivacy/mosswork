@@ -1,4 +1,16 @@
 {
+  "darwin-amd64": [
+    {
+      "url": "https://ffmpeg.martin-riedl.de/download/macos/amd64/1787081194_9.0.1/ffmpeg.zip",
+      "sha256": "5bdead62ff504ab9b447cc72b212c4fb481e3f7de5877d427a51bee8136dda40",
+      "files": ["ffmpeg"]
+    },
+    {
+      "url": "https://ffmpeg.martin-riedl.de/download/macos/amd64/1787081194_9.0.1/ffprobe.zip",
+      "sha256": "34511bbcf1988ad2886023bf5ace4f44cf62e6defeb3d194d6f7619e5b061f7f",
+      "files": ["ffprobe"]
+    }
+  ],
   "darwin-arm64": [
     {
       "url": "https://sudowork-runtime-1309794936.cos.accelerate.myqcloud.com/ffmpeg/autobuild-2026-09-05-13-10/ffmpeg-darwin-arm64.tar.gz",

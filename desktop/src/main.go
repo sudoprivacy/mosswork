@@ -251,7 +251,7 @@ func (a *App) boot() {
 		// The bundled employee form is immediately usable, including offline
 		// server editing. There is no preliminary connection screen.
 		if s.CompanyRemember {
-			a.resumeCompanyLogin(companyServerURL(s))
+			a.resumeCompanyLogin(companyServerURL(s), s.CompanyAccountLogin)
 		}
 		return
 	}
@@ -399,6 +399,13 @@ func (a *App) requestQuit() {
 func main() {
 	// Helpers must run before tool preparation, account loading or GUI startup.
 	updater.HandleHelperMode()
+	if len(os.Args) == 2 && os.Args[1] == "--verify-private-payload" {
+		if err := verifyPrivatePayload(); err != nil {
+			log.Print(err)
+			os.Exit(1)
+		}
+		return
+	}
 	if len(os.Args) == 2 && os.Args[1] == "--verify-update-payload" {
 		if err := verifyDesktopUpdatePayload(); err != nil {
 			log.Print(err)
@@ -407,9 +414,10 @@ func main() {
 		return
 	}
 	store := &settingsStore{cur: loadSettings()}
-	if companyOnly {
-		// Tool verification needs no login or company credentials. Start it
-		// alongside the login window; the worker joins the same preparation.
+	// The unified installer opens the login UI first. Its company worker
+	// verifies and extracts the runtime on first use in company_runtime.go.
+	bootstrapIncluded := privateManifestSHA256 != "" && privateChecksumsSHA256 != ""
+	if companyOnly && !bootstrapIncluded {
 		go func() { _, _ = ensureCompanyPortable() }()
 	}
 	api := newApp(store, defaultCompanyJournal())
@@ -452,6 +460,9 @@ func main() {
 	initialURL := "/"
 	if companyOnly || store.get().ConnectionMode != "local" {
 		initialURL = "/login.html"
+		if bootstrapIncluded && store.get().CompanyURL == "" && api.companyURL != "" {
+			initialURL += "?companyDefault=1"
+		}
 		api.loginVisible = true
 	}
 	win := app.Window.NewWithOptions(application.WebviewWindowOptions{

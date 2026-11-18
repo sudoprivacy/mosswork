@@ -2,6 +2,7 @@ package main
 
 import (
 	"encoding/json"
+	"errors"
 	"os"
 	"path/filepath"
 	"runtime"
@@ -17,14 +18,15 @@ const (
 
 // Settings is persisted at ~/.mosswork/desktop-settings.json
 type Settings struct {
-	Locale          Locale `json:"locale"`
-	Autostart       bool   `json:"autostart"`
-	MinimizeToTray  bool   `json:"minimizeToTray"`
-	PreventSleep    bool   `json:"preventSleep"`
-	Port            int    `json:"port,omitempty"`
-	ConnectionMode  string `json:"connectionMode,omitempty"`
-	CompanyURL      string `json:"companyUrl,omitempty"`
-	CompanyRemember bool   `json:"companyRemember,omitempty"`
+	Locale              Locale `json:"locale"`
+	Autostart           bool   `json:"autostart"`
+	MinimizeToTray      bool   `json:"minimizeToTray"`
+	PreventSleep        bool   `json:"preventSleep"`
+	Port                int    `json:"port,omitempty"`
+	ConnectionMode      string `json:"connectionMode,omitempty"`
+	CompanyURL          string `json:"companyUrl,omitempty"`
+	CompanyRemember     bool   `json:"companyRemember,omitempty"`
+	CompanyAccountLogin bool   `json:"companyAccountLogin,omitempty"`
 }
 
 func defaultSettings() Settings {
@@ -109,6 +111,7 @@ func (st *settingsStore) save(next Settings) error {
 	// Ordinary preference bindings cannot change the trusted server target.
 	next.ConnectionMode, next.CompanyURL = st.cur.ConnectionMode, st.cur.CompanyURL
 	next.CompanyRemember = st.cur.CompanyRemember
+	next.CompanyAccountLogin = st.cur.CompanyAccountLogin
 	return st.saveLocked(next)
 }
 
@@ -124,18 +127,23 @@ func (st *settingsStore) saveConnection(mode, base string) error {
 	st.mu.Lock()
 	defer st.mu.Unlock()
 	next := st.cur
-	if next.CompanyURL != base {
+	if next.CompanyURL != base || next.ConnectionMode != mode {
 		next.CompanyRemember = false
+		next.CompanyAccountLogin = false
 	}
 	next.ConnectionMode, next.CompanyURL = mode, base
 	return st.saveLocked(next)
 }
 
-func (st *settingsStore) saveCompanyRemember(remember bool) error {
+func (st *settingsStore) saveCompanyLogin(base string, remember, account bool) error {
 	st.mu.Lock()
 	defer st.mu.Unlock()
 	next := st.cur
+	if next.CompanyURL != base || next.ConnectionMode != "company" {
+		return errors.New("服务器地址已更改，请重试 / Server address changed; try again")
+	}
 	next.CompanyRemember = remember
+	next.CompanyAccountLogin = remember && account
 	return st.saveLocked(next)
 }
 

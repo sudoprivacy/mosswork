@@ -12,8 +12,9 @@ import (
 )
 
 type CaptchaConfig struct {
-	Provider string `json:"provider"`
-	SiteKey  string `json:"site_key,omitempty"`
+	Canonical bool   `json:"canonical,omitempty"`
+	Provider  string `json:"provider"`
+	SiteKey   string `json:"site_key,omitempty"`
 }
 
 type LoginInput struct {
@@ -26,6 +27,15 @@ type LoginInput struct {
 
 type LoginResult struct {
 	AccessToken string `json:"access_token"`
+}
+
+var errAuthNotFound = errors.New("找不到登录服务 / Login service not found")
+var errAuthUnauthorized = errors.New("账号或密码错误 / Incorrect username or password")
+
+type IdentityStatus struct {
+	Mode     string `json:"mode"`
+	Phone    bool   `json:"phone_login_available"`
+	Password bool   `json:"password_login_available"`
 }
 
 // Only these fixed authentication endpoints are used. Redirects are disabled by
@@ -58,8 +68,10 @@ func (c *Client) authJSON(ctx context.Context, base, path string, body any, outp
 	}
 	if response.StatusCode != http.StatusOK {
 		switch response.StatusCode {
+		case http.StatusNotFound:
+			return errAuthNotFound
 		case 401:
-			return errors.New("账号或密码错误 / Incorrect username or password")
+			return errAuthUnauthorized
 		case 429:
 			return errors.New("尝试次数过多，请稍后重试 / Too many attempts; try again later")
 		case 400, 403:
@@ -76,16 +88,53 @@ func (c *Client) authJSON(ctx context.Context, base, path string, body any, outp
 	return nil
 }
 
-func (c *Client) LoginConfig(ctx context.Context, raw string) (CaptchaConfig, error) {
+// Older employee servers can protect unknown API paths with a blanket 401.
+// Recognize them only through their separate, public setup and captcha APIs.
+func (c *Client) signInOptions(ctx context.Context, base string, needCaptcha bool) (IdentityStatus, CaptchaConfig, error) {
+	var status struct {
+		Mode     string `json:"mode"`
+		Phone    *bool  `json:"phone_login_available"`
+		Password *bool  `json:"password_login_available"`
+	}
+	err := c.authJSON(ctx, base, "/api/identity/status", nil, &status)
+	var identity IdentityStatus
 	var config CaptchaConfig
-	base, err := c.CheckServer(ctx, raw)
-	if err != nil {
-		return config, err
+	if err == nil {
+		if (status.Mode != "canonical" && status.Mode != "standalone") || status.Phone == nil || status.Password == nil {
+			return identity, config, errors.New("无法确认服务器的登录方式 / Invalid sign-in configuration")
+		}
+		identity = IdentityStatus{Mode: status.Mode, Phone: *status.Phone, Password: *status.Password}
+		if status.Mode == "canonical" || !needCaptcha {
+			return identity, CaptchaConfig{Canonical: status.Mode == "canonical"}, nil
+		}
+	} else if !errors.Is(err, errAuthUnauthorized) && !errors.Is(err, errAuthNotFound) {
+		return identity, config, err
+	}
+	if _, err = c.CheckServer(ctx, base); err != nil {
+		return identity, config, err
 	}
 	err = c.authJSON(ctx, base, "/api/auth/captcha", nil, &config)
+	config.Canonical = false
 	if err == nil && config.Provider == "" {
 		err = errors.New("服务器未返回登录验证配置 / Missing login verification configuration")
 	}
+	if err == nil && identity.Mode == "" {
+		identity.Mode = "standalone"
+	}
+	return identity, config, err
+}
+
+func (c *Client) IdentityMode(ctx context.Context, base string) (IdentityStatus, error) {
+	status, _, err := c.signInOptions(ctx, base, false)
+	return status, err
+}
+
+func (c *Client) LoginConfig(ctx context.Context, raw string) (CaptchaConfig, error) {
+	base, err := ServerAddress(raw)
+	if err != nil {
+		return CaptchaConfig{}, err
+	}
+	_, config, err := c.signInOptions(ctx, base, true)
 	return config, err
 }
 
@@ -97,6 +146,13 @@ func (c *Client) Login(ctx context.Context, input LoginInput) (string, LoginResu
 	}
 	if strings.TrimSpace(input.Username) == "" || input.Password == "" || len(input.Username) > 320 || len(input.Password) > 4096 || len(input.CaptchaToken) > 4096 {
 		return "", result, errors.New("请填写有效的账号和密码 / Enter your username and password")
+	}
+	status, err := c.IdentityMode(ctx, base)
+	if err != nil {
+		return "", result, err
+	}
+	if status.Mode == "canonical" {
+		return "", result, errors.New("请在工作台完成账号登录 / Continue in the workspace to sign in")
 	}
 	err = c.authJSON(ctx, base, "/api/auth/login", map[string]string{
 		"username": strings.TrimSpace(input.Username), "password": input.Password, "captcha_token": input.CaptchaToken,

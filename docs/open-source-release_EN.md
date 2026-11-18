@@ -48,6 +48,8 @@ python3 tools/check_public_source.py --root /absolute/new-directory/mosswork-Ent
 
 The export tool uses Git-tracked and unignored files as candidates and copies the current worktree, including uncommitted changes. It does not modify the Git index, branches or remotes. Use a new output directory for each source snapshot.
 
+Exports normalize CRLF to LF in Git-classified text, including dirty and untracked source, regardless of the host's checkout settings. Files marked `-text`, binary data and symbolic-link targets keep their original bytes. The manifest hashes the exported bytes after normalization. POSIX shell scripts and `.command` launchers also require LF in `.gitattributes`, including templates copied into runtime payloads.
+
 To refresh the pending-release entry point, export to a new temporary directory and verify it first, then update the source, archive, change list and checksums at that entry point. Retain the previous snapshot as history. Subsequent changes still belong to the same pending release. Before the final build, compare the complete worktree with the candidate manifest again to confirm that nothing is missing; build installers and runtime payloads from that final source together.
 
 `PUBLIC_SOURCE.json` records the source HEAD, `source_worktree_dirty`, export scope and per-file SHA-256. `source_worktree_dirty=true` means the snapshot includes uncommitted changes and must be identified by the per-file manifest and source archive SHA-256. Formal releases export from a clean worktree at a specified commit and keep the corresponding tag, manifest and checksums.

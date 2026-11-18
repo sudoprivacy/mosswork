@@ -34,7 +34,7 @@ def build_dashboard(root: Path) -> dict:
     result = {"resources": len(files), "source_bytes": sum(item["bytes"] for item in files.values()),
               "zip_bytes": destination.stat().st_size,
               "zip_sha256": hashlib.sha256(destination.read_bytes()).hexdigest(), "files": files}
-    destination.with_suffix(".json").write_text(json.dumps(result, indent=2) + "\n")
+    destination.with_suffix(".json").write_text(json.dumps(result, indent=2) + "\n", encoding="utf-8")
     return result
 
 

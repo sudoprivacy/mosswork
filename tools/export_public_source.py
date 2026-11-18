@@ -109,6 +109,23 @@ def candidates(root: Path) -> list[str]:
     return sorted(set(raw.decode().strip("\0").split("\0")) - {""})
 
 
+def crlf_text_files(root: Path) -> set[str]:
+    """Use Git's binary detection and attributes, independent of checkout settings."""
+    raw = subprocess.check_output(
+        ["git", "ls-files", "--eol", "--cached", "--others", "--exclude-standard", "-z"],
+        cwd=root,
+    )
+    result = set()
+    for record in raw.split(b"\0"):
+        if not record:
+            continue
+        info, name = record.split(b"\t", 1)
+        fields = info.split()
+        if fields[1] in {b"w/crlf", b"w/mixed"} and b"attr/-text" not in fields:
+            result.add(name.decode("utf-8"))
+    return result
+
+
 def export(root: Path, destination: Path) -> int:
     root = root.resolve()
     destination = destination.resolve()
@@ -143,12 +160,20 @@ def export(root: Path, destination: Path) -> int:
             target_name += ".disabled"
         selected.append((source, target_name))
 
+    normalize = crlf_text_files(root)
     destination.mkdir(parents=True)
     records: list[dict[str, str]] = []
     for source, target_name in selected:
         target = destination / target_name
         target.parent.mkdir(parents=True, exist_ok=True)
-        shutil.copy2(source, target, follow_symlinks=False)
+        if source.is_symlink():
+            shutil.copy2(source, target, follow_symlinks=False)
+        else:
+            data = source.read_bytes()
+            if source.relative_to(root).as_posix() in normalize:
+                data = data.replace(b"\r\n", b"\n")
+            target.write_bytes(data)
+            shutil.copystat(source, target)
         data = str(target.readlink()).encode() if target.is_symlink() else target.read_bytes()
         records.append(
             {
@@ -167,6 +192,7 @@ def export(root: Path, destination: Path) -> int:
         "adapt the package name, repository, images, signing identities and credentials. "
         "See ../../docs/open-source-release.md.\n",
         encoding="utf-8",
+        newline="\n",
     )
     # Re-exporting an imported source repository regenerates this note and its hash.
     records = [
@@ -192,6 +218,7 @@ def export(root: Path, destination: Path) -> int:
             subprocess.check_output(["git", "status", "--porcelain"], cwd=root)
         ),
         "git_history_included": False,
+        "text_line_endings": "LF; Git-classified binary and explicit -text files are preserved",
         "upstream_release_workflows_enabled": False,
         "excluded_policy": list(EXCLUDED),
         "excluded_file_count": len(skipped),
@@ -199,7 +226,9 @@ def export(root: Path, destination: Path) -> int:
         "files": records,
     }
     (destination / "PUBLIC_SOURCE.json").write_text(
-        json.dumps(manifest, ensure_ascii=False, indent=2) + "\n", encoding="utf-8"
+        json.dumps(manifest, ensure_ascii=False, indent=2) + "\n",
+        encoding="utf-8",
+        newline="\n",
     )
     return len(records)
 

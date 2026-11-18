@@ -14,6 +14,7 @@ import json
 import os
 import platform
 import plistlib
+import re
 import shutil
 import struct
 import subprocess
@@ -22,6 +23,13 @@ import tomllib
 import zipfile
 from email.parser import Parser
 from pathlib import Path
+from urllib.parse import urlsplit
+
+if __name__ == "__main__":
+    sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
+
+from desktop.macos_distribution import notarize, notarize_app, verify_distribution
+from desktop.private_payload import copy_private_bundle
 
 
 def run(
@@ -229,6 +237,18 @@ def package_runtime(source: Path, destination: Path, platform: str, arch: str) -
     return destination
 
 
+def company_origin(value: str) -> str:
+    """Accept one public origin suitable for the Go linker and the desktop client."""
+    if re.fullmatch(r"https?://(?:[A-Za-z0-9._-]+|\[[0-9a-fA-F:.]+\])(?::[0-9]+)?/?", value):
+        try:
+            parsed = urlsplit(value)
+            if parsed.hostname and parsed.port != 0:
+                return value.rstrip("/")
+        except ValueError:
+            pass
+    raise argparse.ArgumentTypeError("Expected a company HTTP(S) origin, without a path or credentials")
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--output", required=True, type=Path)
@@ -244,10 +264,38 @@ def main() -> None:
         help="Build an explicitly incomplete legacy shell without local task execution",
     )
     parser.add_argument("--wails", default="wails3")
+    parser.add_argument("--company-url", type=company_origin, help="Initial company server for a fresh install")
+    parser.add_argument(
+        "--bootstrap-bundle",
+        type=Path,
+        help="Add a Stack-produced SudoCode/Nexus deployment component to the company client",
+    )
     parser.add_argument("--sign-identity", help="Optional Developer ID Application identity")
+    parser.add_argument(
+        "--notary-profile",
+        help="Existing notarytool Keychain profile; require accepted notarization",
+    )
+    parser.add_argument(
+        "--team-id", help="Expected Developer ID team for notarized macOS artifacts"
+    )
     parser.add_argument("--platform", choices=("all", "darwin", "windows"), default="all")
     parser.add_argument("--arch", choices=("all", "arm64", "amd64"), default="all")
     args = parser.parse_args()
+    if args.bootstrap_bundle and (
+        args.platform != "darwin" or args.arch == "all" or args.legacy_shell_only
+    ):
+        parser.error("Bootstrap integration requires a complete, single-architecture macOS client")
+    if args.notary_profile and (
+        not args.sign_identity
+        or not args.team_id
+        or args.platform == "windows"
+        or args.legacy_shell_only
+    ):
+        parser.error(
+            "Notarization requires --sign-identity, --team-id and a complete macOS package"
+        )
+    if args.team_id and not args.notary_profile:
+        parser.error("--team-id requires --notary-profile")
     arches = ("arm64", "amd64") if args.arch == "all" else (args.arch,)
     if args.platform in ("all", "windows") and args.webview2_dir is None:
         parser.error("Windows installers require --webview2-dir")
@@ -257,6 +305,9 @@ def main() -> None:
         )
     root = Path(__file__).resolve().parent.parent
     version = tomllib.loads((root / "pyproject.toml").read_text())["project"]["version"]
+    version_flags = f"-X main.desktopVersion={version}"
+    if args.company_url:
+        version_flags += f" -X main.companyDefaultURL={args.company_url}"
 
     output = args.output.resolve()
     output.mkdir(parents=True, exist_ok=True)
@@ -264,6 +315,7 @@ def main() -> None:
     if stage.exists():
         raise SystemExit(f"Build staging already exists: {stage}; use a fresh output parent")
     payloads: dict[tuple[str, str], Path] = {}
+    private_payload = None
     if not args.legacy_shell_only:
         for target_platform in ("darwin", "windows"):
             if args.platform not in ("all", target_platform):
@@ -287,6 +339,12 @@ def main() -> None:
         source,
         ignore=shutil.ignore_patterns("bin", "bundled", "*.syso", ".DS_Store"),
     )
+    if args.bootstrap_bundle:
+        # Stage and validate before compiling. Runtime trust comes from pins in
+        # the desktop executable, never from a manifest beside mutable scripts.
+        private_payload = copy_private_bundle(
+            args.bootstrap_bundle, stage / "private-bootstrap", args.arch
+        )
     build = source / "build"
     stamp = build / "stamp_version.py"
     run(
@@ -317,10 +375,22 @@ def main() -> None:
     common = ["go", "build", "-tags", tags, "-trimpath", "-buildvcs=false"]
     artifacts: list[Path] = []
     native_update_checks: dict[str, bool] = {}
+    native_private_checks: dict[str, bool] = {}
+    macos_distribution = None
 
     def verify_native_client(binary: Path, target: str, arch: str) -> None:
         host_platform, host_arch = host_target()
         is_native = target == host_platform
+        if args.bootstrap_bundle and is_native and arch == host_arch:
+            output = run(binary, "--verify-private-payload", cwd=source, capture_output=True)
+            if json.loads(output) != {
+                "client_version": version,
+                "platform": target,
+                "arch": arch,
+                "payload_verified": True,
+            }:
+                raise ValueError("Actual native Private payload differs from this candidate")
+            native_private_checks[f"{target}-{arch}"] = True
         if not args.legacy_shell_only and is_native and arch == host_arch:
             output = run(
                 binary,
@@ -344,6 +414,12 @@ def main() -> None:
             native_update_checks[f"{target}-{arch}"] = True
 
     if args.platform in ("all", "darwin"):
+        ldflags = f"-w -s {version_flags}"
+        if private_payload:
+            ldflags += (
+                f" -X main.privateManifestSHA256={private_payload['manifest_sha256']}"
+                f" -X main.privateChecksumsSHA256={private_payload['checksums_sha256']}"
+            )
         for arch in arches:
             env = dict(
                 os.environ,
@@ -355,7 +431,7 @@ def main() -> None:
             )
             run(
                 *common,
-                f"-ldflags=-w -s -X main.desktopVersion={version}",
+                f"-ldflags={ldflags}",
                 "-o",
                 stage / f"mosswork-{arch}",
                 cwd=source,
@@ -390,6 +466,12 @@ def main() -> None:
         )
         (app / "Contents/Info.plist").write_bytes(plistlib.dumps(info))
         shutil.copy2(build / "darwin/icons.icns", resources / "icons.icns")
+        if args.bootstrap_bundle:
+            copied_payload = copy_private_bundle(
+                stage / "private-bootstrap", resources / "private-bootstrap", args.arch
+            )
+            if copied_payload != private_payload:
+                raise ValueError("Private bundle changed after desktop compilation")
         os.symlink("/Applications", dmgroot / "Applications")
         if args.sign_identity:
             run(
@@ -409,6 +491,18 @@ def main() -> None:
         mac_arch = "universal" if len(arches) == 2 else arches[0]
         for arch in arches:
             verify_native_client(macos / "mosswork", "darwin", arch)
+        expected_arches = ["x86_64" if arch == "amd64" else arch for arch in arches]
+        if args.notary_profile:
+            # Staple the application BEFORE freezing either delivery artifact.
+            notarize_app(
+                app,
+                stage,
+                args.notary_profile,
+                args.team_id,
+                info["CFBundleIdentifier"],
+                expected_arches,
+                version,
+            )
         dmg = (
             output
             / f"mosswork-company{'-legacy-shell' if args.legacy_shell_only else ''}-macos-{mac_arch}-{version}.dmg"
@@ -435,6 +529,12 @@ def main() -> None:
             # matching runtime. The updater replaces the whole application.
             run("ditto", "-c", "-k", "--norsrc", "--keepParent", app, update, cwd=source)
             artifacts.append(update)
+            if args.notary_profile:
+                notarize(dmg, args.notary_profile, stage / "notary-dmg.json")
+                run("xcrun", "stapler", "staple", dmg, cwd=source)
+                macos_distribution = verify_distribution(
+                    dmg, update, args.team_id, info["CFBundleIdentifier"], expected_arches, version
+                )
     if args.platform in ("all", "windows"):
         nsis = build / "windows/nsis"
         run(
@@ -492,7 +592,7 @@ def main() -> None:
             try:
                 run(
                     *common,
-                    f"-ldflags=-w -s -H windowsgui -X main.desktopVersion={version}",
+                    f"-ldflags=-w -s -H windowsgui {version_flags}",
                     "-o",
                     binary,
                     cwd=source,
@@ -538,6 +638,8 @@ def main() -> None:
                 "native_update_payload_checks": native_update_checks,
                 "protocol_version": 1,
                 "local_runtime_included": not args.legacy_shell_only,
+                "company_runtime_included": not args.legacy_shell_only,
+                "native_private_payload_verified": native_private_checks,
                 "dashboard_included": True,
                 "dashboard_zip_sha256": hashlib.sha256(
                     (root / "desktop/src/assets/company-dashboard.zip").read_bytes()
@@ -546,6 +648,8 @@ def main() -> None:
                 "deployed": False,
                 "real_device_verified": False,
                 "signing": "developer-id" if args.sign_identity else "unsigned (macOS ad-hoc)",
+                "macos_distribution": macos_distribution,
+                "private_bootstrap": private_payload,
                 "payloads": [
                     {
                         "platform": key[0],

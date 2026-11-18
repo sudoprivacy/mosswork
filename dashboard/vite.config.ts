@@ -3,6 +3,7 @@ import { defineConfig, loadEnv, type Plugin } from "vite";
 import react from "@vitejs/plugin-react";
 import { VitePWA } from "vite-plugin-pwa";
 import path from "path";
+import { manualVendorChunk } from "./vendorChunks";
 
 // serialize-javascript@7 (pulled in by vite-plugin-pwa → @rollup/plugin-terser)
 // expects Web Crypto globals during `vite build`. Node <19 does not define them.
@@ -126,52 +127,7 @@ export default defineConfig(({ mode }) => {
           entryFileNames: "assets/index.[hash].js",
           chunkFileNames: "assets/[name].[hash].js",
           assetFileNames: "assets/[name].[hash].[ext]",
-          manualChunks(id) {
-            if (id.includes("node_modules")) {
-              if (id.includes("react-dom")) return "vendor-react";
-              if (id.includes("react-router")) return "vendor-react";
-              if (/\/node_modules\/react\//.test(id)) return "vendor-react";
-              // Keep rc-* with antd in one chunk. Splitting rc-* into vendor-rc
-              // creates a circular chunk (vendor-rc ↔ vendor-antd) that breaks
-              // production with "Cannot access 'FastColor' before initialization".
-              if (id.includes("rc-")) return "vendor-antd";
-              if (id.includes("/antd/")) return "vendor-antd";
-              if (id.includes("antd-style")) return "vendor-antd";
-              if (id.includes("@ant-design")) return "vendor-antd";
-              if (id.includes("@xterm")) return "vendor-xterm";
-              // mermaid + deps are dynamically imported — skip manualChunks so
-              // Vite generates async chunks automatically.
-              if (
-                id.includes("mermaid") ||
-                id.includes("cytoscape") ||
-                id.includes("dagre") ||
-                id.includes("elkjs") ||
-                id.includes("cose-bilkent")
-              )
-                return undefined;
-              if (
-                id.includes("react-markdown") ||
-                id.includes("remark-gfm") ||
-                id.includes("remark-") ||
-                id.includes("rehype-") ||
-                id.includes("katex")
-              )
-                return "vendor-markdown";
-              if (
-                id.includes("react-syntax-highlighter") ||
-                id.includes("refractor") ||
-                id.includes("highlight.js")
-              )
-                return undefined;
-              if (id.includes("lucide-react")) return "vendor-icons";
-              if (
-                id.includes("i18next") ||
-                id.includes("ahooks") ||
-                id.includes("jszip")
-              )
-                return "vendor-utils";
-            }
-          },
+          manualChunks: manualVendorChunk,
         },
       },
     },
@@ -242,9 +198,8 @@ export default defineConfig(({ mode }) => {
               "assets/vendor-*.js",
               "assets/*.{css,woff2}",
             ],
-            // vendor-antd (incl. the ColorPicker color engine) exceeds the
-            // 2 MiB workbox default; raise the precache limit so it stays
-            // offline-available instead of silently skipped.
+            // vendor-antd exceeds Workbox's 2 MiB default. Keep it offline
+            // while retaining a bounded check for accidental chunk growth.
             maximumFileSizeToCacheInBytes: 3 * 1024 * 1024,
             // FastAPI already serves the SPA fallback. A Workbox NavigationRoute
             // would Cache-First the old shell; use NetworkFirst below instead.

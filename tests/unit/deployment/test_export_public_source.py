@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import hashlib
 import importlib.util
 import json
 import os
@@ -187,6 +188,43 @@ def test_export_cannot_target_its_own_repository(tmp_path: Path) -> None:
     _repo(root)
     with pytest.raises(ValueError, match="outside"):
         exporter.export(root, root / "public")
+
+
+@pytest.mark.parametrize("autocrlf", ["true", "false"])
+def test_export_normalizes_checkout_text_without_changing_source_or_binary(
+    tmp_path: Path, autocrlf: str
+) -> None:
+    root = tmp_path / "repo"
+    _repo(root)
+    subprocess.run(["git", "-C", str(root), "config", "core.autocrlf", autocrlf], check=True)
+    (root / ".gitattributes").write_bytes(b"*.sh text eol=lf\n*.dat -text\n")
+    (root / "start.sh").write_bytes(b"#!/bin/bash\nset -euo pipefail\nprintf 'old\\n'\n")
+    subprocess.run(["git", "-C", str(root), "add", "."], check=True)
+    index_before = subprocess.check_output(["git", "-C", str(root), "write-tree"])
+    files = {
+        "start.sh": b"#!/bin/bash\r\nset -euo pipefail\r\nprintf 'current\\n'\r\n",
+        "new.command": b"#!/bin/sh\r\nprintf 'new\\n'\n",
+        "README.md": b"current unstaged text\r\n",
+        "text.dat": b"explicit binary\r\n",
+        "binary.bin": b"\x00\xff\r\n\x01",
+        "empty.txt": b"",
+    }
+    for name, data in files.items():
+        (root / name).write_bytes(data)
+    target = tmp_path / "public"
+    exporter.export(root, target)
+    for name in ("start.sh", "new.command", "README.md"):
+        assert (target / name).read_bytes() == files[name].replace(b"\r\n", b"\n")
+    for name in ("text.dat", "binary.bin", "empty.txt"):
+        assert (target / name).read_bytes() == files[name]
+    assert all((root / name).read_bytes() == data for name, data in files.items())
+    assert subprocess.check_output(["git", "-C", str(root), "write-tree"]) == index_before
+    manifest = json.loads((target / "PUBLIC_SOURCE.json").read_bytes())
+    for item in manifest["files"]:
+        assert hashlib.sha256((target / item["path"]).read_bytes()).hexdigest() == item["sha256"]
+    assert b"\r\n" not in (target / "PUBLIC_SOURCE.json").read_bytes()
+    assert b"\r\n" not in (target / ".github/upstream-workflows/README.md").read_bytes()
+    assert checker.check(target) == []
 
 
 def test_clean_import_can_be_reexported_without_nested_manifest_or_duplicate_records(
