@@ -129,7 +129,7 @@ func parseWorkspaceEvent(name, nonce string) (id, action, code string, ok bool) 
 	}
 	id, action = parts[1], parts[2]
 	switch action {
-	case "status", "choose", "clear", "disconnect":
+	case "status", "choose", "clear", "disconnect", "about":
 		ok = parts[3] == ""
 	case "pair":
 		code, _ = url.QueryUnescape(parts[3])
@@ -146,11 +146,14 @@ func (a *App) dispatchWorkspaceEvent(name string) {
 	if !ok || base == "" {
 		return
 	}
+	if action == "about" {
+		a.ShowDesktopUpdate()
+	}
 	// Native directory dialogs run asynchronously; status remains available while
 	// one is open. No script can supply a filesystem path to this bridge.
 	go func() {
 		var err error
-		if action != "status" {
+		if action != "status" && action != "about" {
 			if !a.workspaceBusy.CompareAndSwap(false, true) {
 				err = errors.New("busy")
 			} else {

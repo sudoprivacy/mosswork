@@ -5,6 +5,7 @@ import copy
 import json
 import sys
 from collections import Counter
+from importlib import import_module
 from pathlib import Path
 from unittest.mock import AsyncMock
 
@@ -17,6 +18,8 @@ from .test_runtime import ToolModel, acquire, install_agent
 
 
 def runtime_for(client, tmp_path):
+    # Real model/provider imports belong to setup, before turn watchdogs start.
+    import_module("deepagents.graph")
     events = []
     runtime = EnterpriseRuntime(events.append)
     runtime.client = client
@@ -30,7 +33,8 @@ def runtime_for(client, tmp_path):
     return runtime, events
 
 
-async def run_turn(runtime, *, completion_timeout=15, **options):
+async def run_turn(runtime, *, completion_timeout=60, **options):
+    # This bounds real graph/file I/O and retry backoff, not cancellation latency.
     await runtime.start(
         {
             "task_id": "task1",
@@ -86,12 +90,13 @@ async def test_final_sync_cannot_be_cancelled_out_of_cleanup(
     install_agent(server)
     runtime, events = runtime_for(client, tmp_path)
     entered_sync = asyncio.Event()
+    release_sync = asyncio.Event()
     send = client.http.send
 
     async def hold_checkpoint(request, *args, **kwargs):
         if request.url.path.endswith("/checkpoint-batch"):
             entered_sync.set()
-            await asyncio.Event().wait()
+            await release_sync.wait()
         return await send(request, *args, **kwargs)
 
     monkeypatch.setattr(client.http, "send", hold_checkpoint)
@@ -105,14 +110,18 @@ async def test_final_sync_cannot_be_cancelled_out_of_cleanup(
             }
         )
         worker = runtime.work["thread1"]
-        await asyncio.wait_for(entered_sync.wait(), 10)
+        # Graph startup and report creation precede the cleanup under test.
+        await asyncio.wait_for(entered_sync.wait(), 30)
         assert (runtime.workspace / "thread1/report.txt").is_file()
         if action == "close":
-            await asyncio.wait_for(runtime.close(), 10)
+            await asyncio.wait_for(asyncio.shield(runtime.close()), 10)
         else:
             for _ in range(2):
-                assert await runtime.cancel({"thread_id": "thread1"}) == {"status": "completed"}
-        await asyncio.wait_for(worker, 10)
+                assert await asyncio.wait_for(
+                    asyncio.shield(runtime.cancel({"thread_id": "thread1"})), 10
+                ) == {"status": "completed"}
+        # The watchdog must not cancel the worker and manufacture completion.
+        await asyncio.wait_for(asyncio.shield(worker), 10)
         assert "thread1" not in runtime.work
         done = [event for event in events if event.get("event") == "done"]
         assert len(done) == 1
@@ -120,6 +129,7 @@ async def test_final_sync_cannot_be_cancelled_out_of_cleanup(
         assert done[0]["sync_state"] == "pending"
         assert runtime.tasks["thread1"]["status"] == "completed"
     finally:
+        release_sync.set()
         await runtime.close()
 
 

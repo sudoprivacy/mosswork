@@ -102,6 +102,7 @@ async def test_real_harness_routes_before_grant_guard_and_denies_revoked_model(m
         HarnessAgentConfig(
             name="grant-test",
             workspace_dir=str(tmp_path / "workspace"),
+            backend={"type": "local_shell", "root_dir": str(tmp_path / "workspace")},
             providers=[provider],
             default_model="alpha/chat",
             bootstrap_enabled=False,

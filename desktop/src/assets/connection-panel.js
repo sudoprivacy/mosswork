@@ -30,6 +30,7 @@ function mountConnectionPanel(config) {
     choose: () => request("choose"),
     clear: () => request("clear"),
     disconnect: () => request("disconnect"),
+    showAbout: () => request("about"),
   });
   const runtimePending = new Map();
   const runtimeListeners = new Set();

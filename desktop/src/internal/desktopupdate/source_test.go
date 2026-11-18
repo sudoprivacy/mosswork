@@ -32,7 +32,7 @@ func feedFixture(t *testing.T, mutate func(map[string]any), body []byte) (*Sourc
 	feed := map[string]any{"schemaVersion": 1, "channel": "stable", "version": "0.0.8",
 		"metadata": map[string]any{"distribution": "mosswork-company"}, "artifacts": []any{artifact}}
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.URL.Path == "/mosswork/release/latest/desktop-update.json" {
+		if r.URL.Path == "/mosswork/release/latest/desktop-update.json" || r.URL.Path == ServerFeedPath {
 			_ = json.NewEncoder(w).Encode(feed)
 			return
 		}
@@ -51,6 +51,48 @@ func feedFixture(t *testing.T, mutate func(map[string]any), body []byte) (*Sourc
 }
 
 var oldWindows = updater.CheckRequest{CurrentVersion: "0.0.7", Platform: "windows", Arch: "amd64"}
+
+func TestServerDiscoveryAndPinnedDownloadAfterServerSwitch(t *testing.T) {
+	_, server := feedFixture(t, nil, []byte("complete executable"))
+	selected := server.URL
+	source := NewServerSource(func() string { return selected })
+	release, err := source.Check(context.Background(), oldWindows)
+	if err != nil || release == nil {
+		t.Fatalf("server check: %v, %v", release, err)
+	}
+	want := server.URL + "/api/update/desktop/releases/v0.0.8/" + release.Artifact.Filename
+	if release.Metadata["endpoint.artifact.url"] != want {
+		t.Fatalf("update bypasses server: %v", release.Metadata)
+	}
+	selected = "http://127.0.0.1:1"
+	var downloaded bytes.Buffer
+	if err := source.Download(context.Background(), release, &downloaded, nil); err != nil {
+		t.Fatal(err)
+	}
+	if downloaded.String() != "complete executable" {
+		t.Fatal("download bytes differ")
+	}
+	selected = ""
+	if _, err := source.Check(context.Background(), oldWindows); err == nil {
+		t.Fatal("check without server succeeded")
+	}
+}
+
+func TestUnpublishedServerManifestDoesNotBecomeUpdateFailure(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != ServerFeedPath {
+			t.Errorf("unexpected request: %s", r.URL.Path)
+		}
+		w.WriteHeader(http.StatusNotFound)
+		_, _ = w.Write([]byte(`{"error":{"code":"DESKTOP_UPDATE_NOT_PUBLISHED"}}`))
+	}))
+	defer server.Close()
+	source := NewServerSource(func() string { return server.URL })
+	release, err := source.Check(context.Background(), oldWindows)
+	if err != nil || release != nil {
+		t.Fatalf("unpublished update was treated as a failure: %v, %v", release, err)
+	}
+}
 
 func TestActualManifestDiscoveryAndPinnedDownload(t *testing.T) {
 	source, server := feedFixture(t, nil, []byte("complete executable"))

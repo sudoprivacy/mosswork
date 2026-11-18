@@ -38,7 +38,7 @@ CI 不发布 macOS Intel、Windows ARM、Linux 客户端、PyPI 包或独立 por
 
 原生自动更新还需要同次构建生成的完整 Mac 应用 ZIP 和内嵌完整运行时的 Windows 程序，文件名以 `-update.zip` / `-update.exe` 结尾。不得把 NSIS 安装器当作待替换的程序文件。`tools/desktop_update_manifest.py` 从实际文件生成 `desktop-update.json`，客户端和发布器共用 `desktop/src/internal/desktopupdate/targets.json` 的目标清单。生成清单后再写入 `SHA256SUMS.txt`。预发布版本不生成稳定更新清单。
 
-两个 COS 发布入口共用串行发布组。发布器验证不可变发行目录、完成安装包别名后，最后更新 `latest/desktop-update.json`；旧版本恢复不会回退已有的新版清单。启动和手动检查均使用此入口。没有更新器的客户端需要先手动安装一次包含此功能的正式版。
+两个 COS 发布入口共用串行发布组。发布器验证不可变发行目录、完成安装包别名后，最后更新 `latest/desktop-update.json`；旧版本恢复不会回退已有的新版清单。服务端从此入口取得清单，经 `/api/update/desktop/` 向客户端提供清单和完整更新包；客户端的启动和手动检查均访问当前连接的服务端。发布时需验证服务端可访问 COS、反向代理可持续传输完整包，以及普通员工和登录前可用的更新入口。没有更新器的客户端需要先手动安装一次包含此功能的正式版。
 
 仓库需允许 Actions 的 `GITHUB_TOKEN` 写入 Releases。所有产物均作为 Release 附件分发，无需 Packages 权限或镜像仓库凭据。Linux runner 构建并导出 amd64 Docker 镜像包，重新导入归档后验证首次部署、健康检查和重复安装。发布前校验每个附件小于 GitHub 的 2 GiB 上限，并生成 SHA-256 清单。
 

@@ -10,9 +10,12 @@
 
 - Canonical human review captures the original compiler document and reads records through current independent document/page grants and original-member audit. Production providers and comment delivery remain separate integration requirements.
 - Install published market skills into existing skill packages with target selection, per-package install/reinstall/update/rollback states, dependency checks and local-change warnings. Mounted Agents refresh after active conversations finish.
+- Native company clients expose an About dialog with the installed version, platform and selected update server. Ordinary employees can check for updates; both manifests and complete client downloads pass through the selected server from the official COS stable channel.
 
 ### Fixed
 
+- Make the native About dialog readable in light and dark themes, explain disabled updates in development builds, and distinguish unpublished feeds from unavailable or invalid update sources.
+- Avoid setting the Windows WebView2 background before its controller exists, preventing a startup crash.
 - Preserve the reading position when dragging the chat scrollbar while a reply is streaming; returning to the latest reply resumes automatic scrolling.
 - Return one-shot agent results after the final task state commits, so the result and conversation availability agree.
 

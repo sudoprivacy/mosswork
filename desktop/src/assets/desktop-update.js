@@ -19,16 +19,36 @@ async function refresh() {
     (status.latest_version
       ? ` · ${copy.latest}: ${status.latest_version}`
       : "");
-  element("status").textContent = status.error
-    ? copy[status.error_stage] || copy.error
-    : copy[status.state] || copy.idle;
+  element("platform").textContent = `${copy.platform}: ${view.platform}`;
+  element("server").textContent = view.server
+    ? `${copy.server}: ${view.server}`
+    : copy["no-server"];
+  const unconfigured =
+    status.current_version === "dev" ? copy.development : copy.unconfigured;
+  element("status").textContent =
+    status.state === "unconfigured"
+      ? unconfigured
+      : status.error
+      ? ["busy", "location"].includes(status.error_stage)
+        ? copy[status.error_stage]
+        : copy.error
+      : copy[status.state] || copy.idle;
   const isBusy = [
     "checking",
     "downloading",
     "verifying",
     "installing",
   ].includes(status.state);
-  element("check").disabled = isBusy || status.state === "unconfigured";
+  element("check").disabled =
+    isBusy || status.state === "unconfigured" || !view.server;
+  element("check").title =
+    status.state === "unconfigured"
+      ? unconfigured
+      : !view.server
+      ? copy["no-server"]
+      : isBusy
+      ? copy[status.state]
+      : "";
   element("download").hidden =
     !status.latest_version || status.is_ready || isBusy;
   element("restart").hidden = !status.is_ready;

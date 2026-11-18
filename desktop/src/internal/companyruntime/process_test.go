@@ -6,13 +6,22 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
 	"time"
 )
 
+func fixturePythonPath() (string, error) {
+	name := "python3"
+	if runtime.GOOS == "windows" {
+		name = "python"
+	}
+	return exec.LookPath(name)
+}
+
 func TestStdioProtocolAndExit(t *testing.T) {
-	python, err := exec.LookPath("python3")
+	python, err := fixturePythonPath()
 	if err != nil {
 		t.Skip("test fixture requires Python")
 	}
@@ -92,7 +101,7 @@ for line in sys.stdin:
 }
 
 func TestLargeImageSnapshotKeepsRuntimeResponsive(t *testing.T) {
-	python, err := exec.LookPath("python3")
+	python, err := fixturePythonPath()
 	if err != nil {
 		t.Skip("test fixture requires Python")
 	}
@@ -142,7 +151,7 @@ for line in sys.stdin:
 }
 
 func TestBrokenRuntimeOutputTerminatesWorker(t *testing.T) {
-	python, err := exec.LookPath("python3")
+	python, err := fixturePythonPath()
 	if err != nil {
 		t.Skip("test fixture requires Python")
 	}
@@ -200,7 +209,7 @@ func TestEnvironmentIsolatesPythonAndMossworkHome(t *testing.T) {
 }
 
 func TestUnicodeIPCAndFilesWithLegacyWindowsEncoding(t *testing.T) {
-	python, err := exec.LookPath("python3")
+	python, err := fixturePythonPath()
 	if err != nil {
 		t.Skip("test fixture requires Python")
 	}
@@ -244,7 +253,7 @@ for line in sys.stdin:
 }
 
 func TestWorkerReusesBytecodeOutsideTheVerifiedBundle(t *testing.T) {
-	python, err := exec.LookPath("python3")
+	python, err := fixturePythonPath()
 	if err != nil {
 		t.Skip("test fixture requires Python")
 	}

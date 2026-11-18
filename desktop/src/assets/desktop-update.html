@@ -13,6 +13,11 @@
           "Segoe UI",
           sans-serif;
       }
+      html,
+      body {
+        background-color: rgb(245, 246, 248);
+        color: rgb(28, 28, 30);
+      }
       body {
         margin: 0;
         padding: 28px;
@@ -22,6 +27,7 @@
       }
       p {
         line-height: 1.6;
+        overflow-wrap: anywhere;
       }
       #note {
         opacity: 0.65;
@@ -41,6 +47,8 @@
         padding: 8px 14px;
         border: 1px solid #8886;
         border-radius: 8px;
+        background-color: rgb(255, 255, 255);
+        color: rgb(28, 28, 30);
         cursor: pointer;
       }
       button:disabled {
@@ -56,16 +64,29 @@
       [hidden] {
         display: none !important;
       }
+      @media (prefers-color-scheme: dark) {
+        html,
+        body {
+          background-color: rgb(14, 14, 14);
+          color: rgb(240, 240, 240);
+        }
+        button {
+          background-color: rgb(38, 38, 38);
+          color: rgb(240, 240, 240);
+        }
+      }
     </style>
   </head>
   <body>
     <h1 id="title"></h1>
     <p id="versions"></p>
+    <p id="platform"></p>
+    <p id="server"></p>
     <p id="status" role="status" aria-live="polite"></p>
     <progress id="progress" hidden></progress>
     <p id="note"></p>
     <footer>
-      <button id="check" type="button"></button>
+      <button id="check" type="button" disabled></button>
       <button id="download" type="button" hidden></button>
       <button id="restart" type="button" hidden></button>
     </footer>

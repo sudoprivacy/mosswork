@@ -12,7 +12,11 @@ from typing import Any
 from fastapi import Request
 from fastapi.responses import JSONResponse
 
-from octop.api.deps import is_canonical_human_review_path, is_canonical_identity_request
+from octop.api.deps import (
+    is_canonical_human_review_path,
+    is_canonical_identity_request,
+    is_desktop_update_path,
+)
 
 _OPEN_PREFIXES = (
     "/api/setup/",
@@ -28,6 +32,8 @@ def install(app: Any, server: Any) -> None:
     ) -> Any:
         path = request.url.path
         if not path.startswith("/api/"):
+            return await call_next(request)
+        if request.method == "GET" and is_desktop_update_path(path):
             return await call_next(request)
         cfg = server.services.config if server.services else getattr(server, "config", None)
         open_exact = ["/api/health", "/api/identity/status"]
