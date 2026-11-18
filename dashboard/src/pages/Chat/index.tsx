@@ -361,6 +361,7 @@ function ChatPageInner() {
     modelStatus,
     streamStalled,
     localPreparing,
+    localPreparingPhase,
     thinkingStartedAt,
     historyLoading,
     historyError,
@@ -1571,6 +1572,7 @@ function ChatPageInner() {
                     liveSpeakers={liveSpeakers}
                     thinkingStartedAt={thinkingStartedAt}
                     localPreparing={localPreparing}
+                    localPreparingPhase={localPreparingPhase}
                     sessionKey={activeThreadId ?? undefined}
                     onRegenerate={handleRegenerate}
                     onDisableStreamUsage={

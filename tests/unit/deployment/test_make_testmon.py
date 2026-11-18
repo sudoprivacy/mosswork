@@ -21,6 +21,8 @@ def test_make_and_commit_share_the_default_windows_git_shell_context(tmp_path: P
     if make is None and os.name == "nt":
         pytest.skip("GNU Make is required; the Windows publication route supplies it")
     assert make is not None
+    # The hook's shell must also be able to execute recursive $(MAKE) recipes.
+    make = Path(make).as_posix()
     root = tmp_path / "real default shell context"
     for folder in ("output", ".githooks", "empty-hooks"):
         (root / folder).mkdir(parents=True, exist_ok=True)

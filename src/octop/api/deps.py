@@ -63,7 +63,26 @@ _JWT_EXEMPT_EXACT = (
 
 
 def is_jwt_exempt_path(path: str) -> bool:
-    return path in _JWT_EXEMPT_EXACT or any(path.startswith(p) for p in _JWT_EXEMPT_PREFIXES)
+    return (
+        is_desktop_update_path(path)
+        or path in _JWT_EXEMPT_EXACT
+        or any(path.startswith(p) for p in _JWT_EXEMPT_PREFIXES)
+    )
+
+
+def is_desktop_update_path(path: str) -> bool:
+    from octop.infra.setup.desktop_update import ARTIFACT, artifact_path
+
+    if path == "/api/update/desktop/latest/desktop-update.json":
+        return True
+    match = re.fullmatch(r"/api/update/desktop/releases/v([^/]+)/([^/]+)", path)
+    if match is None or ARTIFACT.fullmatch(match[2]) is None:
+        return False
+    try:
+        artifact_path(match[1], match[2])
+    except ValueError:
+        return False
+    return True
 
 
 def is_canonical_human_review_path(request: Request) -> bool:

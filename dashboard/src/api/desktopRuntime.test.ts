@@ -2,6 +2,7 @@ import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import {
   runLocalTurn,
   createRuntimeTaskId,
+  matchesRuntimeTask,
   type DesktopRuntimeBridge,
   type RuntimeEvent,
 } from "./desktopRuntime";
@@ -88,6 +89,16 @@ it("creates task identities on intranet HTTP without crypto.randomUUID", () => {
     /^[a-f0-9]{8}-[a-f0-9]{4}-4[a-f0-9]{3}-[89ab][a-f0-9]{3}-[a-f0-9]{12}$/,
   );
   expect(createRuntimeTaskId()).not.toBe(createRuntimeTaskId());
+});
+
+it("matches global runtime progress events without a thread id", () => {
+  expect(
+    matchesRuntimeTask(
+      { event: "runtime_progress", phase: "tools" },
+      "thread",
+      "task",
+    ),
+  ).toBe(true);
 });
 
 it("keeps completed local work successful while its company receipt is pending", async () => {

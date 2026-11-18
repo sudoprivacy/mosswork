@@ -37,6 +37,10 @@ func TestRuntimeIPCRejectsStaleAndUnsupportedRequests(t *testing.T) {
 			t.Fatal("steer request accepted after account change")
 		}
 	}
+	request := "desktop:runtime:session:4:create_thread:" + url.QueryEscape(`{"agent_id":"expert"}`)
+	if _, method, _, ok := parseRuntimeEvent(request, "session"); !ok || method != "create_thread" {
+		t.Fatal("create_thread request rejected")
+	}
 }
 
 func TestRuntimeModelFailureMessages(t *testing.T) {
@@ -64,6 +68,21 @@ func TestRuntimeErrorTranslationPreservesCode(t *testing.T) {
 	}
 	if m.Error == "company_model_http_400" || m.Error == "" {
 		t.Fatalf("error was not translated: %q", m.Error)
+	}
+}
+
+func TestRuntimeDeviceErrorsHaveActionableClassification(t *testing.T) {
+	if got := runtimeErrorCode("device_session_expired"); got != "device_session_expired" {
+		t.Fatalf("unexpected device code: %s", got)
+	}
+	if got := runtimeErrorStage("device_reconnecting_timeout"); got != "device_connection" {
+		t.Fatalf("unexpected device stage: %s", got)
+	}
+	if !runtimeErrorRetryable("device_reconnecting_timeout") {
+		t.Fatal("reconnect timeout should be retryable")
+	}
+	if got := runtimeErrorAction("workspace_file_locked"); got != "close_file_and_retry" {
+		t.Fatalf("unexpected locked-file action: %s", got)
 	}
 }
 

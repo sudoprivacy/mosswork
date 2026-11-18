@@ -246,6 +246,8 @@ async def test_built_desktop_chat_reconnect_and_cancel(
             calls.append(method)
             if method == "status":
                 return runtime.status()
+            if method == "create_thread":
+                return await company.request("threads", {**params, "execution_mode": "local"})
             if method == "start":
                 return await runtime.start(params)
             if method == "cancel":
@@ -278,6 +280,7 @@ async def test_built_desktop_chat_reconnect_and_cancel(
           window.__mossworkRuntime = {
             version: 1,
             status: () => window.acceptanceRuntimeCall('status'),
+            createThread: params => window.acceptanceRuntimeCall('create_thread', params),
             start: params => window.acceptanceRuntimeCall('start', params),
             cancel: params => window.acceptanceRuntimeCall('cancel', params),
             resumeHitl: params => window.acceptanceRuntimeCall('hitl_resume', params),
@@ -322,6 +325,7 @@ async def test_built_desktop_chat_reconnect_and_cancel(
             ).to_be_visible(timeout=45000)
             thread_id = urlsplit(page.url).path.rsplit("/", 1)[-1]
             assert thread_id != existing_thread_id
+            assert calls.count("create_thread") == 1
             async with asyncio.timeout(20):
                 while runtime.work:
                     await asyncio.sleep(0.02)

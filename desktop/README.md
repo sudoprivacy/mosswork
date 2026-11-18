@@ -1,7 +1,13 @@
 # mosswork desktop (Wails v3 + green portable)
 
-Stable company clients support native automatic updates from the official COS
-channel. Startup and manual checks share one native provider and update state.
+Stable company clients request native automatic updates through the selected
+company server. The server obtains the official COS stable manifest and streams
+complete payloads without redirecting clients. Startup and manual checks share
+one native provider and update state. The account menu's **About mosswork / Client
+updates** shows the installed client version and update server without requiring
+server administration permissions. The tray settings offer the same entry before
+sign-in. The server must support `/api/update/desktop/` and reach the official
+release origin.
 Downloads are verified before the user confirms restart; active or unresolved
 local tasks and unsynced results block that restart. See [Update procedures](../docs/updates_EN.md).
 

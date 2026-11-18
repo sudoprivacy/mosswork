@@ -13,6 +13,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"runtime"
+	"strconv"
 	"strings"
 	"time"
 
@@ -34,7 +35,7 @@ func parseRuntimeEvent(name, nonce string) (id, method string, params json.RawMe
 		return
 	}
 	switch p[2] {
-	case "status", "thread_workspace", "refresh_status", "start", "cancel", "reveal", "reconcile", "preview_image", "steer", "steer_remove", "hitl_resume", "upload_artifact", "import_attachment":
+	case "status", "thread_workspace", "refresh_status", "start", "cancel", "reveal", "reconcile", "preview_image", "steer", "steer_remove", "hitl_resume", "upload_artifact", "import_attachment", "create_thread":
 	default:
 		return
 	}
@@ -80,7 +81,14 @@ func (a *App) dispatchRuntimeEvent(name string) {
 		}
 		payload := map[string]any{"id": id, "result": result}
 		if err != nil {
-			payload["error"] = runtimeErrorText(err.Error())
+			code := runtimeErrorCode(err.Error())
+			payload["error"] = runtimeErrorText(code)
+			payload["error_code"] = code
+			payload["stage"] = runtimeErrorStage(code)
+			payload["retryable"] = runtimeErrorRetryable(code)
+			if action := runtimeErrorAction(code); action != "" {
+				payload["action"] = action
+			}
 		}
 		data, _ := json.Marshal(payload)
 		a.window.ExecJS(`(function(origin,nonce,result){if(location.origin===origin)window.__mossworkRuntimeReply?.(nonce,result);})(` + jsonString(a.companyPageOriginLocked()) + `,` + jsonString(nonce) + `,` + string(data) + `)`)
@@ -118,6 +126,10 @@ func (a *App) performRuntimeAction(nonce, base, method string, params json.RawMe
 	if method == "upload_artifact" || method == "import_attachment" {
 		a.companyMu.Unlock()
 		return a.transferRuntimeArtifact(nonce, base, method, params)
+	}
+	if method == "create_thread" {
+		a.companyMu.Unlock()
+		return a.companyCreateThread(nonce, base, params)
 	}
 	if method == "preview_image" {
 		var p struct {
@@ -202,6 +214,57 @@ func (a *App) performRuntimeAction(nonce, base, method string, params json.RawMe
 	return process.Request(ctx, method, params)
 }
 
+func runtimeErrorCode(value string) string {
+	if strings.HasPrefix(value, "company_model_") || strings.HasPrefix(value, "device_") {
+		return value
+	}
+	switch value {
+	case "heartbeat_timeout", "workspace_file_locked", "workspace_permission_denied", "workspace_file_not_found", "task_result_unknown":
+		return value
+	default:
+		return "local_runtime_error"
+	}
+}
+
+func runtimeErrorStage(code string) string {
+	switch {
+	case strings.HasPrefix(code, "device_"), code == "heartbeat_timeout":
+		return "device_connection"
+	case strings.HasPrefix(code, "company_model_"):
+		return "model_request"
+	case strings.HasPrefix(code, "workspace_"):
+		return "artifact_write"
+	case code == "task_result_unknown":
+		return "task_reconcile"
+	default:
+		return "runtime"
+	}
+}
+
+func runtimeErrorRetryable(code string) bool {
+	if strings.HasPrefix(code, "company_model_http_") {
+		status, err := strconv.Atoi(strings.TrimPrefix(code, "company_model_http_"))
+		return err == nil && (status == 408 || status == 429 || status >= 500)
+	}
+	if strings.HasPrefix(code, "company_model_") {
+		return code != "company_model_context_overflow" && code != "company_model_empty_response"
+	}
+	return code == "workspace_file_locked" || code == "workspace_permission_denied" || code == "device_reconnecting_timeout"
+}
+
+func runtimeErrorAction(code string) string {
+	switch code {
+	case "workspace_file_locked":
+		return "close_file_and_retry"
+	case "workspace_permission_denied":
+		return "check_file_permissions"
+	case "task_result_unknown", "local_runtime_error":
+		return "check_task_status"
+	default:
+		return ""
+	}
+}
+
 // Runtime verification and initialization must never hold the session lock:
 // native image reads and changing/revoking the account remain independent.
 func (a *App) ensureRuntimeProcess(nonce, base, method string, prepare func() (string, error)) (*companyruntime.Process, error) {
@@ -212,10 +275,19 @@ func (a *App) ensureRuntimeProcess(nonce, base, method string, prepare func() (s
 		a.companyMu.Unlock()
 		return nil, errors.New("账号已切换，请重新打开当前会话")
 	}
-	identity, credential, err := a.company.RuntimeIdentity()
+	client := a.company
+	a.companyMu.Unlock()
+	// A transient reconnect must not be reported as a permanent device failure.
+	// RuntimeIdentity waits briefly for the native channel to recover without
+	// holding companyMu, so status polling and account changes remain responsive.
+	identity, credential, err := client.RuntimeIdentity()
 	if err != nil {
-		a.companyMu.Unlock()
 		return nil, err
+	}
+	a.companyMu.Lock()
+	if a.company != client || a.workspaceNonce != nonce || a.companyURL != base {
+		a.companyMu.Unlock()
+		return nil, errors.New("账号已切换，请重新打开当前会话")
 	}
 	if a.workspacePath == "" || a.workspaceGrant == nil || a.workspaceError != "" {
 		a.companyMu.Unlock()
@@ -228,6 +300,7 @@ func (a *App) ensureRuntimeProcess(nonce, base, method string, prepare func() (s
 		}
 		workspace, epoch := a.workspacePath, a.runtimeEpoch
 		a.companyMu.Unlock()
+		a.emitRuntimeProgress(nonce, base, epoch, "tools")
 		root, err := prepare()
 		if err != nil {
 			return nil, err
@@ -267,6 +340,7 @@ func (a *App) ensureRuntimeProcess(nonce, base, method string, prepare func() (s
 		a.companyRuntime = process
 		go a.watchRuntimeIdentity(nonce, base, epoch, identity.ExpiresAt)
 		a.companyMu.Unlock()
+		a.emitRuntimeProgress(nonce, base, epoch, "runtime")
 		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 		_, err = process.Request(ctx, "initialize", map[string]any{"company_url": base, "credential": credential, "device_id": identity.DeviceID, "owner_user_id": identity.OwnerUserID, "workspace": workspace, "state_dir": stateDir, "execute_authorized": true})
 		cancel()
@@ -294,10 +368,20 @@ func (a *App) ensureRuntimeProcess(nonce, base, method string, prepare func() (s
 	a.companyMu.Unlock()
 	return process, nil
 }
+
+func (a *App) emitRuntimeProgress(nonce, base string, epoch uint64, phase string) {
+	a.deliverRuntimeEvent(nonce, base, epoch, companyruntime.Message{
+		Event: "runtime_progress",
+		Phase: phase,
+	})
+}
+
 func applyRuntimeErrorTranslation(m companyruntime.Message) companyruntime.Message {
-	if m.Error != "" {
+	if m.ErrorCode == "" && m.Error != "" {
 		m.ErrorCode = m.Error
-		m.Error = runtimeErrorText(m.Error)
+	}
+	if m.ErrorCode != "" {
+		m.Error = runtimeErrorText(m.ErrorCode)
 	}
 	return m
 }
@@ -349,9 +433,20 @@ func (a *App) watchRuntimeIdentity(nonce, base string, epoch uint64, expires int
 
 func runtimeErrorText(code string) string {
 	messages := map[string]string{
+		"execution_mode_server":                  "此会话已在网页端使用，请新建会话进行本机执行",
+		"server_thread_running":                  "此会话正在服务器执行，请等待完成后再试",
+		"project_binding_required":               "会话缺少本地项目绑定，请更新公司服务端后重试",
+		"device_reconnecting_timeout":            "本机连接正在恢复，但等待已超时；请确认客户端仍在运行后重试。",
+		"device_disconnected":                    "本机设备已断开公司服务，请检查网络和客户端连接后重试。",
+		"device_unpaired":                        "本机设备尚未连接公司服务，请在设置中完成配对。",
+		"device_session_expired":                 "本机设备连接已过期，请重新登录公司账号并配对。",
+		"heartbeat_timeout":                      "本机心跳应答超时，正在重新连接公司服务。",
+		"workspace_file_locked":                  "文件正在被其他程序占用，请关闭文件后再试。",
+		"workspace_permission_denied":            "没有权限读取或写入该文件，请检查文件权限后再试。",
+		"workspace_file_not_found":               "文件不存在或已被移动，请检查文件位置后再试。",
+		"task_result_unknown":                    "任务结果暂时无法确认，请先检查已有成果，系统不会自动重复执行。",
 		"company_runtime_disabled":               "公司尚未启用本机执行服务，请联系管理员开启；通讯录和员工聊天仍可使用。",
 		"company_protocol_incompatible":          "公司服务与客户端运行协议不兼容，请安装匹配的企业客户端。",
-		"device_session_expired":                 "当前设备连接已过期，请重新登录公司账号。",
 		"legacy_thread_read_only":                "此会话包含服务器执行的旧历史，仅供查看；请新建会话开始本机任务。",
 		"project_on_another_device":              "此会话的本地项目属于另一台电脑，文件未同步；请新建会话处理本机文件。",
 		"task_selection_changed":                 "任务状态已变化，请刷新任务列表后再核对。",

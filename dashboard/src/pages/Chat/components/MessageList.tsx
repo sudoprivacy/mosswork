@@ -100,6 +100,7 @@ interface MessageListProps {
   liveSpeakers?: ReadonlyArray<string>;
   thinkingStartedAt?: number | null;
   localPreparing?: boolean;
+  localPreparingPhase?: string;
   sessionKey?: string;
   onRegenerate?: (messageId: string) => void;
   onDisableStreamUsage?: () => Promise<boolean>;
@@ -268,6 +269,7 @@ export default function MessageList(props: MessageListProps) {
     liveSpeakers = [],
     thinkingStartedAt = null,
     localPreparing = false,
+    localPreparingPhase,
     sessionKey,
     onRegenerate,
     onDisableStreamUsage,
@@ -796,6 +798,7 @@ export default function MessageList(props: MessageListProps) {
             <GeneratingIndicator
               startedAt={thinkingStartedAt}
               preparing={localPreparing}
+              preparingPhase={localPreparingPhase}
               showElapsed={isAwaitingAssistantReply}
               membersOnly={generatingMembersOnly}
               speakerNames={liveSpeakerNames}
@@ -809,6 +812,7 @@ export default function MessageList(props: MessageListProps) {
       showGenerating,
       thinkingStartedAt,
       localPreparing,
+      localPreparingPhase,
       isAwaitingAssistantReply,
       generatingMembersOnly,
       liveSpeakerNames,

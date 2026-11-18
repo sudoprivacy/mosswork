@@ -24,7 +24,13 @@ async def test_desktop_task_uses_thread_folder_or_existing_project(
 
     server, client, _, owner = company
     install_agent(server)
-    thread = (await client.request("threads", {"agent_id": "expert"}))["thread_id"]
+    params = {"agent_id": "expert"}
+    if not existing_project:
+        params["execution_mode"] = "local"
+    created = await client.request("threads", params)
+    thread = created["thread_id"]
+    assert created["execution_mode"] == "local"
+    assert server.services.session_repo.get(created["session_key"]).thread_id == thread
     runtime = native_runtime(client, tmp_path, [])
     task = {"agent_id": "expert", "thread_id": thread, "text": "Create the local report"}
     try:
@@ -45,9 +51,44 @@ async def test_desktop_task_uses_thread_folder_or_existing_project(
         await runtime.start({**task, "task_id": "native-report"})
         await asyncio.wait_for(runtime.work[thread], 15)
         assert runtime.tasks[thread]["status"] == "completed"
+        await runtime.start({**task, "task_id": "native-followup", "text": "Confirm the report"})
+        await asyncio.wait_for(runtime.work[thread], 15)
+        assert runtime.tasks[thread]["status"] == "completed"
         assert (runtime.workspace / (existing_project or thread) / "report.txt").read_text() == (
             "local report 42"
         )
+    finally:
+        await runtime.close()
+
+
+async def test_nonempty_server_thread_remains_server_owned(company, tmp_path):
+    from octop.infra.company_runtime.client import CompanyServiceError
+    from tests.unit.company_runtime.test_memory_approvals import native_runtime
+
+    server, client, _, owner = company
+    install_agent(server)
+    server.services.session_repo.upsert(
+        session_key="thread2",
+        agent_id="expert",
+        user_id=owner,
+        channel_type="dashboard",
+        chat_type="dm",
+        thread_id="thread2",
+    )
+    server.services.thread_repo.touch_last_active("thread2")
+    runtime = native_runtime(client, tmp_path, [])
+    try:
+        with pytest.raises(CompanyServiceError, match="execution_mode_server"):
+            await runtime.start(
+                {
+                    "task_id": "nonempty-server-thread",
+                    "thread_id": "thread2",
+                    "agent_id": "expert",
+                    "text": "Must remain server-owned",
+                }
+            )
+        assert server.services.company_runtime_repo.binding("thread2") is None
+        server.services.thread_repo.claim_server_execution("thread2")
     finally:
         await runtime.close()
 

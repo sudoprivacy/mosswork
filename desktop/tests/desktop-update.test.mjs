@@ -21,7 +21,7 @@ const script = (
   "const { Call, Events } = window.native;",
 );
 
-async function panel(status) {
+async function panel(status, server = "https://company.example") {
   const dom = new JSDOM(html, { runScripts: "outside-only" });
   const { window } = dom;
   const emitted = [];
@@ -44,12 +44,24 @@ async function panel(status) {
     error: "Update failed",
     note: "Keep work",
     confirm: "Restart?",
+    server: "Update server",
+    platform: "Platform",
+    development: "Development builds do not support online updates.",
+    unconfigured: "Use a stable company installer.",
+    "no-server": "Set a server address first.",
+    idle: "Check for a new client version.",
   };
   window.native = {
     Call: {
       ByName: async (method) => {
         assert.equal(method, "main.App.GetDesktopUpdate");
-        return { locale: "en", strings, status: current };
+        return {
+          locale: "en",
+          strings,
+          status: current,
+          server,
+          platform: "windows / amd64",
+        };
       },
     },
     Events: {
@@ -91,6 +103,15 @@ test("available update requires an explicit download and a separate confirmed re
   });
   try {
     assert.deepEqual(p.emitted, []);
+    assert.equal(
+      p.byId("versions").textContent,
+      "Current: 0.0.7 · Latest: 0.0.8",
+    );
+    assert.equal(
+      p.byId("server").textContent,
+      "Update server: https://company.example",
+    );
+    assert.equal(p.byId("platform").textContent, "Platform: windows / amd64");
     assert.equal(p.byId("download").hidden, false);
     assert.equal(p.byId("restart").hidden, true);
     p.byId("download").click();
@@ -138,6 +159,82 @@ test("download progress is event driven and busy rejection preserves the ready c
     assert.equal(p.byId("status").textContent, "Finish local tasks first");
     assert.equal(p.byId("restart").hidden, false);
     assert.deepEqual(p.emitted, []);
+  } finally {
+    p.close();
+  }
+});
+
+test("development builds explain the disabled check without emitting an update action", async () => {
+  const p = await panel({ state: "unconfigured", current_version: "dev" });
+  try {
+    assert.equal(p.byId("check").disabled, true);
+    assert.equal(
+      p.byId("status").textContent,
+      "Development builds do not support online updates.",
+    );
+    assert.equal(p.byId("check").title, p.byId("status").textContent);
+    p.byId("check").click();
+    assert.deepEqual(p.emitted, []);
+  } finally {
+    p.close();
+  }
+});
+
+test("stable builds can check through a configured server and explain a missing address", async () => {
+  const p = await panel({ state: "idle", current_version: "0.0.7" });
+  try {
+    assert.equal(p.byId("check").disabled, false);
+    p.byId("check").click();
+    assert.deepEqual(p.emitted, ["desktop:update:check"]);
+  } finally {
+    p.close();
+  }
+  const missing = await panel({ state: "idle", current_version: "0.0.7" }, "");
+  try {
+    assert.equal(missing.byId("check").disabled, true);
+    assert.equal(missing.byId("check").title, "Set a server address first.");
+    missing.byId("check").click();
+    assert.deepEqual(missing.emitted, []);
+  } finally {
+    missing.close();
+  }
+});
+
+test("about renders opaque backgrounds and contrasting text in both themes", async () => {
+  const p = await panel({ state: "unconfigured", current_version: "dev" });
+  try {
+    const { window } = p.dom;
+    const body = window.getComputedStyle(window.document.body);
+    assert.equal(body.backgroundColor, "rgb(245, 246, 248)");
+    assert.equal(body.color, "rgb(28, 28, 30)");
+    const button = window.getComputedStyle(p.byId("check"));
+    assert.equal(button.backgroundColor, "rgb(255, 255, 255)");
+    assert.equal(button.color, "rgb(28, 28, 30)");
+    const dark = Array.from(window.document.styleSheets[0].cssRules).find(
+      (rule) => rule.conditionText === "(prefers-color-scheme: dark)",
+    );
+    assert.ok(dark);
+    const darkBody = dark.cssRules[0].style;
+    assert.equal(
+      darkBody.getPropertyValue("background-color"),
+      "rgb(14, 14, 14)",
+    );
+    assert.equal(darkBody.getPropertyValue("color"), "rgb(240, 240, 240)");
+  } finally {
+    p.close();
+  }
+});
+
+test("failed checks display failure copy rather than the check action or busy label", async () => {
+  const p = await panel({
+    state: "error",
+    current_version: "0.0.7",
+    error: "HTTP 503",
+    error_stage: "check",
+  });
+  try {
+    assert.equal(p.byId("status").textContent, "Update failed");
+    assert.equal(p.byId("check").disabled, false);
   } finally {
     p.close();
   }

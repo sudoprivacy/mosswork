@@ -57,6 +57,11 @@ func startupTestApp(t *testing.T) *App {
 	return app
 }
 
+func TestEmitRuntimeProgressWithoutWindowIsSafe(t *testing.T) {
+	a := &App{}
+	a.emitRuntimeProgress("nonce", "https://company.test", 0, "tools")
+}
+
 func TestRuntimePreparationDoesNotBlockImagePreview(t *testing.T) {
 	a := startupTestApp(t)
 	path, digest := previewFixture(t, a.workspacePath, "image.png", previewPNG(t, 8, 8))

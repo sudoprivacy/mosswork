@@ -26,6 +26,7 @@ import {
   LockOpen,
   SlidersHorizontal,
   Monitor,
+  Info,
 } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import { useTranslation } from "react-i18next";
@@ -427,7 +428,27 @@ export default function AvatarDropdown({
         <span>{t("account.changePassword")}</span>
       </button>
 
-      {userCan(user, "update") && (
+      {desktop.available && window.mossworkDesktopWorkspace?.showAbout && (
+        <button
+          type="button"
+          className={styles.menuItem}
+          onClick={() => {
+            setMenuOpen(false);
+            void window.mossworkDesktopWorkspace
+              ?.showAbout?.()
+              .catch((error) => {
+                message.error(
+                  apiErrorMessage(error, t("common.unknownError"), t),
+                );
+              });
+          }}
+        >
+          <Info size={16} strokeWidth={1.8} />
+          <span>{t("account.aboutClient")}</span>
+        </button>
+      )}
+
+      {!desktop.available && userCan(user, "update") && (
         <button
           type="button"
           className={styles.menuItem}

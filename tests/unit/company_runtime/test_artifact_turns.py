@@ -70,6 +70,17 @@ def test_snapshot_does_not_stop_before_files_beyond_result_cap(tmp_path):
     assert artifact_index(tmp_path, previous=before) == [artifact(str(last), "changed")]
 
 
+def test_artifact_snapshot_ignores_os_and_office_temporary_files(tmp_path):
+    (tmp_path / "~$项目汇报.pptx").write_bytes(b"office lock")
+    (tmp_path / ".DS_Store").write_bytes(b"finder metadata")
+    (tmp_path / "Thumbs.db").write_bytes(b"windows metadata")
+    (tmp_path / "draft.tmp").write_bytes(b"temporary")
+    report = tmp_path / "项目汇报.pptx"
+    report.write_bytes(b"report")
+
+    assert artifact_index(tmp_path, limit=None) == [artifact(str(report), "report")]
+
+
 @pytest.mark.asyncio
 async def test_legacy_cumulative_images_are_reconstructed_per_original_turn(company):
     server, client, _, _ = company

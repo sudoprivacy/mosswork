@@ -37,6 +37,7 @@ from octop.infra.company_runtime.client import (
     CompanyServiceError,
 )
 from octop.infra.company_runtime.local import (
+    LocalArtifactError,
     OperationJournal,
     ProjectBackend,
     ReceiptMiddleware,
@@ -244,7 +245,17 @@ class EnterpriseRuntime:
                     "pending_approval": self.steering.approvals.snapshot(value["thread_id"]),
                     **{
                         k: value[k]
-                        for k in ("task_id", "thread_id", "status", "recovery_state", "sync_state")
+                        for k in (
+                            "task_id",
+                            "thread_id",
+                            "status",
+                            "recovery_state",
+                            "sync_state",
+                            "error_code",
+                            "error_stage",
+                            "error_retryable",
+                            "error_action",
+                        )
                         if k in value
                     },
                 }
@@ -464,6 +475,10 @@ class EnterpriseRuntime:
         watcher = None
         history = None
         status, error, artifacts = "completed", "", []
+        error_code = ""
+        error_stage = ""
+        error_retryable = False
+        error_action = ""
         sent_files: dict[str, dict[str, Any]] = {}
         try:
             if project.is_symlink() or not project.resolve().is_relative_to(self.workspace):
@@ -1018,8 +1033,34 @@ class EnterpriseRuntime:
             status = "cancelled"
         except Exception as exc:
             status, error = "failed", str(exc)
+            if isinstance(exc, LocalArtifactError):
+                error_code = exc.code
+                error_stage = "artifact_write"
+                error_retryable = exc.retryable
+                error_action = exc.action
+            elif isinstance(exc, CompanyModelError):
+                error_code = str(exc)
+                error_stage = "model_request"
+                error_retryable = exc.retryable
+            elif isinstance(exc, httpx.TransportError):
+                error_code = "company_model_connection_lost"
+                error_stage = "model_request"
+                error_retryable = True
+            elif str(exc).startswith("company_model_"):
+                error_code = str(exc)
+                error_stage = "model_request"
             if "unknown" in error or isinstance(exc, httpx.TransportError):
                 status = "unknown"
+                error_code = error_code or "task_result_unknown"
+                error_stage = error_stage or "task_reconcile"
+                error_action = error_action or "check_task_status"
+            if error_code:
+                task.update(
+                    error_code=error_code,
+                    error_stage=error_stage,
+                    error_retryable=error_retryable,
+                    error_action=error_action,
+                )
         finally:
             task["reported_status"] = status
             # Stop the ownership watcher before any await in finalization.
@@ -1115,6 +1156,10 @@ class EnterpriseRuntime:
                             "status": status,
                             "sync_state": task["sync_state"],
                             "error": error,
+                            **({"error_code": error_code} if error_code else {}),
+                            **({"stage": error_stage} if error_stage else {}),
+                            **({"retryable": error_retryable} if error_code else {}),
+                            **({"action": error_action} if error_action else {}),
                             "artifacts": artifacts,
                         }
                     )

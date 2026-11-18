@@ -164,7 +164,10 @@ OPENAPI_TAGS: list[dict[str, str]] = [
         "description": "Per-agent subagent definitions (agents/*.md) and bundled catalog install.",
     },
     {"name": "terminal", "description": "AI-assisted remote terminal sessions."},
-    {"name": "update", "description": "In-place server update checks and apply flow."},
+    {
+        "name": "update",
+        "description": "Native client release discovery and downloads; server update status and administration.",
+    },
     {
         "name": "browser",
         "description": "Remote browser: env/install, harness sessions, live stream, record/replay.",

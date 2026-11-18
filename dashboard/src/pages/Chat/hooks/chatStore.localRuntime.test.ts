@@ -129,6 +129,20 @@ it("shows retry status and keeps it during a waiting heartbeat", async () => {
   await pending;
 });
 
+it("shows cold-start runtime phases and clears them when the turn ends", async () => {
+  const pending = store.sendTurn("local-thread", "start", "expert", "key");
+  expect(store.getSnapshot("local-thread").localPreparing).toBe(true);
+  listener?.({ event: "runtime_progress", phase: "tools" });
+  expect(store.getSnapshot("local-thread").localPreparingPhase).toBe("tools");
+  expect(store.getSnapshot("local-thread").localPreparing).toBe(true);
+  listener?.({ event: "runtime_progress", phase: "runtime" });
+  expect(store.getSnapshot("local-thread").localPreparingPhase).toBe("runtime");
+  listener?.({ event: "done", thread_id: "local-thread", status: "completed" });
+  await pending;
+  expect(store.getSnapshot("local-thread").localPreparing).toBe(false);
+  expect(store.getSnapshot("local-thread").localPreparingPhase).toBeUndefined();
+});
+
 it("keeps the original runtime error code on a failed local task", async () => {
   const pending = store.sendTurn("local-thread", "fail", "expert", "key");
   listener?.({

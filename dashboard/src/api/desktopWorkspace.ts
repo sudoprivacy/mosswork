@@ -15,6 +15,7 @@ export interface DesktopWorkspaceBridge {
   choose: () => Promise<DesktopWorkspaceState>;
   clear: () => Promise<DesktopWorkspaceState>;
   disconnect: () => Promise<DesktopWorkspaceState>;
+  showAbout?: () => Promise<DesktopWorkspaceState>;
 }
 
 declare global {

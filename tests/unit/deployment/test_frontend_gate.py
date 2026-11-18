@@ -72,7 +72,7 @@ def invoke(root, *arguments):
         capture_output=True,
         text=True,
         encoding="utf-8",
-        timeout=30,
+        timeout=60,
     )
 
 
@@ -204,6 +204,7 @@ def frontend(root):
         if key not in {"GIT_DIR", "GIT_WORK_TREE", "GIT_INDEX_FILE", "GIT_COMMON_DIR", "GIT_PREFIX"}
     }
     environment["PYTHONDONTWRITEBYTECODE"] = "1"
+    # This watchdog covers metadata checks and the complete real npm pipeline.
     try:
         return subprocess.run(
             [sys.executable, str(root / "tools/frontend_gate.py")],
@@ -212,7 +213,7 @@ def frontend(root):
             capture_output=True,
             text=True,
             encoding="utf-8",
-            timeout=30,
+            timeout=60,
         )
     except subprocess.TimeoutExpired:
         history = root / ".git/mosswork-frontend-gate/history.json"
@@ -377,7 +378,7 @@ def test_actual_make_then_git_hook_reuses_one_frontend_result(npm_repository):
         capture_output=True,
         text=True,
         encoding="utf-8",
-        timeout=30,
+        timeout=60,
     )
     assert first.returncode == 0, (first.stdout, first.stderr)
     assert trace(root) == ["typecheck", "test", "build"]
@@ -389,7 +390,7 @@ def test_actual_make_then_git_hook_reuses_one_frontend_result(npm_repository):
         capture_output=True,
         text=True,
         encoding="utf-8",
-        timeout=30,
+        timeout=60,
     )
     assert second.returncode == 0, (second.stdout, second.stderr)
     assert "FRONTEND_GATE_RECEIPT:" in second.stdout + second.stderr
@@ -465,7 +466,7 @@ def test_frontend_dispatcher_plan_works_without_site_packages(repository):
         capture_output=True,
         text=True,
         encoding="utf-8",
-        timeout=30,
+        timeout=60,
     )
     assert result.returncode == 0, (result.stdout, result.stderr)
     assert json.loads(result.stdout)["profile"] == "frontend"
@@ -481,7 +482,7 @@ def test_actual_frontend_entry_loads_without_site_packages(npm_repository):
         capture_output=True,
         text=True,
         encoding="utf-8",
-        timeout=30,
+        timeout=60,
     )
     assert result.returncode == 0, (result.stdout, result.stderr)
     assert trace(root) == ["typecheck", "test", "build"]

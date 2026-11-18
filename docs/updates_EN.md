@@ -28,7 +28,7 @@ Web users can load newly deployed web code after refreshing. The employee client
 
 ## Employee client software upgrades
 
-Stable company clients with the native updater check the official channel at startup and every six hours. You can also select **Check for updates** in the system tray's desktop settings, including before sign-in.
+Stable company clients with a configured server address check through that server at startup and every six hours. Select **About mosswork / Client updates** in the account menu to view the installed client version, platform and update server, or check manually. Employees do not need server update permissions. The system tray's desktop settings offer the same entry before sign-in.
 
 When a new version is available, select **Download update**. Once the complete download passes SHA-256 verification, save unsent edits, select **Restart and install** and confirm. Checking and downloading do not quit the client. Running tasks, pending approvals, unresolved results and unsynced results block the restart; the verified download remains ready until those tasks are handled.
 
@@ -42,4 +42,10 @@ Local projects stay in the employee working folder; before installing or upgradi
 
 ## Update sources
 
-Native clients use this repository's official COS stable channel. Startup and manual checks share one manifest; downloads stay pinned to the selected immutable release and its checksum. Server and Python package upgrades remain administrator-managed: `mosswork update` and the online update API stay disabled. Upstream PyPI packages with the same name and personal-edition installers must not replace the enterprise distribution.
+Native clients request both the manifest and complete payload from the selected company server. The server fetches this repository's official COS stable feed and streams the payload without redirecting clients to COS. The server must reach the official release origin and support `/api/update/desktop/`; reverse proxies must allow long-running complete downloads. Older servers require manual client installation. Downloads stay pinned to the server and immutable release selected during discovery, even after switching servers.
+
+The installed client version is independent of the server version. Server and Python package upgrades remain administrator-managed: `mosswork update` and server self-update APIs stay disabled. Upstream PyPI packages with the same name and personal-edition installers must not replace the enterprise distribution.
+
+mosswork release maintainers upload the official manifest and payloads to COS through this repository's publication workflow. Company administrators deploy a server with the update endpoints; employees do not publish releases or need a COS account to check for updates. See the [release guide](open-source-release_EN.md) for publication steps.
+
+An unpublished manifest shows “No client updates are currently available.” For failed checks, administrators can find `Native update manifest unavailable` in the server's `MOSSWORK_HOME/logs/mosswork.log` (default: `~/.mosswork/logs/mosswork.log`). Access logs only show the HTTP status. The update API distinguishes unpublished manifests (404), unavailable sources (503) and invalid manifests (502), without exposing proxy addresses or credentials in network error responses.

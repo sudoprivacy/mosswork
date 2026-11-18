@@ -13,18 +13,23 @@ import (
 	"github.com/wailsapp/wails/v3/pkg/application"
 	"github.com/wailsapp/wails/v3/pkg/events"
 	"github.com/wailsapp/wails/v3/pkg/updater"
+	"mosswork.desktop/internal/company"
 	"mosswork.desktop/internal/desktopupdate"
 )
 
 type DesktopUpdateView struct {
-	Status  desktopupdate.Status `json:"status"`
-	Strings map[string]string    `json:"strings"`
-	Locale  Locale               `json:"locale"`
+	Status   desktopupdate.Status `json:"status"`
+	Strings  map[string]string    `json:"strings"`
+	Locale   Locale               `json:"locale"`
+	Server   string               `json:"server"`
+	Platform string               `json:"platform"`
 }
 
 func (a *App) GetDesktopUpdate() DesktopUpdateView {
 	locale := a.store.get().Locale
 	view := DesktopUpdateView{Status: desktopupdate.Status{State: updater.StateUnconfigured, CurrentVersion: desktopVersion}, Strings: map[string]string{}, Locale: locale}
+	view.Server = a.desktopUpdateServer()
+	view.Platform = runtime.GOOS + " / " + runtime.GOARCH
 	for key := range desktopUpdateCopy[LocaleEN] {
 		text := desktopUpdateCopy[locale][key]
 		if text == "" {
@@ -38,18 +43,31 @@ func (a *App) GetDesktopUpdate() DesktopUpdateView {
 	return view
 }
 
+func (a *App) desktopUpdateServer() string {
+	a.companyMu.Lock()
+	base := a.companyURL
+	a.companyMu.Unlock()
+	if base == "" {
+		base = companyServerURL(a.store.get())
+	}
+	normalized, err := company.ServerAddress(base)
+	if err != nil {
+		return ""
+	}
+	return normalized
+}
+
 func (a *App) configureDesktopUpdates() {
 	// Development/base-mode binaries must not replace themselves with the
 	// enterprise distribution. Release packaging stamps only complete clients.
 	if !companyOnly || desktopVersion == "dev" || !desktopupdate.Supported(runtime.GOOS, runtime.GOARCH) {
 		return
 	}
-	source, err := desktopupdate.NewSource()
-	if err == nil {
-		a.updates, err = desktopupdate.New(desktopVersion, source, a.requestQuit, func() {
-			a.app.Event.Emit("desktop:update:changed")
-		})
-	}
+	source := desktopupdate.NewServerSource(a.desktopUpdateServer)
+	var err error
+	a.updates, err = desktopupdate.New(desktopVersion, source, a.requestQuit, func() {
+		a.app.Event.Emit("desktop:update:changed")
+	})
 	if err != nil {
 		log.Printf("configure desktop updates: %v", err)
 	}
@@ -76,15 +94,18 @@ func (a *App) ShowDesktopUpdate() {
 	if a.updateWindow == nil {
 		a.updateWindow = a.app.Window.NewWithOptions(application.WebviewWindowOptions{
 			Name: "desktop-update", Title: a.GetDesktopUpdate().Strings["title"],
-			Width: 480, Height: 400, URL: "/desktop-update.html", AllowSimpleEventEmit: true,
+			Width: 520, Height: 460, URL: "/desktop-update.html", AllowSimpleEventEmit: true,
+			BackgroundColour: desktopBackgroundColour(a.app.Env.IsDarkMode()),
 		})
 		a.updateWindow.RegisterHook(events.Common.WindowClosing, func(event *application.WindowEvent) {
 			event.Cancel()
 			a.updateWindow.Hide()
 		})
 	}
+	a.updateWindow.SetTitle(a.GetDesktopUpdate().Strings["title"])
 	a.updateWindow.Show()
 	a.updateWindow.Focus()
+	a.app.Event.Emit("desktop:update:changed")
 }
 
 func (a *App) startDesktopUpdateChecks() {
@@ -96,11 +117,13 @@ func (a *App) startDesktopUpdateChecks() {
 		ticker := time.NewTicker(6 * time.Hour)
 		defer ticker.Stop()
 		for {
-			check, stop := context.WithTimeout(ctx, 30*time.Second)
-			err := a.updates.Check(check)
-			stop()
-			if err == nil && a.updates.Status().State == updater.StateAvailable {
-				a.ShowDesktopUpdate()
+			if a.desktopUpdateServer() != "" {
+				check, stop := context.WithTimeout(ctx, 30*time.Second)
+				err := a.updates.Check(check)
+				stop()
+				if err == nil && a.updates.Status().State == updater.StateAvailable {
+					a.ShowDesktopUpdate()
+				}
 			}
 			select {
 			case <-ctx.Done():
@@ -217,10 +240,12 @@ func desktopUpdateIdle(data json.RawMessage) error {
 
 var desktopUpdateCopy = map[Locale]map[string]string{
 	LocaleEN: {
-		"title": "mosswork updates", "current": "Current version", "latest": "New version",
+		"title": "About mosswork", "current": "Client version", "latest": "New client version",
+		"server": "Update server", "platform": "Platform", "no-server": "Set your server address before checking for updates.",
 		"unconfigured": "Automatic updates are available in supported stable company installers.",
+		"development":  "Development builds do not support online updates. Install a stable company client to enable updates.",
 		"idle":         "Check for a new client version.", "checking": "Checking for updates…",
-		"up-to-date": "You’re up to date.", "available": "A new version is available.",
+		"up-to-date": "No client updates are currently available.", "available": "A new version is available.",
 		"downloading": "Downloading the complete client…", "verifying": "Verifying the download…",
 		"installing": "Preparing the update…", "ready": "The update is ready to install.",
 		"error":    "Update failed. Your current version is still available. Please try again.",
@@ -231,10 +256,12 @@ var desktopUpdateCopy = map[Locale]map[string]string{
 		"note":    "Your account settings and working folders are preserved. Installation restarts the client; save any unsent edits first.",
 	},
 	LocaleZH: {
-		"title": "mosswork 客户端更新", "current": "当前版本", "latest": "新版本",
+		"title": "关于 mosswork", "current": "客户端版本", "latest": "新版客户端",
+		"server": "更新服务端", "platform": "系统架构", "no-server": "请先设置服务端地址，再检查更新。",
 		"unconfigured": "请使用受支持的正式版企业客户端安装包启用自动更新。",
+		"development":  "开发版不支持在线更新。请安装正式版企业客户端后使用此功能。",
 		"idle":         "检查是否有新版客户端。", "checking": "正在检查更新…",
-		"up-to-date": "当前已是最新版本。", "available": "发现新版客户端。",
+		"up-to-date": "暂无可用的客户端更新。", "available": "发现新版客户端。",
 		"downloading": "正在下载完整客户端…", "verifying": "正在校验下载内容…",
 		"installing": "正在准备更新…", "ready": "更新已准备好，可以重启安装。",
 		"error":    "更新未完成，当前版本仍可使用，请稍后重试。",

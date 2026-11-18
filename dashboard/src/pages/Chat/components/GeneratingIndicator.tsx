@@ -7,6 +7,7 @@ interface GeneratingIndicatorProps {
   startedAt?: number | null;
   showElapsed?: boolean;
   preparing?: boolean;
+  preparingPhase?: string;
   /**
    * Host turn already settled; only team members (or late peers) are still
    * producing — softer named copy.
@@ -24,6 +25,7 @@ export default function GeneratingIndicator({
   startedAt = null,
   showElapsed = false,
   preparing = false,
+  preparingPhase,
   membersOnly = false,
   speakerNames = [],
 }: GeneratingIndicatorProps) {
@@ -38,7 +40,12 @@ export default function GeneratingIndicator({
   const named = speakerNames.filter((n) => n.trim());
   let label: string;
   if (preparing) {
-    label = t("chat.preparingLocalTask", "正在准备本地任务");
+    label =
+      preparingPhase === "tools"
+        ? t("chat.preparingLocalTools", "正在校验本地工具包")
+        : preparingPhase === "runtime"
+        ? t("chat.preparingLocalRuntime", "正在启动本地运行时")
+        : t("chat.preparingLocalTask", "正在准备本地任务");
   } else if (membersOnly || named.length > 0) {
     if (named.length === 1) {
       label = t("chat.memberResponding", {

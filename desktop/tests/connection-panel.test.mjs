@@ -20,6 +20,13 @@ test('no extra buttons or dialogs on the employee workspace',()=>{
  const p=page('/chat');assert.equal(p.host,null);assert.equal(p.dom.window.document.body.children.length,0);
  assert.ok(p.dom.window.mossworkDesktopWorkspace);assert.deepEqual(p.events,[]);p.dom.window.close();
 });
+test('about opens through the selected-origin nonce bridge without pairing or server update permission',async()=>{
+ const p=page('/chat');
+ const result=p.dom.window.mossworkDesktopWorkspace.showAbout();
+ assert.deepEqual(p.events,['wails:event:emit:desktop:workspace:secret-page-nonce:2:about:']);
+ p.dom.window.__mossworkWorkspaceReply('secret-page-nonce',{id:'2',state:{state:'unpaired'}});
+ assert.equal((await result).state,'unpaired');p.dom.window.close();
+});
 test('login handoff and unrelated origins receive no native workspace bridge',()=>{
  for(const [path,origin] of [['/desktop-login.html','http://127.0.0.1:41000'],['/chat','http://external.test'],['/login.html','http://wails.localhost']]){
  const p=page(path,origin);assert.equal(p.dom.window.mossworkDesktopWorkspace,undefined);assert.deepEqual(p.events,[]);p.dom.window.close();}

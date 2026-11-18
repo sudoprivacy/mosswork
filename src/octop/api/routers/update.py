@@ -9,8 +9,10 @@ import sys
 import time
 from typing import Any
 
+import httpx
 from fastapi import APIRouter, BackgroundTasks, Body, Depends, Query
-from pydantic import BaseModel, Field
+from fastapi.responses import JSONResponse, StreamingResponse
+from pydantic import BaseModel, ConfigDict, Field
 
 from octop.api.deps import current_user, get_server, require_permission
 from octop.api.routers.update_store import (
@@ -23,6 +25,7 @@ from octop.api.routers.update_store import (
 )
 from octop.infra.errors import ErrorCode, MossworkError
 from octop.infra.server import MossworkServer
+from octop.infra.setup import desktop_update
 from octop.infra.setup.self_update import (
     UpgradeResult,
     fetch_pypi_info,
@@ -49,6 +52,102 @@ router = APIRouter(prefix="/update", tags=["update"])
 
 _STABLE_ONLY_KEY = "update.stable_only"
 _CACHE_INTERNAL = frozenset({"latest_any", "latest_stable", "description"})
+
+
+class DesktopUpdateArtifact(BaseModel):
+    model_config = ConfigDict(extra="allow")
+    platform: str
+    arch: str
+    filename: str
+    url: str = Field(description="Relative download URL on this company server")
+    size: int = Field(description="Complete client payload size in bytes")
+    digest_algo: str = Field(alias="digestAlgo")
+    digest: str = Field(description="Base64-encoded SHA-256 digest")
+
+
+class DesktopUpdateManifest(BaseModel):
+    model_config = ConfigDict(extra="allow")
+    schema_version: int = Field(alias="schemaVersion")
+    channel: str
+    version: str = Field(description="Client release version, independent of the server version")
+    metadata: dict[str, Any]
+    artifacts: list[DesktopUpdateArtifact]
+
+
+@router.get(
+    "/desktop/latest/desktop-update.json",
+    summary="Check native client releases",
+    description="Public stable client manifest. All artifact URLs point back to this server; no server upgrade permission is required.",
+    response_class=JSONResponse,
+    response_model=DesktopUpdateManifest,
+)
+async def desktop_update_manifest() -> dict[str, Any]:
+    try:
+        manifest = await desktop_update.fetch_manifest()
+        DesktopUpdateManifest.model_validate(manifest)
+        return manifest
+    except httpx.HTTPStatusError as exc:
+        upstream_status = exc.response.status_code
+        logger.warning("Native update manifest unavailable: upstream HTTP %s", upstream_status)
+        code = (
+            ErrorCode.DESKTOP_UPDATE_NOT_PUBLISHED
+            if upstream_status == 404
+            else ErrorCode.DESKTOP_UPDATE_SOURCE_UNAVAILABLE
+        )
+        raise MossworkError.localized(
+            code, details={"reason": "source_http_error", "upstream_status": upstream_status}
+        ) from exc
+    except httpx.HTTPError as exc:
+        logger.warning("Native update manifest unavailable: %s: %s", type(exc).__name__, exc)
+        raise MossworkError.localized(
+            ErrorCode.DESKTOP_UPDATE_SOURCE_UNAVAILABLE,
+            details={
+                "reason": "source_timeout"
+                if isinstance(exc, httpx.TimeoutException)
+                else "source_connection_failed"
+            },
+        ) from exc
+    except (ValueError, KeyError, TypeError) as exc:
+        logger.warning("Native update manifest unavailable: invalid manifest: %s", exc)
+        raise MossworkError.localized(
+            ErrorCode.DESKTOP_UPDATE_MANIFEST_INVALID,
+            details={"reason": "manifest_invalid"},
+        ) from exc
+
+
+@router.get(
+    "/desktop/releases/v{version}/{filename}",
+    summary="Download a complete native client update",
+    description="Public streaming download from the official immutable release. Does not redirect the client or upgrade the server.",
+    response_class=StreamingResponse,
+    responses={
+        200: {
+            "description": "Complete native client payload",
+            "content": {
+                "application/octet-stream": {"schema": {"type": "string", "format": "binary"}}
+            },
+        },
+    },
+)
+async def desktop_update_artifact(version: str, filename: str) -> StreamingResponse:
+    try:
+        client, response = await desktop_update.open_artifact(version, filename)
+    except ValueError as exc:
+        raise MossworkError.localized(ErrorCode.NOT_FOUND) from exc
+    except httpx.HTTPStatusError as exc:
+        if exc.response.status_code == 404:
+            raise MossworkError.localized(ErrorCode.NOT_FOUND) from exc
+        raise MossworkError.localized(ErrorCode.INTERNAL_ERROR) from exc
+    except httpx.HTTPError as exc:
+        raise MossworkError.localized(ErrorCode.INTERNAL_ERROR) from exc
+    headers = {"Cache-Control": "no-store"}
+    if length := response.headers.get("Content-Length"):
+        headers["Content-Length"] = length
+    return StreamingResponse(
+        desktop_update.artifact_bytes(client, response),
+        media_type="application/octet-stream",
+        headers=headers,
+    )
 
 
 class UpdateSettingsBody(BaseModel):

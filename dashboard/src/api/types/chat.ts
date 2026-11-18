@@ -31,7 +31,9 @@ export interface ProcessErrorInfo {
   code?: string | number;
   source?: string;
   status_code?: number;
+  stage?: string;
   retryable?: boolean;
+  action?: string;
   [key: string]: unknown;
 }
 

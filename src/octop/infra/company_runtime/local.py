@@ -30,6 +30,27 @@ from octop.infra.company_runtime.processes import (
 from octop.infra.utils.asyncio import offload
 
 
+class LocalArtifactError(RuntimeError):
+    """A user-actionable failure while collecting local task artifacts."""
+
+    def __init__(self, code: str, message: str | None = None) -> None:
+        super().__init__(message or code)
+        self.code = code
+        self.retryable = code in {"workspace_file_locked", "workspace_permission_denied"}
+        self.action = (
+            "close_file_and_retry" if code == "workspace_file_locked" else "check_file_permissions"
+        )
+
+
+def _ignored_artifact(path: Path) -> bool:
+    name = path.name
+    return (
+        name.startswith("~$")
+        or name in {".DS_Store", "Thumbs.db", "desktop.ini"}
+        or name.endswith((".tmp", ".temp"))
+    )
+
+
 def local_attachment_metadata(project: Path, files: list[dict[str, Any]]) -> list[dict[str, Any]]:
     """Keep verified imported originals in user history without uploading their bytes."""
     if len(files) > 50:
@@ -242,13 +263,29 @@ def artifact_index(
     known = {item["path"]: item["sha256"] for item in previous or []}
     outputs = []
     for path in sorted(project.rglob("*")):
-        if path.is_symlink() or not path.is_file() or not path.resolve().is_relative_to(project):
+        if (
+            _ignored_artifact(path)
+            or path.is_symlink()
+            or not path.is_file()
+            or not path.resolve().is_relative_to(project)
+        ):
             continue
-        with path.open("rb") as stream:
-            digest = hashlib.file_digest(stream, "sha256").hexdigest()
+        try:
+            with path.open("rb") as stream:
+                digest = hashlib.file_digest(stream, "sha256").hexdigest()
+            size = path.stat().st_size
+        except FileNotFoundError:
+            # Files can disappear while the task is finishing; omit the stale entry.
+            continue
+        except PermissionError as exc:
+            winerror = getattr(exc, "winerror", None)
+            code = (
+                "workspace_file_locked" if winerror in {32, 33} else "workspace_permission_denied"
+            )
+            raise LocalArtifactError(code) from exc
         if known.get(str(path)) == digest:
             continue
-        outputs.append({"path": str(path), "size": path.stat().st_size, "sha256": digest})
+        outputs.append({"path": str(path), "size": size, "sha256": digest})
         if limit is not None and len(outputs) >= limit:
             break
     return outputs

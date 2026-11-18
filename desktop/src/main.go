@@ -447,9 +447,6 @@ func main() {
 	app.Event.OnApplicationEvent(events.Common.ApplicationStarted, func(_ *application.ApplicationEvent) {
 		api.startDesktopUpdateChecks()
 		applyAppIcon(app)
-		if api.window != nil {
-			api.window.SetBackgroundColour(desktopBackgroundColour(app.Env.IsDarkMode()))
-		}
 	})
 
 	initialURL := "/"
@@ -465,7 +462,9 @@ func main() {
 		URL:                  initialURL,
 		Frameless:            mainWindowFrameless(runtime.GOOS),
 		AllowSimpleEventEmit: true,
-		BackgroundColour:     desktopBackgroundColour(app.Env.IsDarkMode()),
+		// WebView2 applies this after creating its controller. ApplicationStarted
+		// is too early to call SetBackgroundColour on Windows.
+		BackgroundColour: desktopBackgroundColour(app.Env.IsDarkMode()),
 		Mac: application.MacWindow{
 			TitleBar: application.MacTitleBarDefault,
 			WebviewPreferences: application.MacWebviewPreferences{

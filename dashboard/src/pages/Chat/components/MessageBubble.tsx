@@ -156,6 +156,9 @@ function formatErrorDebugTags(errorInfo: ChatMessage["errorInfo"]): string[] {
   if (errorInfo.source) {
     parts.push(`source: ${errorInfo.source}`);
   }
+  if (typeof errorInfo.stage === "string" && errorInfo.stage) {
+    parts.push(`stage: ${errorInfo.stage}`);
+  }
   if (typeof errorInfo.status_code === "number") {
     parts.push(`HTTP ${errorInfo.status_code}`);
   }
@@ -716,6 +719,7 @@ function MessageBubble({
     ? formatChatStreamError(errorSource, t)
     : textContent;
   const errorAction = isError ? chatStreamErrorAction(errorSource) : null;
+  const canRetry = message.errorInfo?.retryable !== false;
   const attachments = message.attachments || [];
   const imageAttachments = attachments.filter(
     (attachment) =>
@@ -948,7 +952,7 @@ function MessageBubble({
                     ))}
                   </div>
                 )}
-                {(errorAction || onRegenerate) && (
+                {(errorAction || (onRegenerate && canRetry)) && (
                   <div className={styles.errorActionRow}>
                     {errorAction?.fix === "disable_stream_usage" &&
                     onDisableStreamUsage ? (
@@ -974,7 +978,7 @@ function MessageBubble({
                         {t(errorAction.labelKey)}
                       </button>
                     ) : null}
-                    {onRegenerate && (
+                    {onRegenerate && canRetry && (
                       <button
                         className={styles.errorRetryBtn}
                         onClick={() => onRegenerate(message.id)}

@@ -112,6 +112,7 @@ export interface ModelStatus {
 /** Per-session state held in the chat store's module-scoped Map. */
 export interface SessionStreamState {
   localPreparing?: boolean;
+  localPreparingPhase?: string;
   messages: ChatMessage[];
   isStreaming: boolean;
   modelStatus: ModelStatus | null;
@@ -177,6 +178,7 @@ export interface SessionSnapshot {
   modelStatus: ModelStatus | null;
   streamStalled: boolean;
   localPreparing?: boolean;
+  localPreparingPhase?: string;
   thinkingStartedAt: number | null;
   runUsage: TokenUsage | null;
   contextUsage: TokenUsage | null;

@@ -19,6 +19,18 @@ class RuntimeConflict(ValueError):
     pass
 
 
+def _thread_is_empty_for_local_claim(conn: Any, thread_id: str, last_active: int) -> bool:
+    """Return whether a server session has never been used by any runtime path."""
+    if last_active != 0:
+        return False
+    for table in ("thread_messages", "company_runtime_tasks"):
+        if conn.execute(
+            f"SELECT 1 FROM {table} WHERE thread_id=? LIMIT 1", (thread_id,)
+        ).fetchone():
+            return False
+    return True
+
+
 class CompanyRuntimeRepo:
     def __init__(self, db: DatabasePool) -> None:
         self.db = db
@@ -128,10 +140,11 @@ class CompanyRuntimeRepo:
             if binding and binding["installation_hash"] != installation_hash:
                 raise RuntimeConflict("project_on_another_device")
             if not binding:
-                has_history = conn.execute(
-                    "SELECT 1 FROM thread_messages WHERE thread_id=? LIMIT 1", (thread_id,)
-                ).fetchone()
-                if thread["last_active"] or has_history:
+                if not _thread_is_empty_for_local_claim(conn, thread_id, thread["last_active"]):
+                    if conn.execute(
+                        "SELECT 1 FROM sessions WHERE thread_id=?", (thread_id,)
+                    ).fetchone():
+                        raise RuntimeConflict("execution_mode_server")
                     raise RuntimeConflict("legacy_thread_read_only")
                 conn.execute(
                     "INSERT INTO company_runtime_threads VALUES(?,?,?,?,?,?,?)",
