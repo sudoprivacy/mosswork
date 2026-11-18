@@ -578,6 +578,7 @@ jobs:
           gh release edit "$RELEASE_TAG" --draft=false --prerelease="$PRERELEASE" --latest="$([[ "$PRERELEASE" == false ]] && echo true || echo false)" --notes-file release-notes.md
       - name: Publish release assets to Tencent COS
         env:
+          VERIFY_PUBLIC_SIGNED_MAC: ${{ needs.source.outputs.signed_mac }}
           COS_BUCKET: sudowork-release-1309794936
           COS_ROOT_PATH: mosswork/release
           COS_PUBLIC_BASE_URL: https://sudowork-release-1309794936.cos.accelerate.myqcloud.com

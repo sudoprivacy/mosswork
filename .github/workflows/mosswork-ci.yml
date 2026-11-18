@@ -29,6 +29,7 @@ on:
       - 'tests/unit/test_cli_main.py'
       - 'scripts/install-moss-server.sh'
       - 'tools/publish-release-to-cos.sh'
+      - 'tools/verify_public_mac_download.py'
       - 'tools/desktop_update_manifest.py'
       - 'desktop/src/**'
       - 'tools/*public_source.py'
