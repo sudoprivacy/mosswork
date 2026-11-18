@@ -13,7 +13,8 @@ values are recorded in `downloads.json` beside this notice.
   <https://ffmpeg.martin-riedl.de/>
 
 The macOS binaries are FFmpeg 9.0.1; Windows uses the pinned 9.0 release-branch
-build `n9.0.1-26-g5c8e7e2433`. The binaries are mirrored by Sudowork at the
+build `n9.0.1-26-g5c8e7e2433`. ARM64 macOS and Windows binaries use the Sudowork
+mirror; Intel macOS uses the fixed upstream 9.0.1 ZIPs. All archives have
 checksum-pinned addresses recorded in `downloads.json`. A copy of the GPL v3 is
 included as `GPL-3.0.txt`. Keep the corresponding upstream source and build instructions available
 when redistributing these binaries. Preserve upstream licenses included here.

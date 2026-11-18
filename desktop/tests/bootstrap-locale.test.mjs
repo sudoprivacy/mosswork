@@ -6,13 +6,13 @@ import {test} from 'node:test';
 const go=await readFile(new URL('../src/internal/companyui/server.go',import.meta.url),'utf8');
 const script=go.match(/const bootstrapDocument = `[\s\S]*?<script>([\s\S]*?)<\/script>/)[1];
 
-function bootstrap(locale,{blocked=false}={}) {
+function bootstrap(locale,{blocked=false,hash='#fresh-login-nonce'}={}) {
   const saved=new Map([['mosswork:ui-locale','zh']]),navigation=[];
   const status={textContent:''};
   const document={documentElement:{},querySelector:()=>status};
   runInNewContext(script,{
     URLSearchParams,document,
-    location:{search:'?ui_locale='+encodeURIComponent(locale),hash:'#fresh-login-nonce',replace:value=>navigation.push(value)},
+    location:{search:'?ui_locale='+encodeURIComponent(locale),hash,replace:value=>navigation.push(value)},
     localStorage:{setItem(key,value){if(blocked)throw Error('disabled');saved.set(key,value);}},
   });
   return {saved,navigation,document};
@@ -22,9 +22,14 @@ test('bootstrap applies the native locale before the dashboard reads old browser
   for(const locale of ['en','zh']) {
     const p=bootstrap(locale);
     assert.equal(p.saved.get('mosswork:ui-locale'),locale);
-    assert.equal(p.document.title,locale==='en'?'mosswork':'mosswork 企业版');
+    assert.equal(p.document.title,'mosswork');
     assert.deepEqual(p.navigation,['/desktop-login.html#fresh-login-nonce']);
   }
+});
+
+test('the account entry opens the guarded dashboard root; a legacy resume keeps its handoff',()=>{
+  assert.deepEqual(bootstrap('zh',{hash:'#account'}).navigation,['/']);
+  assert.deepEqual(bootstrap('zh',{hash:'#resume'}).navigation,['/desktop-login.html#resume']);
 });
 
 test('invalid locale and unavailable storage cannot interrupt the protected login handoff',()=>{

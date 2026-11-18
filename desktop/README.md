@@ -1,5 +1,9 @@
 # mosswork desktop (Wails v3 + green portable)
 
+The optional SudoCode deployment component uses the ordinary company installer,
+login page, runtime and update channel. The build and its current session
+requirements are described in the [bootstrap guide](../docs/private-desktop-bootstrap.md).
+
 Stable company clients request native automatic updates through the selected
 company server. The server obtains the official COS stable manifest and streams
 complete payloads without redirecting clients. Startup and manual checks share
@@ -174,7 +178,12 @@ for compatibility with older dashboards and explicit browser-based pairing.
 
 No per-company rebuild or employee environment variable is required. An optional
 `MOSSWORK_COMPANY_URL` or compiled `main.companyDefaultURL` still supplies a deployment
-default; the address saved in the panel takes precedence. Compile the NSIS installer
+default; the address saved in the panel takes precedence. Pass a public origin
+to `package-company.py --company-url` to set the compiled default. The release
+workflow accepts the same origin through its `MOSSWORK_COMPANY_URL` repository
+variable. The desktop opens the bundled organization account page for a server
+advertising canonical sign-in. The employee form remains available for servers
+that expose the standalone login API. Compile the NSIS installer
 with `-DMOSSWORK_COMPANY_OFFLINE`; optionally supply
 `-DMOSSWORK_WEBVIEW2_OFFLINE_INSTALLER=<full architecture-matched installer>`.
 Without WebView2 already installed or that full offline payload, the company
@@ -192,7 +201,9 @@ Exported sources do not need a new Git repository or an artificial source commit
 Tag releases build only macOS ARM64 and Windows amd64 clients on native runners.
 The workflow prepares the portable runtime, adds the pinned document dependencies
 and FFmpeg tools, and runs `verify_company_runtime.py` on each target before packaging.
-FFmpeg binaries use the checksum-pinned public Sudowork mirror in `company-tools.json`.
+FFmpeg binaries use the checksum-pinned sources in `company-tools.json`:
+the public Sudowork mirror for ARM64 macOS and Windows, and fixed upstream
+9.0.1 ZIPs for Intel macOS packaging.
 Their licenses and provenance are included in the runtime's `third-party/ffmpeg/`.
 The Windows build downloads Microsoft's x64 offline WebView2 installer and checks
 its Authenticode signature. Release automation and GHCR setup are documented in

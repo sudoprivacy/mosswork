@@ -9,6 +9,10 @@ on:
         description: 'Build and validate current native clients without publishing or changing a release'
         type: boolean
         default: false
+      sign_bootstrap_candidate:
+        description: 'Qualify the Developer ID signed and notarized macOS bootstrap client from main'
+        type: boolean
+        default: false
 
 permissions:
   contents: read
@@ -25,6 +29,7 @@ jobs:
       tag: ${{ steps.version.outputs.tag }}
       version: ${{ steps.version.outputs.version }}
       prerelease: ${{ steps.version.outputs.prerelease }}
+      signed_mac: ${{ steps.signing.outputs.enabled }}
     steps:
       - uses: actions/checkout@v4
       - uses: astral-sh/setup-uv@v6
@@ -56,6 +61,28 @@ jobs:
           with open(os.environ['GITHUB_OUTPUT'], 'a') as out:
               out.write(f'tag={tag}\nversion={version}\nprerelease={str(prerelease).lower()}\n')
           PY
+      - name: Select the macOS signing path
+        id: signing
+        env:
+          SIGN_CANDIDATE: ${{ inputs.sign_bootstrap_candidate || false }}
+          QUALIFY: ${{ inputs.qualify_clients_only || false }}
+          SIGNED_RELEASE_TAG: ${{ vars.MOSSWORK_SIGNED_BOOTSTRAP_RELEASE_TAG }}
+          DEFAULT_BRANCH: ${{ github.event.repository.default_branch }}
+        run: |
+          set -euo pipefail
+          enabled=false
+          if [[ "$SIGN_CANDIDATE" == true ]]; then
+            [[ "$QUALIFY" == true && "$GITHUB_REF" == "refs/heads/$DEFAULT_BRANCH" ]] || {
+              echo 'Signed candidate qualification requires the default branch and qualify_clients_only.' >&2; exit 1;
+            }
+            enabled=true
+          elif [[ -n "$SIGNED_RELEASE_TAG" && "$GITHUB_REF" == "refs/tags/$SIGNED_RELEASE_TAG" ]]; then
+            # Reject a tag pointing outside the default branch's history.
+            git fetch --unshallow --no-tags origin "$DEFAULT_BRANCH"
+            git merge-base --is-ancestor "$GITHUB_SHA" FETCH_HEAD
+            enabled=true
+          fi
+          echo "enabled=$enabled" >> "$GITHUB_OUTPUT"
       - name: Refuse overwriting a published release
         if: ${{ !inputs.qualify_clients_only }}
         env:
@@ -69,7 +96,7 @@ jobs:
             }
           fi
       - name: Test release tooling
-        run: uv run --frozen pytest tests/unit/deployment desktop/tests/test_package_company.py desktop/tests/test_company_tools.py tests/unit/infra/test_local_harness.py tests/unit/infra/test_local_components.py tests/unit/infra/test_brand_environment.py -q
+        run: uv run --frozen pytest tests/unit/deployment desktop/tests/test_package_company.py desktop/tests/test_company_tools.py desktop/tests/test_bootstrap_release.py tests/unit/infra/test_local_harness.py tests/unit/infra/test_local_components.py tests/unit/infra/test_brand_environment.py -q
       - name: Export the complete public source and deployment assets
         env:
           RELEASE_TAG: ${{ steps.version.outputs.tag }}
@@ -99,6 +126,9 @@ jobs:
     name: Client (${{ matrix.platform }})
     needs: source
     runs-on: ${{ matrix.os }}
+    environment:
+      name: ${{ matrix.target == 'darwin' && needs.source.outputs.signed_mac == 'true' && 'mosswork-macos-release' || 'client-build' }}
+      deployment: ${{ matrix.target == 'darwin' && needs.source.outputs.signed_mac == 'true' }}
     timeout-minutes: 90
     strategy:
       fail-fast: false
@@ -155,6 +185,18 @@ jobs:
           # package resolves from the exported source tree on every runner.
           npm ci --no-audit --replace-registry-host=never
           npm run build
+      - name: Fetch the pinned Stack bootstrap bundle
+        if: runner.os == 'macOS' && needs.source.outputs.signed_mac == 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          STACK_TAG: ${{ vars.MOSSWORK_BOOTSTRAP_ARM64_STACK_TAG }}
+          STACK_ASSET: ${{ vars.MOSSWORK_BOOTSTRAP_ARM64_STACK_ASSET }}
+          STACK_SHA256: ${{ vars.MOSSWORK_BOOTSTRAP_ARM64_STACK_SHA256 }}
+        run: |
+          set -euo pipefail
+          [[ "$STACK_TAG" =~ ^[A-Za-z0-9][A-Za-z0-9._-]*$ && "$STACK_ASSET" =~ ^[A-Za-z0-9][A-Za-z0-9._-]*\.tar\.gz$ ]]
+          gh release download "$STACK_TAG" --repo sudoprivacy/sudostack --pattern "$STACK_ASSET" --output "$RUNNER_TEMP/stack.tar.gz"
+          uv run --no-project --python 3.12 python desktop/extract_bootstrap_release.py "$RUNNER_TEMP/stack.tar.gz" "$STACK_SHA256" "$RUNNER_TEMP/stack-bootstrap"
       - name: Install Wails
         working-directory: source
         run: |
@@ -189,13 +231,34 @@ jobs:
           if ($signature.Status -ne 'Valid' -or $signature.SignerCertificate.Subject -notmatch 'Microsoft Corporation') {
             throw 'WebView2 installer signature validation failed'
           }
+      - name: Set up Apple signing on the ephemeral Mac
+        if: runner.os == 'macOS' && needs.source.outputs.signed_mac == 'true'
+        env:
+          BUILD_CERTIFICATE_BASE64: ${{ secrets.BUILD_CERTIFICATE_BASE64 }}
+          P12_PASSWORD: ${{ secrets.P12_PASSWORD }}
+          IDENTITY: ${{ secrets.IDENTITY }}
+          TEAM_ID: ${{ secrets.TEAM_ID }}
+          APPLE_ID: ${{ secrets.APPLE_ID }}
+          APPLE_ID_PASSWORD: ${{ secrets.APPLE_ID_PASSWORD }}
+        run: bash desktop/setup-macos-signing.sh
       - name: Package the requested client architecture
         env:
           TARGET_PLATFORM: ${{ matrix.target }}
           TARGET_ARCH: ${{ matrix.arch }}
+          COMPANY_URL: ${{ vars.MOSSWORK_COMPANY_URL }}
+          SIGN_MAC: ${{ runner.os == 'macOS' && needs.source.outputs.signed_mac == 'true' }}
+          SIGN_IDENTITY: ${{ runner.os == 'macOS' && needs.source.outputs.signed_mac == 'true' && secrets.IDENTITY || '' }}
+          SIGN_TEAM: ${{ runner.os == 'macOS' && needs.source.outputs.signed_mac == 'true' && secrets.TEAM_ID || '' }}
         run: |
+          company_args=()
+          if [[ -n "$COMPANY_URL" ]]; then company_args+=(--company-url "$COMPANY_URL"); fi
+          if [[ "$SIGN_MAC" == true ]]; then
+            company_args+=(--bootstrap-bundle "$RUNNER_TEMP/stack-bootstrap" --sign-identity "$SIGN_IDENTITY"
+                           --team-id "$SIGN_TEAM" --notary-profile mosswork-release)
+          fi
           uv run --no-project python desktop/package-company.py \
             --platform "$TARGET_PLATFORM" --arch "$TARGET_ARCH" \
+            "${company_args[@]}" \
             --runtime-dir desktop/portable/release --webview2-dir webview2 \
             --output "$RUNNER_TEMP/client"
           mv "$RUNNER_TEMP/client/company-package-status.json" "$RUNNER_TEMP/client/mosswork-${GREEN_HOST_PLAT}-build.json"
@@ -204,8 +267,19 @@ jobs:
           from pathlib import Path
           record = json.loads((Path(os.environ['RUNNER_TEMP']) / 'client' / f"mosswork-{os.environ['GREEN_HOST_PLAT']}-build.json").read_text())
           assert record['native_update_payload_checks'].get(os.environ['GREEN_HOST_PLAT']) is True, 'Actual client/runtime payload check did not run on the target host'
+          if os.environ['SIGN_MAC'] == 'true':
+              assert record['native_private_payload_verified'].get(os.environ['GREEN_HOST_PLAT']) is True
+              assert record['macos_distribution']['team_identifier'] == os.environ['SIGN_TEAM']
+              assert 'gatekeeper' in record['macos_distribution']['checks']
           PY
           rm "$RUNNER_TEMP/client/SHA256SUMS.txt"
+      - name: Preserve Apple submission IDs for reconciliation
+        if: always() && runner.os == 'macOS' && needs.source.outputs.signed_mac == 'true'
+        uses: actions/upload-artifact@v4
+        with:
+          name: macos-notary-receipts-${{ github.run_attempt }}
+          path: ${{ runner.temp }}/build-company/notary-*.json
+          if-no-files-found: ignore
       - uses: actions/upload-artifact@v4
         with:
           name: client-${{ matrix.platform }}
@@ -435,7 +509,7 @@ jobs:
           cat > release-notes.md <<EOF
           mosswork ${RELEASE_VERSION}
 
-          Clients: macOS 13+ ARM64 DMG and Windows x64 EXE only. Both include the local task runtime and FFmpeg. Windows includes offline WebView2. macOS is ad-hoc signed without notarization; Windows is not Authenticode signed.
+          Clients: macOS 13+ ARM64 DMG and Windows x64 EXE. Both include the local task runtime and FFmpeg. The macOS build record identifies the signing mode and includes the verified distribution hashes for notarized releases. Windows includes offline WebView2 and is not Authenticode signed.
 
           Components: moss-harness, moss-memory, moss-browser and moss-gateway ${RELEASE_VERSION} are built from packages/ in the attached source; all four wheels are included below.
 

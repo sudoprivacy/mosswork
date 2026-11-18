@@ -3,7 +3,6 @@
 import hashlib
 import importlib.util
 import json
-import os
 import plistlib
 import tempfile
 import unittest
@@ -156,12 +155,17 @@ class CompanyPackageTest(unittest.TestCase):
                 module.package_runtime(source, root / "bad.zip", "darwin", "arm64")
 
 
-@pytest.mark.skipif(os.name != "posix", reason="macOS app packaging creates POSIX symlinks")
 @pytest.mark.parametrize(
-    "platform,arch,extension", [("darwin", "arm64", ".dmg"), ("windows", "amd64", ".exe")]
+    "platform,arch,extension,private,changed_after_compile",
+    [
+        ("darwin", "arm64", ".dmg", False, False),
+        ("windows", "amd64", ".exe", False, False),
+        ("darwin", "arm64", ".dmg", True, False),
+        ("darwin", "arm64", ".dmg", True, True),
+    ],
 )
 def test_single_arch_build_needs_only_its_own_payload(
-    tmp_path, monkeypatch, platform, arch, extension
+    tmp_path, monkeypatch, platform, arch, extension, private, changed_after_compile
 ):
     root = tmp_path / "repo"
     source = root / "desktop/src"
@@ -170,7 +174,12 @@ def test_single_arch_build_needs_only_its_own_payload(
     (source / "assets").mkdir()
     (source / "assets/company-dashboard.zip").write_bytes(b"dashboard")
     (source / "build/darwin/Info.plist").write_bytes(
-        plistlib.dumps({"CFBundleExecutable": "mosswork"})
+        plistlib.dumps(
+            {
+                "CFBundleExecutable": "mosswork",
+                "CFBundleIdentifier": "io.github.sudoprivacy.mosswork",
+            }
+        )
     )
     (root / "pyproject.toml").write_text('[project]\nversion="1.0.1b2"\n')
     webview = tmp_path / "webview"
@@ -178,10 +187,20 @@ def test_single_arch_build_needs_only_its_own_payload(
     with (webview / "MicrosoftEdgeWebView2RuntimeInstallerX64.exe").open("wb") as stream:
         stream.truncate(50_000_001)
     output = tmp_path / "release"
-    commands, payloads = [], []
+    commands, payloads, links, private_copies = [], [], [], []
 
     def run(*args, cwd, env=None, capture_output=False):
         commands.append((args, env))
+        if len(args) > 1 and args[1] == "--verify-private-payload":
+            assert private and capture_output
+            return json.dumps(
+                {
+                    "client_version": "1.0.1b2",
+                    "platform": platform,
+                    "arch": arch,
+                    "payload_verified": True,
+                }
+            )
         if len(args) > 1 and args[1] == "--verify-update-payload":
             assert capture_output
             assert str(tmp_path / "build-company/native-verification") in env["MOSSWORK_HOME"]
@@ -194,6 +213,10 @@ def test_single_arch_build_needs_only_its_own_payload(
                 }
             )
         if args[0] == "go":
+            if private:
+                assert len(private_copies) == 1
+                assert f"-X main.privateManifestSHA256={'1' * 64}" in str(args)
+                assert f"-X main.privateChecksumsSHA256={'2' * 64}" in str(args)
             Path(args[args.index("-o") + 1]).write_bytes(b"shell")
         elif args[:3] == ("wails3", "generate", "icons"):
             Path(args[args.index("-macfilename") + 1]).write_bytes(b"icon")
@@ -220,6 +243,23 @@ def test_single_arch_build_needs_only_its_own_payload(
     monkeypatch.setattr(module, "run", run)
     monkeypatch.setattr(module, "host_target", lambda: (platform, arch))
     monkeypatch.setattr(module, "package_runtime", payload)
+    # This is a packaging orchestration test: platform tools are already mocked.
+    # Record the Finder shortcut as well, so the same contract runs on Windows.
+    monkeypatch.setattr(module.os, "symlink", lambda target, link: links.append((target, link)))
+    if private:
+
+        def copy_private_bundle(*args):
+            private_copies.append(args)
+            return {
+                "source": "fixture",
+                "checksums_sha256": "2" * 64,
+                "manifest_sha256": (
+                    "3" if changed_after_compile and len(private_copies) > 1 else "1"
+                )
+                * 64,
+            }
+
+        monkeypatch.setattr(module, "copy_private_bundle", copy_private_bundle)
     monkeypatch.setattr(
         module.sys,
         "argv",
@@ -231,12 +271,22 @@ def test_single_arch_build_needs_only_its_own_payload(
             arch,
             "--runtime-dir",
             str(tmp_path / "payloads"),
+            *(["--bootstrap-bundle", str(tmp_path / "bootstrap")] if private else []),
+            *(["--company-url", "https://accounts.example.test/"] if private else []),
             "--webview2-dir",
             str(webview),
             "--output",
             str(output),
         ],
     )
+    if changed_after_compile:
+        with pytest.raises(ValueError, match="changed after desktop compilation"):
+            module.main()
+        assert len(private_copies) == 2
+        assert not any(
+            args[0] == "codesign" or "--verify-private-payload" in args for args, _ in commands
+        )
+        return
     module.main()
     assert payloads == [(platform, arch)]
     assert [env["GOARCH"] for args, env in commands if args[0] == "go"] == [arch]
@@ -244,15 +294,71 @@ def test_single_arch_build_needs_only_its_own_payload(
     installers = [p for p in output.glob("*" + extension) if not p.name.endswith("-update.exe")]
     assert len(installers) == 1
     assert arch in installers[0].name
+    if private:
+        assert "mosswork-company" in installers[0].name
+        assert any("company_embedded" in str(args) for args, _ in commands)
+        info = plistlib.loads(
+            (output.parent / "build-company/dmg/mosswork.app/Contents/Info.plist").read_bytes()
+        )
+        assert info["CFBundleIdentifier"] == "io.github.sudoprivacy.mosswork"
+        assert any("--verify-private-payload" in args for args, _ in commands)
+        assert any("--verify-update-payload" in args for args, _ in commands)
+        assert (
+            output.parent
+            / f"build-company/dmg/mosswork.app/Contents/Resources/mosswork-darwin-{arch}.zip"
+        ).is_file()
+        status = json.loads((output / "company-package-status.json").read_text())
+        assert status["company_runtime_included"] is True
+        assert status["native_update_payload_checks"] == {f"{platform}-{arch}": True}
+        assert status["native_private_payload_verified"] == {f"{platform}-{arch}": True}
     assert all(
         "-X main.desktopVersion=1.0.1b2" in str(args) for args, _ in commands if args[0] == "go"
     )
+    assert all(
+        ("-X main.companyDefaultURL=https://accounts.example.test" in str(args)) == private
+        for args, _ in commands if args[0] == "go"
+    )
     updates = list(output.glob("*-update.*"))
     assert len(updates) == 1
+    assert updates[0].name.startswith("mosswork-company-")
+    if platform == "darwin":
+        assert links == [("/Applications", output.parent / "build-company/dmg/Applications")]
     if platform == "windows":
         assert updates[0].read_bytes() == b"shell"
         assert not any("MOSSWORK_COMPANY_RUNTIME_ZIP=" in str(args) for args, _ in commands)
         assert (output.parent / "build-company/src/bundled/portable.zip").is_file()
+
+
+@pytest.mark.parametrize("invalid", [
+    "https://user:password@example.test", "https://example.test/path",
+    "https://example.test/?key=value", "https://example.test/#fragment",
+    "https://example.test -X main.x=y", "https://example.test:99999",
+])
+def test_company_origin_rejects_non_origin_values(invalid):
+    with pytest.raises(module.argparse.ArgumentTypeError):
+        module.company_origin(invalid)
+
+
+def test_bootstrap_component_cannot_replace_company_runtime(tmp_path, monkeypatch):
+    monkeypatch.setattr(
+        module.sys,
+        "argv",
+        [
+            "package-company.py",
+            "--platform",
+            "darwin",
+            "--arch",
+            "arm64",
+            "--bootstrap-bundle",
+            str(tmp_path / "bootstrap"),
+            "--output",
+            str(tmp_path / "release"),
+        ],
+    )
+    with pytest.raises(SystemExit) as exc:
+        module.main()
+    assert exc.value.code == 2
+    assert not (tmp_path / "release").exists()
 
 
 def test_exported_source_identity_does_not_require_git(tmp_path, monkeypatch):

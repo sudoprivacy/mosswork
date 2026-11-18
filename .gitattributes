@@ -1,3 +1,6 @@
 .githooks/* text eol=lf
 # Keep dashboard text consistent with Prettier on every platform.
 dashboard/** text=auto eol=lf
+# POSIX scripts, including launchers copied into runtime payloads.
+*.sh text eol=lf
+*.command text eol=lf

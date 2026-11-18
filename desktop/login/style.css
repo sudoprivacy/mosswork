@@ -9,3 +9,5 @@
 
 .brand{display:flex;align-items:center;justify-content:center;gap:8px}.edition{font-size:11px;line-height:1;letter-spacing:0;font-weight:600;padding:4px 8px;border-radius:999px;border:1px solid var(--fn-border-primary);background:var(--fn-bg-container);color:var(--fn-text-secondary);white-space:nowrap}
 .login:disabled{opacity:1;background:color-mix(in srgb,var(--fn-color-primary) 48%,var(--fn-border-primary));color:#fff}
+
+.login-methods{display:flex;gap:6px;margin:0 0 14px}.login-methods button{flex:1;border:1px solid var(--fn-border-primary);border-radius:8px;background:var(--fn-bg-container);color:var(--fn-text-secondary);padding:8px;font-size:12px}.login-methods button[aria-pressed="true"]{border-color:var(--fn-color-primary);color:var(--fn-color-primary);background:var(--fn-bg-hover)}.login-methods button:focus-visible{outline:2px solid var(--fn-color-primary);outline-offset:2px}

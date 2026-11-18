@@ -132,16 +132,19 @@ func TestCompanyRememberedLoginDoesNotFollowServerChange(t *testing.T) {
 	if err := store.saveConnection("company", "http://first.test"); err != nil {
 		t.Fatal(err)
 	}
-	if err := store.saveCompanyRemember(true); err != nil {
+	if err := store.saveCompanyLogin("http://first.test", true, true); err != nil {
 		t.Fatal(err)
 	}
-	if !loadSettings().CompanyRemember {
+	if settings := loadSettings(); !settings.CompanyRemember || !settings.CompanyAccountLogin {
 		t.Fatal("remember preference was not saved")
 	}
 	if err := store.saveConnection("company", "http://second.test"); err != nil {
 		t.Fatal(err)
 	}
-	if loadSettings().CompanyRemember {
+	if err := store.saveCompanyLogin("http://first.test", true, true); err == nil {
+		t.Fatal("stale server selection was accepted")
+	}
+	if settings := loadSettings(); settings.CompanyRemember || settings.CompanyAccountLogin {
 		t.Fatal("old login followed a different server")
 	}
 }

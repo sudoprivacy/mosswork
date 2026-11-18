@@ -1,12 +1,13 @@
 import assert from 'node:assert/strict';
 import { createRequire } from 'node:module';
+import { fileURLToPath } from 'node:url';
 import { runInNewContext } from 'node:vm';
 import { test } from 'node:test';
 
 const require = createRequire(new URL('../../dashboard/package.json', import.meta.url));
 const { buildSync } = require('esbuild');
 const compiled = buildSync({
-  entryPoints: [new URL('../login/errorMessage.ts', import.meta.url).pathname],
+  entryPoints: [fileURLToPath(new URL('../login/errorMessage.ts', import.meta.url))],
   bundle: true, format: 'cjs', write: false, platform: 'node',
 }).outputFiles[0].text;
 const module = { exports: {} };

@@ -68,7 +68,7 @@ func (a *App) LoginCompany(ctx context.Context, input company.LoginInput) error 
 	if err = a.rememberCompany(base, client, true); err != nil {
 		return err
 	}
-	if err = a.store.saveCompanyRemember(input.Remember); err != nil {
+	if err = a.store.saveCompanyLogin(base, input.Remember, false); err != nil {
 		return err
 	}
 	var nonce [24]byte
@@ -102,6 +102,45 @@ func (a *App) LoginCompany(ctx context.Context, input company.LoginInput) error 
 	return nil
 }
 
+// The dashboard owns its account session on the existing per-company origin.
+// The native bridge receives only the destination and the startup preference.
+func (a *App) OpenCompanyAccountLogin(ctx context.Context, address string, remember bool) error {
+	if err := a.requireLoginPanel(ctx); err != nil {
+		return err
+	}
+	if !a.loginBusy.CompareAndSwap(false, true) {
+		return errors.New("正在登录，请稍候 / Sign in already in progress")
+	}
+	defer a.loginBusy.Store(false)
+	base, err := company.ServerAddress(address)
+	if err != nil {
+		return err
+	}
+	client := a.newCompanyClient()
+	status, err := client.IdentityMode(ctx, base)
+	if err != nil {
+		return err
+	}
+	if status.Mode != "canonical" {
+		return errors.New("服务器登录方式已更改，请重新选择 / Sign-in method changed; select the server again")
+	}
+	if err = a.rememberCompany(base, client, true); err != nil {
+		return err
+	}
+	target, err := a.companyUIEntry(base, "account")
+	if err != nil {
+		return err
+	}
+	if err = a.store.saveCompanyLogin(base, remember, true); err != nil {
+		return err
+	}
+	a.loginMu.Lock()
+	a.loginVisible, a.loginSession, a.resumeOrigin = false, nil, ""
+	a.loginMu.Unlock()
+	a.showDashboard(target)
+	return nil
+}
+
 func (a *App) showLogin(open bool) {
 	a.companyMu.Lock()
 	a.stopCompanyRuntimeLocked()
@@ -127,21 +166,32 @@ func (a *App) showLogin(open bool) {
 	}
 }
 
-func (a *App) resumeCompanyLogin(raw string) {
+func (a *App) resumeCompanyLogin(raw string, account bool) {
 	base, err := company.ServerAddress(raw)
 	if err != nil {
 		return
 	}
-	target, err := a.companyUIEntry(base, "resume")
+	fragment := "resume"
+	if account {
+		fragment = "account"
+	}
+	target, err := a.companyUIEntry(base, fragment)
 	if err != nil {
 		return
 	}
 	a.loginMu.Lock()
-	a.resumeOrigin = base
+	a.resumeOrigin = ""
+	if !account {
+		a.resumeOrigin = base
+	}
 	a.loginVisible = false
 	a.loginMu.Unlock()
 	a.showDashboard(target)
 	// The bundled form remains available when a saved server is offline.
+	if account {
+		// The account page has its own session check and offline recovery UI.
+		return
+	}
 	go func() {
 		time.Sleep(8 * time.Second)
 		a.loginMu.Lock()

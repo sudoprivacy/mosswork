@@ -24,6 +24,8 @@ import (
 	"strconv"
 	"strings"
 	"time"
+
+	"mosswork.desktop/internal/company"
 )
 
 type Server struct {
@@ -55,7 +57,8 @@ if (locale === "zh" || locale === "en") {
   document.documentElement.lang = locale === "zh" ? "zh-CN" : "en";
   if (locale === "en") document.querySelector('[role="status"]').textContent = "Opening your workspace…";
 }
-location.replace("/desktop-login.html" + location.hash);</script></body></html>`
+if (location.hash === "#account") location.replace("/");
+else location.replace("/desktop-login.html" + location.hash);</script></body></html>`
 
 // Start keeps a separate browser origin per company, including across restarts.
 // The small local record contains only an address and port, never credentials.
@@ -198,6 +201,17 @@ func Start(base string, bundle []byte, stateDir string) (*Server, error) {
 		stop := context.AfterFunc(ctx, done)
 		defer func() { stop(); done() }()
 		r = r.WithContext(requestCtx)
+		if r.URL.Path == "/__mosswork_login_mode" && r.Method == http.MethodGet {
+			// This HTTP identity probe has no local file or journal operations.
+			mode, err := company.NewClient("").IdentityMode(requestCtx, s.Base)
+			if err != nil {
+				http.Error(w, "Company sign-in options unavailable", http.StatusServiceUnavailable)
+				return
+			}
+			w.Header().Set("Content-Type", "application/json")
+			_ = json.NewEncoder(w).Encode(mode)
+			return
+		}
 		if strings.HasPrefix(r.URL.Path, "/api/") {
 			proxy.ServeHTTP(w, r)
 			return
