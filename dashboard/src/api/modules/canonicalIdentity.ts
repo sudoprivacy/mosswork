@@ -97,7 +97,8 @@ export const canonicalIdentityApi = {
         credentials: "same-origin",
         redirect: "error",
       });
-      if (!response.ok) throw new Error("Workspace sign-in options unavailable");
+      if (!response.ok)
+        throw new Error("Workspace sign-in options unavailable");
       status = await response.json();
     } else {
       status = await request<CanonicalIdentityStatus>("/identity/status");
