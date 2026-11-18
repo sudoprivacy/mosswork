@@ -86,16 +86,14 @@ async def test_built_desktop_chat_reconnect_and_cancel(
     created = await client.post(
         "/api/company-runtime/threads",
         headers={"X-Mosswork-Device-Credential": credential},
-        json={"agent_id": agent_id, "execution_mode": "local"},
+        json={"agent_id": agent_id},
     )
     assert created.is_success, created.text
-    assert created.json()["execution_mode"] == "local"
-    thread_id = created.json()["thread_id"]
+    existing_thread_id = created.json()["thread_id"]
     company = CompanyClient(company_origin, credential)
     events = []
     runtime = native_runtime(company, tmp_path, events)
     initial_metadata_seen, release_initial_metadata = asyncio.Event(), asyncio.Event()
-    project_binding = {"project_id": "browser-fixture-project", "binding_revision": 1}
     phase = {"mode": "complete"}
     generating, release_generation, syncing, release_sync = (asyncio.Event() for _ in range(4))
     reading_deltas = asyncio.Queue()
@@ -210,7 +208,7 @@ async def test_built_desktop_chat_reconnect_and_cancel(
             if url.path.startswith("/api/"):
                 if request.method == "GET" and url.path in {
                     f"/api/agents/{agent_id}/threads",
-                    f"/api/agents/{agent_id}/threads/{thread_id}/history",
+                    f"/api/agents/{agent_id}/threads/{existing_thread_id}/history",
                 }:
                     initial_metadata_seen.set()
                     await release_initial_metadata.wait()
@@ -248,14 +246,10 @@ async def test_built_desktop_chat_reconnect_and_cancel(
             calls.append(method)
             if method == "status":
                 return runtime.status()
+            if method == "create_thread":
+                return await company.request("threads", {**params, "execution_mode": "local"})
             if method == "start":
-                # The native port owns the already-authorized fixture workspace.
-                assert (
-                    params.get("project_id", project_binding["project_id"])
-                    == project_binding["project_id"]
-                )
-                assert params.get("binding_revision", 1) == 1
-                return await runtime.start({**project_binding, **params})
+                return await runtime.start(params)
             if method == "cancel":
                 return await runtime.cancel(params)
             if method == "hitl_resume":
@@ -286,6 +280,7 @@ async def test_built_desktop_chat_reconnect_and_cancel(
           window.__mossworkRuntime = {
             version: 1,
             status: () => window.acceptanceRuntimeCall('status'),
+            createThread: params => window.acceptanceRuntimeCall('create_thread', params),
             start: params => window.acceptanceRuntimeCall('start', params),
             cancel: params => window.acceptanceRuntimeCall('cancel', params),
             resumeHitl: params => window.acceptanceRuntimeCall('hitl_resume', params),
@@ -312,25 +307,33 @@ async def test_built_desktop_chat_reconnect_and_cancel(
 
         pump = asyncio.create_task(deliver())
         try:
-            await page.goto(f"http://testserver/chat/{agent_id}/{thread_id}")
+            await page.goto(f"http://testserver/chat/{agent_id}/{existing_thread_id}")
             editor = page.locator("textarea").first
             await expect(editor).to_be_visible(timeout=30000)
             await asyncio.wait_for(initial_metadata_seen.wait(), 30)
             await expect(editor).to_be_disabled()
             release_initial_metadata.set()
             await expect(editor).to_be_enabled()
+            await page.get_by_role("button", name=re.compile(r"^(New Chat|新建对话)$")).first.press(
+                "Enter"
+            )
+            await expect(page).to_have_url(f"http://testserver/chat/{agent_id}")
             await editor.fill("Create the browser acceptance report")
             await editor.press("Enter")
             await expect(
                 page.get_by_text("Browser complete stream finished.", exact=False).first
             ).to_be_visible(timeout=45000)
+            thread_id = urlsplit(page.url).path.rsplit("/", 1)[-1]
+            assert thread_id != existing_thread_id
+            assert calls.count("create_thread") == 1
             async with asyncio.timeout(20):
                 while runtime.work:
                     await asyncio.sleep(0.02)
-            target = runtime.workspace / project_binding["project_id"] / "report.txt"
+            target = runtime.workspace / thread_id / "report.txt"
             assert target.read_text() == "browser report 42"
             first_task = runtime.tasks[thread_id]["task_id"]
             phase["mode"] = "reload"
+            await expect(editor).to_be_enabled()
             await editor.fill("Continue the browser acceptance report")
             await editor.press("Enter")
             await asyncio.wait_for(generating.wait(), 30)

@@ -308,8 +308,6 @@ class ThreadRegistry:
         channel_chat_type: str = "dm",
         channel_metadata: dict[str, Any] | None = None,
         channel_id: str | None = None,
-        execution_mode: str = "server",
-        continuation_of_thread_id: str | None = None,
     ) -> str:
         session_key = self.make_key(
             agent_id=agent_id,
@@ -331,8 +329,6 @@ class ThreadRegistry:
                 channel_type=channel_type,
                 session_key=session_key,
                 last_active=0,
-                execution_mode=execution_mode,
-                continuation_of_thread_id=continuation_of_thread_id,
             )
             self._sessions.upsert(
                 session_key=session_key,
@@ -348,13 +344,7 @@ class ThreadRegistry:
             )
             return tid
 
-    async def reset_by_session_key(
-        self,
-        session_key: str,
-        *,
-        execution_mode: str = "server",
-        continuation_of_thread_id: str | None = None,
-    ) -> str:
+    async def reset_by_session_key(self, session_key: str) -> str:
         session = self._sessions.get(session_key)
         if session is None:
             msg = f"session {session_key!r} not found"
@@ -368,8 +358,6 @@ class ThreadRegistry:
                 channel_type=session.channel_type,
                 session_key=session_key,
                 last_active=0,
-                execution_mode=execution_mode,
-                continuation_of_thread_id=continuation_of_thread_id,
             )
             self._sessions.upsert(
                 session_key=session_key,
@@ -449,8 +437,6 @@ class ThreadRegistry:
         title: str | None = None,
         last_active: int = 0,
         thread_id: str | None = None,
-        execution_mode: str = "server",
-        continuation_of_thread_id: str | None = None,
     ) -> str:
         """Insert a thread row without rebinding the active session."""
         tid = thread_id or _new_thread_id()
@@ -462,8 +448,6 @@ class ThreadRegistry:
             session_key=session_key,
             title=title,
             last_active=last_active,
-            execution_mode=execution_mode,
-            continuation_of_thread_id=continuation_of_thread_id,
         )
         return tid
 
@@ -475,7 +459,6 @@ class ThreadRegistry:
         user_id: int,
         channel_type: str,
         session_key: str,
-        execution_mode: str = "server",
     ) -> str:
         """Insert *thread_id* if missing. Does not rebind the active session."""
         existing = self.get_thread(thread_id)
@@ -488,7 +471,6 @@ class ThreadRegistry:
             session_key=session_key,
             thread_id=thread_id,
             last_active=0,
-            execution_mode=execution_mode,
         )
 
     def delete_thread(self, thread_id: str) -> None:

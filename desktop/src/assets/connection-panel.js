@@ -82,6 +82,7 @@ function mountConnectionPanel(config) {
     steer: params => runtimeRequest("steer", params),
     removeSteer: params => runtimeRequest("steer_remove", params),
     resumeHitl: params => runtimeRequest("hitl_resume", params),
+    threadWorkspace: params => runtimeRequest("thread_workspace", params),
     reveal: params => runtimeRequest("reveal", params),
     previewImage: params => runtimeRequest("preview_image", params),
     uploadArtifact: params => runtimeRequest("upload_artifact", params),

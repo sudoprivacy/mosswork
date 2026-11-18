@@ -11,6 +11,7 @@ from pathlib import PurePosixPath
 from urllib.parse import urlsplit
 from uuid import uuid4
 
+from moss_harness.backends.thread_directory import active_thread_directory, thread_output_path
 from moss_harness.backends.workspace import BackendWorkspace
 from moss_harness.media.models import (
     GeneratedMedia,
@@ -64,7 +65,7 @@ class WorkspaceMediaArtifactStore:
         for artifact in generated:
             extension = artifact.extension.strip(".") or "bin"
             filename = f"{prefix}-{timestamp}-{uuid4().hex[:12]}.{extension}"
-            path = str(PurePosixPath(self._output_dir) / kind / filename)
+            path = thread_output_path(str(PurePosixPath(self._output_dir) / kind / filename))
             await self._workspace.aupload_bytes(path, artifact.data)
             local = await asyncio.to_thread(self._workspace.materialize_local, path)
             stored.append(
@@ -92,6 +93,15 @@ class WorkspaceMediaArtifactStore:
             if urlsplit(raw).scheme in {"http", "https", "data"}:
                 normalized.append(raw)
                 continue
+            rel = PurePosixPath(raw)
+            directory = active_thread_directory.get()
+            if (
+                directory
+                and not rel.is_absolute()
+                and not rel.is_relative_to(directory)
+                and not rel.is_relative_to("inbound")
+            ):
+                raw = thread_output_path(raw)
             data = await self._workspace.adownload_bytes(raw)
             if data is None:
                 raise FileNotFoundError(f"reference image not found: {raw}")

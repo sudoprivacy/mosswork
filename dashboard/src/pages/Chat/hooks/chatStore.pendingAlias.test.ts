@@ -26,8 +26,10 @@ describe("renameSessionKey pending alias", () => {
 
   it("does not let a reused __pending__ key mutate a renamed thread", async () => {
     appendUserMessage(PENDING_THREAD_ID, makeMessage("u1", "first chat"));
+    expect(getSnapshot(PENDING_THREAD_ID).historyHydrated).toBe(false);
     renameSessionKey(PENDING_THREAD_ID, tid1);
 
+    expect(getSnapshot(tid1).historyHydrated).toBe(true);
     expect(getSnapshot(tid1).messages).toHaveLength(1);
     expect(getSnapshot(tid1).messages[0]?.content).toBe("first chat");
 

@@ -121,6 +121,30 @@ describe("history failures", () => {
     expect(chatStore.getSnapshot(thread).messages[0].content).toBe("task done");
   });
 
+  it("loads an existing conversation when only its first local turn is cached", async () => {
+    chatStore.setMessages(thread, [
+      { id: "first", role: "user", content: "你好啊", timestamp: 1 },
+    ]);
+    const history = vi.spyOn(mossworkThreadsApi, "history").mockResolvedValue({
+      thread_id: thread,
+      messages: [
+        { id: "first", role: "user", content: "你好啊" },
+        { id: "reply", role: "assistant", content: "你好！" },
+      ],
+      has_more: false,
+    });
+    const { result } = renderHook(() => useChat(thread, "agent"));
+    await act(async () => {
+      await result.current.loadHistory(thread);
+    });
+    expect(history).toHaveBeenCalledOnce();
+    expect(result.current.historyHydrated).toBe(true);
+    expect(result.current.messages.map((m) => m.id)).toEqual([
+      "first",
+      "reply",
+    ]);
+  });
+
   it("passes the pinned cursor when loading older messages", async () => {
     chatStore.setHistoryPage(
       thread,

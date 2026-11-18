@@ -36,6 +36,7 @@ from typing import TYPE_CHECKING, Any
 
 from langchain_core.tools import tool
 
+from moss_harness.backends.thread_directory import thread_output_path
 from moss_harness.builtin.tools.send_file import (
     build_send_file_to_user_tool,
     send_file_to_user,
@@ -317,7 +318,7 @@ def build_desktop_screenshot_tool(workspace: BackendWorkspace) -> Any:
             capture_window: macOS only. When True, the user is prompted to
                 click a window to capture. Ignored on other platforms.
         """
-        fragment = _resolve_screenshot_fragment(workspace, path)
+        fragment = thread_output_path(_resolve_screenshot_fragment(workspace, path))
         _prepare_parent(workspace, fragment)
 
         local = _local_capture_path(workspace, fragment)

@@ -4226,6 +4226,7 @@ class AgentManager:
         harness_cfg = HarnessAgentConfig(
             name=_memory_namespace(row.agent_id),
             workspace_dir=harness_workspace,
+            thread_workspaces=True,
             system_files_path=system_files_path_from_config(cfg),
             # Memory aux LLM (extraction / promotion) needs a concrete ref; fall
             # back to the same resolution AUTO chat routing uses (active model

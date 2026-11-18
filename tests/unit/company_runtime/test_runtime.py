@@ -1,4 +1,5 @@
 import asyncio
+import hashlib
 import json
 import sys
 from pathlib import Path
@@ -15,66 +16,47 @@ from octop.infra.company_runtime.runtime import EnterpriseRuntime
 from tests.support.http import serve_http
 
 
-@pytest.mark.parametrize("with_project", [False, True])
-async def test_explicit_local_thread_preserves_project_admission_fields(
-    company, tmp_path, with_project
+@pytest.mark.parametrize("existing_project", [None, "saved-project"])
+async def test_desktop_task_uses_thread_folder_or_existing_project(
+    company, tmp_path, existing_project
 ):
     from tests.unit.company_runtime.test_memory_approvals import native_runtime
 
-    server, client, _, _ = company
+    server, client, _, owner = company
     install_agent(server)
-    created = await client.request("threads", {"agent_id": "expert", "execution_mode": "local"})
+    params = {"agent_id": "expert"}
+    if not existing_project:
+        params["execution_mode"] = "local"
+    created = await client.request("threads", params)
     thread = created["thread_id"]
     assert created["execution_mode"] == "local"
+    assert server.services.session_repo.get(created["session_key"]).thread_id == thread
     runtime = native_runtime(client, tmp_path, [])
-    params = {
-        "task_id": "explicit-local-project",
-        "thread_id": thread,
-        "agent_id": "expert",
-        "text": "Create the local report",
-    }
-    project = {
-        "project_id": "fixture-owned-project",
-        "binding_revision": 7,
-        "grant_id": "fixture-project-grant",
-        "grant_version": 3,
-    }
+    task = {"agent_id": "expert", "thread_id": thread, "text": "Create the local report"}
     try:
-        if not with_project:
-            await runtime.start(params)
-            with server.services.db.connect() as conn:
-                project_row = conn.execute(
-                    "SELECT project_id FROM thread_project_bindings WHERE thread_id=?",
-                    (thread,),
-                ).fetchone()
-                runtime_row = conn.execute(
-                    "SELECT project_name FROM company_runtime_threads WHERE thread_id=?",
-                    (thread,),
-                ).fetchone()
-                thread_row = conn.execute(
-                    "SELECT execution_mode FROM threads WHERE thread_id=?", (thread,)
-                ).fetchone()
-            assert project_row["project_id"] == thread
-            assert runtime_row["project_name"] == thread
-            assert thread_row["execution_mode"] == "local"
-            assert server.services.company_runtime_repo.task(params["task_id"]) is not None
-            return
-        await runtime.start({**params, **project})
+        if existing_project:
+            # A v31 client has already used a named folder for this conversation.
+            with server.services.db.transaction() as conn:
+                installation = hashlib.sha256(runtime.installation_token.encode()).hexdigest()
+                conn.execute(
+                    "INSERT INTO company_runtime_threads VALUES(?,?,?,?,?,?,?)",
+                    (thread, owner, "expert", "device0", thread, installation, 0),
+                )
+                conn.execute(
+                    "INSERT INTO thread_project_bindings "
+                    "(thread_id,owner_user_id,agent_id,project_id,display_name,created_at,updated_at) "
+                    "VALUES (?,?,?,?,?,?,?)",
+                    (thread, owner, "expert", existing_project, existing_project, 0, 0),
+                )
+        await runtime.start({**task, "task_id": "native-report"})
         await asyncio.wait_for(runtime.work[thread], 15)
         assert runtime.tasks[thread]["status"] == "completed"
-        assert (runtime.workspace / project["project_id"] / "report.txt").read_text() == (
+        await runtime.start({**task, "task_id": "native-followup", "text": "Confirm the report"})
+        await asyncio.wait_for(runtime.work[thread], 15)
+        assert runtime.tasks[thread]["status"] == "completed"
+        assert (runtime.workspace / (existing_project or thread) / "report.txt").read_text() == (
             "local report 42"
         )
-        with server.services.db.connect() as conn:
-            row = conn.execute(
-                "SELECT project_id,binding_revision,grant_id,grant_version "
-                "FROM thread_project_bindings WHERE thread_id=?",
-                (thread,),
-            ).fetchone()
-        assert dict(row) == project
-        stored = server.services.company_runtime_repo.task(params["task_id"])
-        request = json.loads(stored["request_json"])
-        assert {key: request[key] for key in project} == project
     finally:
         await runtime.close()
 
@@ -105,7 +87,8 @@ async def test_nonempty_server_thread_remains_server_owned(company, tmp_path):
                     "text": "Must remain server-owned",
                 }
             )
-        assert server.services.thread_repo.get("thread2").execution_mode == "server"
+        assert server.services.company_runtime_repo.binding("thread2") is None
+        server.services.thread_repo.claim_server_execution("thread2")
     finally:
         await runtime.close()
 

@@ -788,8 +788,6 @@ async function loadThreadHistory(
     history.artifact_refs,
   );
   if (offset === 0) {
-    chatStore.setThreadExecutionMode(threadId, history.execution_mode);
-    chatStore.setThreadProjectBinding(threadId, history.project_binding);
     syncSessionArtifacts(threadId, artifacts);
     syncSessionConversationMode(
       threadId,
@@ -1021,7 +1019,7 @@ export function useChat(
       const liveTurn =
         snap.isStreaming || (isTeamRoom && chatStore.hasLiveSocket(key));
       if (
-        (snap.messages.length > 0 || liveTurn) &&
+        ((snap.historyHydrated && snap.messages.length > 0) || liveTurn) &&
         !chatStore.isHistoryStale(key)
       ) {
         // Always listen after hydrate so late team / inbox replies land here,

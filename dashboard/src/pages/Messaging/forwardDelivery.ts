@@ -337,12 +337,7 @@ export class ForwardDelivery {
       );
     let thread = this.threads.get(target.id);
     if (!thread) {
-      const created = await mossworkThreadsApi.create(target.id);
-      thread = created.thread_id;
-      const { setThreadExecutionMode } = await import(
-        "../Chat/hooks/chatStore"
-      );
-      setThreadExecutionMode(thread, created.execution_mode);
+      thread = (await mossworkThreadsApi.create(target.id)).thread_id;
       this.active();
       this.threads.set(target.id, thread);
     }

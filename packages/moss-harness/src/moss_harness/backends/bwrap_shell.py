@@ -31,6 +31,7 @@ from moss_harness.backends.local_shell import (
     present_host_paths_in_output,
     rewrite_virtual_paths_in_command,
 )
+from moss_harness.backends.thread_directory import active_thread_directory
 
 logger = logging.getLogger(__name__)
 
@@ -192,7 +193,7 @@ class BubbledLocalShellBackend(HarnessLocalShellBackend):
             relative = self._workspace_dir.relative_to(Path(self.cwd).resolve())
         except ValueError:
             return "/"
-        text = relative.as_posix()
+        text = (relative / active_thread_directory.get()).as_posix()
         return "/" if text in {"", "."} else f"/{text}"
 
     def _execute_in_bwrap(

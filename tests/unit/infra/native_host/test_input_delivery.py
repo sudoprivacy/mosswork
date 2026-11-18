@@ -219,33 +219,35 @@ async def test_later_active_turn_cannot_replace_context_request_identity_during_
 ):
     peer = InputPeer()
     async with wire(peer) as (_peer, _authority, host, _context, _updates, attach):
-        arrived, entered, changed, release = (asyncio.Event() for _ in range(4))
+        entered, changed, release = (asyncio.Event() for _ in range(3))
         observed = []
         original = host.check_current
-        paused = False
 
         def observer(event):
-            if event.message.get("method") == "_sudocode/session/host_context":
-                arrived.set()
             params = event.message.get("params", {})
             if params.get("update", {}).get("state", {}).get("revision") == 4:
                 changed.set()
 
         async def check_current():
-            nonlocal paused
-            if arrived.is_set() and not paused:
-                paused = True
-                entered.set()
-                await release.wait()
+            if not entered.is_set():
+                # Notifications also check authority. Only the context request's
+                # task holds the original input when it reaches this await.
+                try:
+                    evidence = session.context_input()
+                except HostUnavailable:
+                    pass
+                else:
+                    assert evidence.turn_id == 71
+                    entered.set()
+                    await release.wait()
             await original()
-
-        monkeypatch.setattr(host, "check_current", check_current)
 
         async def context(scope):
             observed.append(session.context_input())
             return "must not bind the later turn"
 
         session = await attach(resolve_context=context, observers=[observer])
+        monkeypatch.setattr(host, "check_current", check_current)
         submitted = asyncio.create_task(
             session.submit_input("original-client", "原始输入 🧩", delivery="queue")
         )

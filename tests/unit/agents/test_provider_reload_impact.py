@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import asyncio
 import json
-import time
 from pathlib import Path
 from unittest.mock import AsyncMock
 
@@ -145,25 +144,18 @@ async def test_reload_agents_runs_in_parallel(
 ) -> None:
     services = _make_services(tmp_path)
     registry = _registry(services)
-    started = 0
-    peak = 0
-    lock = asyncio.Lock()
+    started: set[str] = set()
+    two_started = asyncio.Event()
 
-    async def slow_reload(_agent_id: str) -> None:
-        nonlocal started, peak
-        async with lock:
-            started += 1
-            peak = max(peak, started)
-        await asyncio.sleep(0.05)
-        async with lock:
-            started -= 1
+    async def reload_agent(agent_id: str) -> None:
+        started.add(agent_id)
+        if len(started) == 2:
+            two_started.set()
+        await two_started.wait()
 
-    monkeypatch.setattr(registry, "_reload_agent", slow_reload)
-    t0 = time.perf_counter()
-    await registry._reload_agents(["a", "b", "c", "d"])
-    elapsed = time.perf_counter() - t0
-    assert peak >= 2
-    assert elapsed < 0.15
+    monkeypatch.setattr(registry, "_reload_agent", reload_agent)
+    await asyncio.wait_for(registry._reload_agents(["a", "b", "c", "d"]), timeout=5)
+    assert started == {"a", "b", "c", "d"}
 
 
 @pytest.mark.asyncio

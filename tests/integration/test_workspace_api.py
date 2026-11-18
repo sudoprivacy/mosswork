@@ -528,3 +528,31 @@ async def test_doc_write_invalid_content_400(env: Any) -> None:
         headers=auth,
     )
     assert r.status_code == 400
+
+
+async def test_thread_workspace_lists_only_its_directory_and_legacy_files(env: Any) -> None:
+    client, server, auth, aid = env
+    base = f"/api/agents/{aid}/threads"
+    first = (await client.post(base, headers=auth)).json()["thread_id"]
+    second = (await client.post(base, headers=auth)).json()["thread_id"]
+    ws = server.app_runtime.agent_registry.get_agent(aid).workspace
+    server.services.thread_repo.touch_last_active(first)
+    empty = await client.get(f"{base}/{first}/workspace", headers=auth)
+    assert empty.status_code == 200, empty.text
+    assert empty.json()["entries"] == []
+    assert await ws.aexists(f"threads/{first}")
+    await ws.aupload_bytes(f"threads/{first}/generated/a.txt", b"new")
+    await ws.aupload_bytes(f"threads/{second}/b.txt", b"other")
+    await ws.aupload_bytes("generated/old.txt", b"original")
+    server.services.thread_repo.append_artifacts(first, ["generated/old.txt"])
+    url = f"{base}/{first}/workspace"
+    root = await client.get(url, headers=auth)
+    assert root.status_code == 200, root.text
+    assert root.json()["location"] == "server"
+    assert root.json()["root"] == f"threads/{first}"
+    assert root.json()["entries"] == [{"name": "generated", "is_dir": True}]
+    assert [f["path"].split("/")[-1] for f in root.json()["legacy_files"]] == ["old.txt"]
+    child = await client.get(url, headers=auth, params={"path": "generated"})
+    assert child.json()["entries"] == [{"name": "a.txt", "is_dir": False}]
+    escape = await client.get(url, headers=auth, params={"path": f"../{second}"})
+    assert escape.status_code == 400

@@ -92,10 +92,6 @@ class StartTask(Document):
     knowledge_base_ids: list[str] = Field(default_factory=list, max_length=100)
     installation_token: str = Field(min_length=32, max_length=256)
     recovery_token: str = Field(min_length=32, max_length=256)
-    project_id: str | None = Field(default=None, max_length=256)
-    binding_revision: int | None = Field(default=None, ge=1)
-    grant_id: str | None = Field(default=None, max_length=256)
-    grant_version: int | None = Field(default=None, ge=1)
 
 
 class TaskStarted(Document):
@@ -499,30 +495,20 @@ async def skill_asset(
 
 
 class CreateThread(Document):
+    execution_mode: Literal["local"] = "local"
     agent_id: str = Field(pattern=ID)
     title: str = Field(default="", max_length=200)
-    execution_mode: Literal["server", "local"] = "local"
-    continuation_of_thread_id: str | None = Field(default=None, max_length=128)
-
-
-class ProjectBinding(Document):
-    project_id: str = Field(min_length=1, max_length=256)
-    display_name: str = Field(min_length=1, max_length=256)
-    expected_revision: int | None = Field(default=None, ge=1)
-    grant_id: str | None = Field(default=None, max_length=256)
-    grant_version: int | None = Field(default=None, ge=1)
-    installation_hash: str | None = Field(default=None, max_length=256)
 
 
 @router.post(
     "/threads",
-    response_model=dict[str, Any],
+    response_model=dict[str, str],
     summary="Create an employee-owned conversation for local execution",
 )
 async def create_thread(body: CreateThread, svc: CompanyRuntimeService = Depends(service)) -> Any:
     from octop.infra.utils.ulid import new_short_id
 
-    await svc.authorize(body.agent_id, body.continuation_of_thread_id, execution=False)
+    await svc.authorize(body.agent_id, execution=False)
     thread_id = "thr_" + new_short_id()
     session_key = f"dashboard:{body.agent_id}:{svc.owner}"
     await offload(
@@ -534,8 +520,6 @@ async def create_thread(body: CreateThread, svc: CompanyRuntimeService = Depends
         session_key=session_key,
         title=body.title or None,
         last_active=0,
-        execution_mode=body.execution_mode,
-        continuation_of_thread_id=body.continuation_of_thread_id,
     )
     await offload(
         svc.services.session_repo.upsert,
@@ -553,26 +537,4 @@ async def create_thread(body: CreateThread, svc: CompanyRuntimeService = Depends
         "thread_id": thread_id,
         "session_key": session_key,
         "execution_mode": body.execution_mode,
-        "continuation_of_thread_id": body.continuation_of_thread_id,
     }
-
-
-@router.get("/threads/{thread_id}/project", summary="Read a desktop thread project binding")
-async def project(thread_id: str, svc: CompanyRuntimeService = Depends(service)) -> Any:
-    await svc.authorize_for_project(thread_id)
-    return await svc.project_binding(thread_id)
-
-
-@router.put("/threads/{thread_id}/project", summary="Bind a local thread to a desktop project")
-async def bind_project(
-    thread_id: str,
-    body: ProjectBinding,
-    svc: CompanyRuntimeService = Depends(service),
-) -> Any:
-    return await svc.bind_project(thread_id, body.model_dump())
-
-
-@router.delete("/threads/{thread_id}/project", summary="Clear a desktop thread project binding")
-async def clear_project(thread_id: str, svc: CompanyRuntimeService = Depends(service)) -> Any:
-    await svc.clear_project(thread_id)
-    return {"thread_id": thread_id, "state": "unbound"}

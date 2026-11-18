@@ -23,7 +23,6 @@ const mock = vi.hoisted(() => ({
   upload: vi.fn(),
   create: vi.fn(),
   append: vi.fn(),
-  setThreadExecutionMode: vi.fn(),
   turn: vi.fn(),
   event: vi.fn(),
 }));
@@ -47,7 +46,6 @@ vi.mock("../../api/modules/mossworkThreads", () => ({
 }));
 vi.mock("../Chat/hooks/chatStore", () => ({
   appendUserMessage: mock.append,
-  setThreadExecutionMode: mock.setThreadExecutionMode,
   sendTurn: mock.turn,
   emitSessionEvent: mock.event,
 }));
@@ -115,10 +113,7 @@ beforeEach(() => {
     media_type: "application/pdf",
     access_url: "/api/agents/agent/workspace/download?path=inbound/report.pdf",
   });
-  mock.create.mockResolvedValue({
-    thread_id: "thread",
-    execution_mode: "server",
-  });
+  mock.create.mockResolvedValue({ thread_id: "thread" });
   mock.turn.mockResolvedValue(undefined);
   mock.file.mockResolvedValue("file-asset");
   mock.image.mockResolvedValue("image-asset");

@@ -54,6 +54,7 @@ from deepagents.backends.protocol import (
 )
 from deepagents.backends.sandbox import BaseSandbox
 
+from moss_harness.backends.thread_directory import active_thread_directory
 from moss_harness.runtime_env import load_dotenv_path, parse_env_text, resolve_docker_execute_env
 
 logger = logging.getLogger(__name__)
@@ -534,7 +535,7 @@ class DockerSandbox(BaseSandbox):
             exec_id = self._client.api.exec_create(
                 self._container.id,
                 cmd=["bash", "-lc", command],
-                workdir=self._workspace_root,
+                workdir=str(PurePosixPath(self._workspace_root, active_thread_directory.get())),
                 environment=self._resolve_execute_env(),
             )["Id"]
         except self._docker.errors.APIError as exc:

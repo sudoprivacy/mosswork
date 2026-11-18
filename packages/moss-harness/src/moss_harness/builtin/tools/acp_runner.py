@@ -18,6 +18,7 @@ from moss_harness.acp.tool_adapter import (
     format_permission_required,
     render_event_text,
 )
+from moss_harness.backends.thread_directory import active_thread_directory
 from moss_harness.backends.utils import DEFENSIVE_OP_ERRORS
 
 ActionName = Literal["list", "status", "start", "message", "respond", "close"]
@@ -62,7 +63,7 @@ def build_acp_runner_tool(*, service_key: str, config: ACPConfig, workspace_dir:
         action_name = str(action or "").strip().lower()
         runner_name = str(runner or "").strip()
         message_text = str(message or "")
-        execution_cwd = _resolve_execution_cwd(cwd, workspace_dir)
+        execution_cwd = _resolve_execution_cwd(cwd, workspace_dir / active_thread_directory.get())
 
         validation_error = _validate_action_inputs(
             action_name=action_name,

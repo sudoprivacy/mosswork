@@ -9,7 +9,6 @@ import {
   pickPreferredSession,
   toSession,
 } from "../pages/Chat/hooks/useSessions";
-import { setThreadExecutionMode } from "../pages/Chat/hooks/chatStore";
 
 export function useAgentThreadChat(
   agentId: string | null,
@@ -50,7 +49,6 @@ export function useAgentThreadChat(
         if (fresh || !tid) {
           const created = await mossworkThreadsApi.create(agentId);
           tid = created.thread_id;
-          setThreadExecutionMode(tid, created.execution_mode);
         }
         await mossworkThreadsApi.rebind(agentId, tid);
         if (!cancelled) {

@@ -115,21 +115,11 @@ interface DockSessionState {
   activeTabId: DockTabId | null;
 }
 
-function defaultDockSessionState(
-  threadId: string | null | undefined,
-  defaultWorkspaceOpen: boolean,
-): DockSessionState {
-  // The chat page opts into an immediately visible workspace, including its
-  // pending new-chat route before navigation has created a thread.
-  if (defaultWorkspaceOpen && threadId !== undefined) {
-    return {
-      dockOpen: true,
-      openTabs: [{ id: "workspace", kind: "workspace" }],
-      activeTabId: "workspace",
-    };
-  }
-  return { dockOpen: false, openTabs: [], activeTabId: null };
-}
+const closedDock: DockSessionState = {
+  dockOpen: false,
+  openTabs: [],
+  activeTabId: null,
+};
 
 function dockSessionKey(
   agentId: string | null | undefined,
@@ -145,13 +135,12 @@ export function useChatDockPanel(
   isMobile: boolean,
   agentId?: string | null,
   threadId?: string | null,
-  defaultWorkspaceOpen = false,
 ) {
   const sessionKey = dockSessionKey(agentId, threadId);
   const [sessionStates, setSessionStates] = useState<
     Record<string, DockSessionState>
   >(() => ({
-    [sessionKey]: defaultDockSessionState(threadId, defaultWorkspaceOpen),
+    [sessionKey]: closedDock,
   }));
   const [dockMode, setDockMode] = useState<PanelMode>(loadPanelMode);
   const { panelSizes, isResizing, handleResizeStart } = usePanelResize(
@@ -159,21 +148,17 @@ export function useChatDockPanel(
     persistPanelSizes,
   );
 
-  const currentSession =
-    sessionStates[sessionKey] ??
-    defaultDockSessionState(threadId, defaultWorkspaceOpen);
+  const currentSession = sessionStates[sessionKey] ?? closedDock;
   const { dockOpen, openTabs, activeTabId } = currentSession;
 
   const updateSession = useCallback(
     (updater: (state: DockSessionState) => DockSessionState) => {
       setSessionStates((prev) => {
-        const current =
-          prev[sessionKey] ??
-          defaultDockSessionState(threadId, defaultWorkspaceOpen);
+        const current = prev[sessionKey] ?? closedDock;
         return { ...prev, [sessionKey]: updater(current) };
       });
     },
-    [defaultWorkspaceOpen, sessionKey, threadId],
+    [sessionKey],
   );
 
   const openDock = useCallback(() => {

@@ -76,31 +76,19 @@ describe("useChatDockPanel tabs", () => {
     expect(result.current.dockOpen).toBe(false);
   });
 
-  it("opens a separate workspace by default for each conversation", () => {
+  it("starts collapsed and remembers the workspace toggle per thread", () => {
     const { result, rerender } = renderHook(
-      ({ threadId }: { threadId: string }) =>
-        useChatDockPanel(false, "main", threadId, true),
+      ({ threadId }) => useChatDockPanel(false, "main", threadId),
       { initialProps: { threadId: "thread-a" } },
     );
-
-    expect(result.current.dockOpen).toBe(true);
-    expect(result.current.openTabs.map((tab) => tab.id)).toEqual(["workspace"]);
-
-    act(() => {
-      result.current.openBrowserTab();
-      result.current.handleClose();
-    });
-    rerender({ threadId: "thread-b" });
-
-    expect(result.current.dockOpen).toBe(true);
-    expect(result.current.openTabs.map((tab) => tab.id)).toEqual(["workspace"]);
-
-    rerender({ threadId: "thread-a" });
     expect(result.current.dockOpen).toBe(false);
-    expect(result.current.openTabs.map((tab) => tab.id)).toEqual([
-      "workspace",
-      "browser",
-    ]);
+    act(() => result.current.toggleWorkspacePanel());
+    rerender({ threadId: "thread-b" });
+    expect(result.current.dockOpen).toBe(false);
+    expect(result.current.openTabs).toEqual([]);
+    rerender({ threadId: "thread-a" });
+    expect(result.current.dockOpen).toBe(true);
+    expect(result.current.activeTabId).toBe("workspace");
   });
 
   it("toggleBrowserPanel opens browser tab then closes dock when active", () => {

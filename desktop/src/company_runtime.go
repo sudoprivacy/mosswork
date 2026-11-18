@@ -35,7 +35,7 @@ func parseRuntimeEvent(name, nonce string) (id, method string, params json.RawMe
 		return
 	}
 	switch p[2] {
-	case "status", "refresh_status", "start", "cancel", "reveal", "reconcile", "preview_image", "steer", "steer_remove", "hitl_resume", "upload_artifact", "import_attachment", "create_thread":
+	case "status", "thread_workspace", "refresh_status", "start", "cancel", "reveal", "reconcile", "preview_image", "steer", "steer_remove", "hitl_resume", "upload_artifact", "import_attachment", "create_thread":
 	default:
 		return
 	}
@@ -68,8 +68,16 @@ func (a *App) dispatchRuntimeEvent(name string) {
 		result, err := a.performRuntimeAction(nonce, base, method, params)
 		a.companyMu.Lock()
 		defer a.companyMu.Unlock()
-		if a.workspaceNonce != nonce || a.companyURL != base || ((method == "preview_image" || method == "upload_artifact" || method == "import_attachment") && a.runtimeEpoch != epoch) {
+		if a.workspaceNonce != nonce || a.companyURL != base {
 			return
+		}
+		if a.runtimeEpoch != epoch {
+			switch method {
+			case "thread_workspace":
+				result, err = nil, errors.New("工作目录已切换，请重新打开会话")
+			case "preview_image", "upload_artifact", "import_attachment":
+				return
+			}
 		}
 		payload := map[string]any{"id": id, "result": result}
 		if err != nil {
@@ -98,6 +106,10 @@ func (a *App) performRuntimeAction(nonce, base, method string, params json.RawMe
 	if a.workspaceNonce != nonce || a.companyURL != base {
 		a.companyMu.Unlock()
 		return nil, errors.New("账号已切换，请重新打开当前会话")
+	}
+	if method == "thread_workspace" {
+		a.companyMu.Unlock()
+		return a.threadWorkspace(nonce, base, params)
 	}
 	if method == "refresh_status" {
 		// A settings refresh must work before pairing a project and must never

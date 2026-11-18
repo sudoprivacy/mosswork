@@ -6,7 +6,7 @@ import json
 import os
 import re
 from collections.abc import Mapping, Sequence
-from pathlib import Path
+from pathlib import Path, PurePosixPath
 from typing import Any
 
 from octop.infra.gateway.media.backend_files import (
@@ -157,6 +157,30 @@ def artifacts_for_response(
         seen.add(key)
         out.append(resolved)
     return out
+
+
+def artifacts_outside_thread_directory(
+    artifacts: Sequence[object],
+    workspace_dir: Path,
+    *,
+    agent_id: str,
+    directory: str,
+    tool_root: str,
+) -> list[ThreadArtifact]:
+    """Older files and peer outputs retain their original addresses in the conversation."""
+    roots = (
+        PurePosixPath(directory),
+        PurePosixPath(tool_root),
+        PurePosixPath(workspace_dir.as_posix(), directory),
+    )
+    return [
+        ref
+        for ref in artifacts_for_response(artifacts, workspace_dir, default_agent_id=agent_id)
+        if ref.agent_id != agent_id
+        or not any(
+            PurePosixPath(ref.path.replace("\\", "/")).is_relative_to(root) for root in roots
+        )
+    ]
 
 
 def artifact_paths_for_response(refs: Sequence[ThreadArtifact]) -> list[str]:
