@@ -427,6 +427,7 @@ def main() -> None:
         )
         if args.sign_identity:
             run("codesign", "--timestamp", "--sign", args.sign_identity, dmg, cwd=source)
+            run("codesign", "--verify", "--strict", "--verbose=2", dmg, cwd=source)
         run("hdiutil", "verify", dmg, cwd=source)
         artifacts.append(dmg)
         if not args.legacy_shell_only:

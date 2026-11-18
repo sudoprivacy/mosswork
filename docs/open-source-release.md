@@ -22,7 +22,7 @@
 
 推送与 `pyproject.toml` 版本完全一致的 `v<version>` tag 后，`mosswork-release.yml` 自动构建。当前版本对应 `v0.0.7`；工作流不自动修改版本、提交代码或创建 tag。手工重跑须选择同一个 tag，选择分支会被拒绝。
 
-需要在合并或创建发行 tag 前验证原生安装包时，可在手工运行中启用 `qualify_clients_only`。此模式允许选择当前分支，从完整导出源码构建两个原生客户端并执行实际程序的完整运行时检查；不构建服务器镜像、不发布 GitHub/COS、不创建或修改 tag。关闭该选项时，原有发行 tag 检查仍强制执行。
+需要在合并或创建发行 tag 前验证原生安装包时，可在手工运行中启用 `qualify_clients_only`。此模式允许选择当前分支，从完整导出源码构建客户端并执行实际程序的完整运行时检查。默认构建两个客户端，选择 `qualification_target=darwin-arm64` 可单独验收 macOS DMG。此模式不构建服务器镜像、不发布 GitHub/COS、不创建或修改 tag。关闭该选项时，原有发行 tag 检查仍强制执行。
 
 发布前先按下文导出并验证完整公开源码，将确定的源码提交到发行仓库，再由维护者推送 tag。流程从该 tag 再次导出完整公开范围，并从同一份导出物构建客户端和镜像。
 
@@ -42,7 +42,7 @@ CI 不发布 macOS Intel、Windows ARM、Linux 客户端、PyPI 包或独立 por
 
 仓库需允许 Actions 的 `GITHUB_TOKEN` 写入 Releases。所有产物均作为 Release 附件分发，无需 Packages 权限或镜像仓库凭据。Linux runner 构建并导出 amd64 Docker 镜像包，重新导入归档后验证首次部署、健康检查和重复安装。发布前校验每个附件小于 GitHub 的 2 GiB 上限，并生成 SHA-256 清单。
 
-客户端运行时包含目标架构 Python、本仓库构建的四个组件、文档库和 FFmpeg，并在各自原生 runner 上执行工具冒烟测试。FFmpeg 的下载源与 SHA-256 固定在 `desktop/company-tools.json`，使用 Sudowork 的公开镜像；维护时同步来源、许可材料和对应源码。Windows 内置微软完整 WebView2 安装器并验证微软签名。当前 CI 的 macOS 应用使用 ad-hoc 签名，未公证；Windows 客户端未做 Authenticode 签名。构建记录不代表已经完成真实终端安装验收。
+客户端运行时包含目标架构 Python、本仓库构建的四个组件、文档库和 FFmpeg，并在各自原生 runner 上执行工具冒烟测试。FFmpeg 的下载源与 SHA-256 固定在 `desktop/company-tools.json`，使用 Sudowork 的公开镜像；维护时同步来源、许可材料和对应源码。Windows 内置微软完整 WebView2 安装器并验证微软签名。macOS CI 使用 `BUILD_CERTIFICATE_BASE64`、`P12_PASSWORD` 和 `TEAM_ID` 三个 Actions Secrets，对应用和 DMG 执行 Developer ID Application 签名与校验。Apple 公证和 Windows Authenticode 签名尚未启用。构建记录不代表已经完成真实终端安装验收。
 
 部署命令和数据目录见[镜像一键部署](../docker/enterprise/INSTALL.md)。服务端 CLI 使用 `moss-server`；底层 Python 包和配置变量继续使用 `mosswork` / `MOSSWORK_`。
 

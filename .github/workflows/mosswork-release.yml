@@ -9,6 +9,11 @@ on:
         description: 'Build and validate current native clients without publishing or changing a release'
         type: boolean
         default: false
+      qualification_target:
+        description: 'Client target when qualify_clients_only is enabled'
+        type: choice
+        options: [all, darwin-arm64]
+        default: all
 
 permissions:
   contents: read
@@ -25,6 +30,7 @@ jobs:
       tag: ${{ steps.version.outputs.tag }}
       version: ${{ steps.version.outputs.version }}
       prerelease: ${{ steps.version.outputs.prerelease }}
+      client_matrix: ${{ steps.version.outputs.client_matrix }}
     steps:
       - uses: actions/checkout@v4
       - uses: astral-sh/setup-uv@v6
@@ -35,6 +41,7 @@ jobs:
         name: Require a tag matching the package version
         env:
           QUALIFY_CLIENTS_ONLY: ${{ github.event_name == 'workflow_dispatch' && inputs.qualify_clients_only || false }}
+          QUALIFICATION_TARGET: ${{ inputs.qualification_target }}
         run: |
           uv run --no-project python - <<'PY'
           import json, os, re, tomllib
@@ -53,8 +60,12 @@ jobs:
           if not re.fullmatch(r'[0-9]+\.[0-9]+\.[0-9]+[A-Za-z0-9._-]*', version):
               raise SystemExit('Version cannot be used as a Docker tag')
           prerelease = not bool(re.fullmatch(r'[0-9]+\.[0-9]+\.[0-9]+', version))
+          clients = [dict(platform='darwin-arm64', os='macos-15', arch='arm64')]
+          if not (qualification and os.environ['QUALIFICATION_TARGET'] == 'darwin-arm64'):
+              clients.append(dict(platform='windows-amd64', os='windows-2022', arch='amd64'))
           with open(os.environ['GITHUB_OUTPUT'], 'a') as out:
               out.write(f'tag={tag}\nversion={version}\nprerelease={str(prerelease).lower()}\n')
+              out.write(f"client_matrix={json.dumps({'include': clients})}\n")
           PY
       - name: Refuse overwriting a published release
         if: ${{ !inputs.qualify_clients_only }}
@@ -102,16 +113,7 @@ jobs:
     timeout-minutes: 90
     strategy:
       fail-fast: false
-      matrix:
-        include:
-          - platform: darwin-arm64
-            os: macos-15
-            target: darwin
-            arch: arm64
-          - platform: windows-amd64
-            os: windows-2022
-            target: windows
-            arch: amd64
+      matrix: ${{ fromJSON(needs.source.outputs.client_matrix) }}
     defaults:
       run:
         shell: bash
@@ -189,21 +191,37 @@ jobs:
           if ($signature.Status -ne 'Valid' -or $signature.SignerCertificate.Subject -notmatch 'Microsoft Corporation') {
             throw 'WebView2 installer signature validation failed'
           }
-      - name: Package the requested client architecture
+      - name: Sign and package the macOS client
+        if: runner.os == 'macOS'
         env:
-          TARGET_PLATFORM: ${{ matrix.target }}
+          BUILD_CERTIFICATE_BASE64: ${{ secrets.BUILD_CERTIFICATE_BASE64 }}
+          P12_PASSWORD: ${{ secrets.P12_PASSWORD }}
+          TEAM_ID: ${{ secrets.TEAM_ID }}
+          TARGET_ARCH: ${{ matrix.arch }}
+        run: |
+          bash desktop/with-macos-signing.sh uv run --no-project python desktop/package-company.py \
+            --platform darwin --arch "$TARGET_ARCH" --runtime-dir desktop/portable/release \
+            --output "$RUNNER_TEMP/client"
+      - name: Package the Windows client
+        if: runner.os == 'Windows'
+        env:
           TARGET_ARCH: ${{ matrix.arch }}
         run: |
           uv run --no-project python desktop/package-company.py \
-            --platform "$TARGET_PLATFORM" --arch "$TARGET_ARCH" \
+            --platform windows --arch "$TARGET_ARCH" \
             --runtime-dir desktop/portable/release --webview2-dir webview2 \
             --output "$RUNNER_TEMP/client"
+      - name: Validate the client build record
+        run: |
           mv "$RUNNER_TEMP/client/company-package-status.json" "$RUNNER_TEMP/client/mosswork-${GREEN_HOST_PLAT}-build.json"
           uv run --no-project python - <<'PY'
           import json, os
           from pathlib import Path
-          record = json.loads((Path(os.environ['RUNNER_TEMP']) / 'client' / f"mosswork-{os.environ['GREEN_HOST_PLAT']}-build.json").read_text())
-          assert record['native_update_payload_checks'].get(os.environ['GREEN_HOST_PLAT']) is True, 'Actual client/runtime payload check did not run on the target host'
+          platform = os.environ['GREEN_HOST_PLAT']
+          record = json.loads((Path(os.environ['RUNNER_TEMP']) / 'client' / f"mosswork-{platform}-build.json").read_text())
+          assert record['native_update_payload_checks'].get(platform) is True, 'Actual client/runtime payload check did not run on the target host'
+          if platform.startswith('darwin-'):
+              assert record['signing'] == 'developer-id', 'macOS package requires Developer ID signing'
           PY
           rm "$RUNNER_TEMP/client/SHA256SUMS.txt"
       - uses: actions/upload-artifact@v4
@@ -435,7 +453,7 @@ jobs:
           cat > release-notes.md <<EOF
           mosswork ${RELEASE_VERSION}
 
-          Clients: macOS 13+ ARM64 DMG and Windows x64 EXE only. Both include the local task runtime and FFmpeg. Windows includes offline WebView2. macOS is ad-hoc signed without notarization; Windows is not Authenticode signed.
+          Clients: macOS 13+ ARM64 DMG and Windows x64 EXE only. Both include the local task runtime and FFmpeg. Windows includes offline WebView2. The macOS app and DMG use Developer ID Application signing. Apple notarization and Windows Authenticode signing are pending.
 
           Components: moss-harness, moss-memory, moss-browser and moss-gateway ${RELEASE_VERSION} are built from packages/ in the attached source; all four wheels are included below.
 
