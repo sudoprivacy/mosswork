@@ -192,11 +192,32 @@ jobs:
           STACK_TAG: ${{ vars.MOSSWORK_BOOTSTRAP_ARM64_STACK_TAG }}
           STACK_ASSET: ${{ vars.MOSSWORK_BOOTSTRAP_ARM64_STACK_ASSET }}
           STACK_SHA256: ${{ vars.MOSSWORK_BOOTSTRAP_ARM64_STACK_SHA256 }}
+          DRAFT_ASSET_ID: ${{ vars.MOSSWORK_BOOTSTRAP_ARM64_DRAFT_ASSET_ID }}
         run: |
           set -euo pipefail
-          [[ "$STACK_TAG" =~ ^[A-Za-z0-9][A-Za-z0-9._-]*$ && "$STACK_ASSET" =~ ^[A-Za-z0-9][A-Za-z0-9._-]*\.tar\.gz$ ]]
-          gh release download "$STACK_TAG" --repo sudoprivacy/sudostack --pattern "$STACK_ASSET" --output "$RUNNER_TEMP/stack.tar.gz"
-          uv run --no-project --python 3.12 python desktop/extract_bootstrap_release.py "$RUNNER_TEMP/stack.tar.gz" "$STACK_SHA256" "$RUNNER_TEMP/stack-bootstrap"
+          if [[ -n "$DRAFT_ASSET_ID" ]]; then
+            [[ "$DRAFT_ASSET_ID" =~ ^[1-9][0-9]*$ && -z "$STACK_TAG" && -z "$STACK_ASSET" ]]
+            gh api "repos/$GITHUB_REPOSITORY/releases/assets/$DRAFT_ASSET_ID" -H 'Accept: application/octet-stream' > "$RUNNER_TEMP/stack.tar.gz"
+          else
+            [[ "$STACK_TAG" =~ ^[A-Za-z0-9][A-Za-z0-9._-]*$ && "$STACK_ASSET" =~ ^[A-Za-z0-9][A-Za-z0-9._-]*\.tar\.gz$ ]]
+            gh release download "$STACK_TAG" --repo sudoprivacy/sudostack --pattern "$STACK_ASSET" --output "$RUNNER_TEMP/stack.tar.gz"
+          fi
+          uv run --no-project --python 3.12 python desktop/extract_bootstrap_release.py "$RUNNER_TEMP/stack.tar.gz" "$STACK_SHA256" "$RUNNER_TEMP/stack-input"
+          python3 - <<'PY'
+          from pathlib import Path
+          import os
+          from desktop.private_payload import copy_private_bundle
+          root = Path(os.environ['RUNNER_TEMP'])
+          copy_private_bundle(root / 'stack-input', root / 'stack-bootstrap', 'arm64')
+          PY
+      - name: Check out the pinned Stack component signer
+        if: runner.os == 'macOS' && needs.source.outputs.signed_mac == 'true'
+        uses: actions/checkout@v4
+        with:
+          repository: sudoprivacy/sudostack
+          ref: 792af9ce9e3ef408fc8d4e2aad3b7341d7bb1b38
+          path: stack-release-tools
+          persist-credentials: false
       - name: Install Wails
         working-directory: source
         run: |
@@ -241,6 +262,19 @@ jobs:
           APPLE_ID: ${{ secrets.APPLE_ID }}
           APPLE_ID_PASSWORD: ${{ secrets.APPLE_ID_PASSWORD }}
         run: bash desktop/setup-macos-signing.sh
+      - name: Sign the staged components and freeze their final pins
+        if: runner.os == 'macOS' && needs.source.outputs.signed_mac == 'true'
+        env:
+          SIGN_IDENTITY: ${{ secrets.IDENTITY }}
+          SIGN_TEAM: ${{ secrets.TEAM_ID }}
+        run: |
+          PYTHONPATH="$GITHUB_WORKSPACE/stack-release-tools/tools/deploy" uv run --no-project --python 3.12 python - <<'PY'
+          import os
+          from pathlib import Path
+          from private_macos_candidate import sign_verified_staging_copy
+          sign_verified_staging_copy(Path(os.environ['RUNNER_TEMP']) / 'stack-bootstrap',
+                                     os.environ['SIGN_IDENTITY'], os.environ['SIGN_TEAM'])
+          PY
       - name: Package the requested client architecture
         env:
           TARGET_PLATFORM: ${{ matrix.target }}

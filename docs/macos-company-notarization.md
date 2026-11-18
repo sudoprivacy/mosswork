@@ -7,6 +7,11 @@ Archive the directory contents with `native-bundle.json` and `SHA256SUMS` at
 the archive root. Set the Mosswork release variables
 `MOSSWORK_BOOTSTRAP_ARM64_STACK_TAG`, `MOSSWORK_BOOTSTRAP_ARM64_STACK_ASSET`
 and `MOSSWORK_BOOTSTRAP_ARM64_STACK_SHA256` from the approved Stack release.
+An internal qualification may use an asset on a Mosswork draft release.
+Set `MOSSWORK_BOOTSTRAP_ARM64_DRAFT_ASSET_ID` and the same SHA-256 variable,
+and leave the public tag and asset variables empty. The Mac verifies the archive
+and its manifest before using the pinned Stack signer on a fresh staging copy.
+It embeds the final signed bytes in the company client.
 The signing custodian provisions `BUILD_CERTIFICATE_BASE64`, `P12_PASSWORD`,
 `IDENTITY`, `TEAM_ID`, `APPLE_ID` and `APPLE_ID_PASSWORD` in the
 `mosswork-macos-release` GitHub environment, with its approved branch and tag
