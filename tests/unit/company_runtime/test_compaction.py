@@ -271,7 +271,12 @@ async def test_long_tool_turn_auto_compacts_and_executes_write_once(company, tmp
                 content="",
                 id=f"model{steps}",
                 tool_call_chunks=[
-                    {"name": name, "args": json.dumps(arguments), "id": f"call{steps}", "index": 0}
+                    {
+                        "name": name,
+                        "args": json.dumps(arguments),
+                        "id": "call1" if steps == 5 else f"call{steps}",
+                        "index": 0,
+                    }
                 ],
             )
 
@@ -296,19 +301,25 @@ async def test_long_tool_turn_auto_compacts_and_executes_write_once(company, tmp
         assert events[-1]["status"] == "completed", events[-1]
         assert summaries >= 1
         assert steps == 6
-        result_ids = {
-            message.tool_call_id
+        results = {
+            (message.tool_call_id, message.name)
             for event in events
             if event.get("data", {}).get("type") == "tool_result"
             for message in event["data"]["messages"]
         }
-        assert result_ids == {f"call{index}" for index in range(1, 6)}
+        assert results == {(f"call{index}", "read_file") for index in range(1, 5)} | {
+            ("call1", "write_file")
+        }
         assert (project / "report.txt").read_text() == "completed after compaction"
         receipts = [
             json.loads(path.read_text())
             for path in (runtime.state / "threads/thread1/operations").glob("*.json")
         ]
         assert sum(receipt.get("tool") == "write_file" for receipt in receipts) == 1
+        assert sorted(item["tool"] for item in receipts if item["operation_id"] == "call1") == [
+            "read_file",
+            "write_file",
+        ]
         saved = await RemoteCheckpointSaver(client, "task1", "thread1").aget_tuple(
             {"configurable": {"thread_id": "thread1"}}
         )

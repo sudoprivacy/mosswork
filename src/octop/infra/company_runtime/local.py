@@ -11,10 +11,13 @@ import os
 import time
 from collections.abc import Callable
 from pathlib import Path
-from typing import Any
+from typing import Annotated, Any, NotRequired
 
 from deepagents.backends.protocol import ExecuteResponse
-from langchain.agents.middleware import AgentMiddleware
+from langchain.agents.middleware import AgentMiddleware, AgentState, ExtendedModelResponse
+from langchain.agents.middleware.types import PrivateStateAttr
+from langchain_core.messages import AIMessage
+from langgraph.types import Command
 from moss_harness.backends.local_shell import HarnessLocalShellBackend
 
 from octop.infra.company_runtime.processes import (
@@ -105,25 +108,40 @@ def image_reference_inputs(project: Path, references: list[str]) -> list[str]:
     return encoded
 
 
+type _ReceiptKey = str | tuple[str, str]
+
+
 class OperationJournal:
     def __init__(self, root: Path) -> None:
         self.root = root
         root.mkdir(parents=True, exist_ok=True, mode=0o700)
 
-    def path(self, operation: str) -> Path:
+    def path(self, operation: _ReceiptKey) -> Path:
+        if isinstance(operation, tuple):
+            digest = hashlib.sha256(json.dumps(operation).encode()).hexdigest()
+            return self.root / f"v2-{digest}.json"
         return self.root / (hashlib.sha256(operation.encode()).hexdigest() + ".json")
 
-    def get(self, operation: str) -> dict[str, Any] | None:
+    def get(self, operation: _ReceiptKey) -> dict[str, Any] | None:
         path = self.path(operation)
         return json.loads(path.read_text(encoding="utf-8")) if path.exists() else None
 
-    def save(self, operation: str, **data: Any) -> None:
+    def save(self, operation: _ReceiptKey, **data: Any) -> None:
+        if isinstance(operation, tuple):
+            data["model_step_id"], call_id = operation
+        else:
+            call_id = operation
         atomic_json(
-            self.path(operation), {"operation_id": operation, "updated_at": time.time(), **data}
+            self.path(operation), {"operation_id": call_id, "updated_at": time.time(), **data}
         )
 
 
-class ReceiptMiddleware(AgentMiddleware):
+class _ReceiptState(AgentState[Any]):
+    company_receipt_scope: NotRequired[Annotated[str, PrivateStateAttr]]
+
+
+class ReceiptMiddleware(AgentMiddleware[_ReceiptState]):
+    state_schema = _ReceiptState
     ALLOWED = frozenset(
         {
             "execute",
@@ -156,13 +174,21 @@ class ReceiptMiddleware(AgentMiddleware):
             if (tool.get("name") if isinstance(tool, dict) else getattr(tool, "name", ""))
             in self.ALLOWED
         ]
-        return await handler(request.override(tools=tools))
+        response = await handler(request.override(tools=tools))
+        if any(isinstance(msg, AIMessage) and msg.tool_calls for msg in response.result):
+            return ExtendedModelResponse(
+                model_response=response,
+                command=Command(
+                    update={"company_receipt_scope": request.runtime.execution_info.task_id}
+                ),
+            )
+        return response
 
     def __init__(
         self, journal: OperationJournal, saver: Any, authorize: Callable[..., Any]
     ) -> None:
         self.journal, self.saver, self.authorize = journal, saver, authorize
-        self.locks: dict[str, asyncio.Lock] = {}
+        self.locks: dict[_ReceiptKey, asyncio.Lock] = {}
 
     async def awrap_tool_call(self, request: Any, handler: Any) -> Any:
         call = request.tool_call
@@ -172,7 +198,9 @@ class ReceiptMiddleware(AgentMiddleware):
             raise RuntimeError("company_skill_cache_read_only")
         if call["name"] not in self.ALLOWED:
             raise RuntimeError("company_tool_not_granted")
-        key = str(call["id"])
+        call_id = str(call["id"])
+        scope = request.state.get("company_receipt_scope")
+        key: _ReceiptKey = (scope, call_id) if scope is not None else call_id
         digest = hashlib.sha256(
             json.dumps(call, sort_keys=True, ensure_ascii=False).encode()
         ).hexdigest()
@@ -190,7 +218,7 @@ class ReceiptMiddleware(AgentMiddleware):
             await offload(
                 self.journal.save, key, request_hash=digest, status="running", tool=call["name"]
             )
-            token = _TOOL_CALL_ID.set(key)
+            token = _TOOL_CALL_ID.set(call_id)
             try:
                 result = await handler(request)
             except BaseException:
