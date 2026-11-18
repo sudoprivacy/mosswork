@@ -89,20 +89,7 @@ export const canonicalIdentityApi = {
   status: async (): Promise<CanonicalIdentityStatus> => {
     // The trusted mode probe must precede the standalone setup latch.
     clearSetupRequired();
-    let status: CanonicalIdentityStatus;
-    if (import.meta.env.VITE_DESKTOP_BUNDLE === "1") {
-      // Use the native public capability check on the selected company's
-      // loopback origin. A legacy server may protect unknown API paths.
-      const response = await fetch("/__mosswork_login_mode", {
-        credentials: "same-origin",
-        redirect: "error",
-      });
-      if (!response.ok)
-        throw new Error("Workspace sign-in options unavailable");
-      status = await response.json();
-    } else {
-      status = await request<CanonicalIdentityStatus>("/identity/status");
-    }
+    const status = await request<CanonicalIdentityStatus>("/identity/status");
     if (
       (status.mode !== "canonical" && status.mode !== "standalone") ||
       typeof status.phone_login_available !== "boolean" ||

@@ -135,7 +135,7 @@ func TestPackagedAccountPageUsesTheSelectedPublicLoginMode(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer s.Close()
-	target := s.Origin + "/__mosswork_login_mode"
+	target := s.Origin + "/api/identity/status"
 	if code, _ := read(t, http.DefaultClient, target); code != 403 {
 		t.Fatal(code)
 	}

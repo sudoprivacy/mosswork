@@ -201,8 +201,9 @@ func Start(base string, bundle []byte, stateDir string) (*Server, error) {
 		stop := context.AfterFunc(ctx, done)
 		defer func() { stop(); done() }()
 		r = r.WithContext(requestCtx)
-		if r.URL.Path == "/__mosswork_login_mode" && r.Method == http.MethodGet {
-			// This HTTP identity probe has no local file or journal operations.
+		if r.URL.Path == "/api/identity/status" && r.Method == http.MethodGet {
+			// Normalize older company servers at the desktop proxy boundary.
+			// Public capability requests never forward a user's credentials.
 			mode, err := company.NewClient("").IdentityMode(requestCtx, s.Base)
 			if err != nil {
 				http.Error(w, "Company sign-in options unavailable", http.StatusServiceUnavailable)
