@@ -192,14 +192,22 @@ jobs:
           STACK_TAG: ${{ vars.MOSSWORK_BOOTSTRAP_ARM64_STACK_TAG }}
           STACK_ASSET: ${{ vars.MOSSWORK_BOOTSTRAP_ARM64_STACK_ASSET }}
           STACK_SHA256: ${{ vars.MOSSWORK_BOOTSTRAP_ARM64_STACK_SHA256 }}
-          DRAFT_ASSET_ID: ${{ vars.MOSSWORK_BOOTSTRAP_ARM64_DRAFT_ASSET_ID }}
+          STACK_PRIVATE_URL: ${{ secrets.MOSSWORK_BOOTSTRAP_ARM64_PRIVATE_URL }}
         run: |
           set -euo pipefail
-          if [[ -n "$DRAFT_ASSET_ID" ]]; then
-            [[ "$DRAFT_ASSET_ID" =~ ^[1-9][0-9]*$ && -z "$STACK_TAG" && -z "$STACK_ASSET" ]]
-            gh api "repos/$GITHUB_REPOSITORY/releases/assets/$DRAFT_ASSET_ID" -H 'Accept: application/octet-stream' > "$RUNNER_TEMP/stack.tar.gz"
+          if [[ -n "$STACK_PRIVATE_URL" ]]; then
+            [[ "$STACK_PRIVATE_URL" == https://* && -z "$STACK_TAG" && -z "$STACK_ASSET" ]] || {
+              echo 'Use an internal HTTPS download URL or a Stack release, and set only one source.' >&2
+              exit 1
+            }
+            curl --fail --silent --show-error --location --globoff --proto '=https' --proto-redir '=https' \
+              --output "$RUNNER_TEMP/stack.tar.gz" -- "$STACK_PRIVATE_URL"
+            unset STACK_PRIVATE_URL
           else
-            [[ "$STACK_TAG" =~ ^[A-Za-z0-9][A-Za-z0-9._-]*$ && "$STACK_ASSET" =~ ^[A-Za-z0-9][A-Za-z0-9._-]*\.tar\.gz$ ]]
+            [[ "$STACK_TAG" =~ ^[A-Za-z0-9][A-Za-z0-9._-]*$ && "$STACK_ASSET" =~ ^[A-Za-z0-9][A-Za-z0-9._-]*\.tar\.gz$ ]] || {
+              echo 'Configure an internal Stack download URL or an approved Stack release tag and asset.' >&2
+              exit 1
+            }
             gh release download "$STACK_TAG" --repo sudoprivacy/sudostack --pattern "$STACK_ASSET" --output "$RUNNER_TEMP/stack.tar.gz"
           fi
           uv run --no-project --python 3.12 python desktop/extract_bootstrap_release.py "$RUNNER_TEMP/stack.tar.gz" "$STACK_SHA256" "$RUNNER_TEMP/stack-input"
