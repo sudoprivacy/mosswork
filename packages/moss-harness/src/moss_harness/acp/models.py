@@ -10,6 +10,12 @@ ACPToolParseMode = Literal["call_title", "update_detail", "call_detail"]
 DEFAULT_STDIO_BUFFER_LIMIT_BYTES = 50 * 1024 * 1024
 
 _BUILTIN_RUNNERS: dict[str, dict[str, Any]] = {
+    "sudocode": {
+        "command": "scode",
+        "args": ["acp"],
+        "trusted": False,
+        "tool_parse_mode": "update_detail",
+    },
     "opencode": {
         "command": "opencode",
         "args": ["acp"],
