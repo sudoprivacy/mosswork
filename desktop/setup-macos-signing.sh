@@ -15,7 +15,8 @@ unset BUILD_CERTIFICATE_BASE64
 security create-keychain -p "$keychain_password" "$keychain"
 security set-keychain-settings -lut 10800 "$keychain"
 security unlock-keychain -p "$keychain_password" "$keychain"
-security import "$cert" -k "$keychain" -P "$P12_PASSWORD" -T /usr/bin/codesign >/dev/null
+# The private temporary filename has no .p12 extension for Keychain to infer.
+security import "$cert" -f pkcs12 -k "$keychain" -P "$P12_PASSWORD" -T /usr/bin/codesign >/dev/null
 unset P12_PASSWORD
 security set-key-partition-list -S apple-tool:,apple:,codesign: -s -k "$keychain_password" "$keychain" >/dev/null
 unset keychain_password
