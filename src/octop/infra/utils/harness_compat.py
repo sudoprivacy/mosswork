@@ -2,7 +2,7 @@
 
 from importlib.metadata import version
 
-SUPPORTED_HARNESS_VERSION = "0.0.7"
+SUPPORTED_HARNESS_VERSION = "0.0.8"
 
 
 def require_supported_harness() -> None:
