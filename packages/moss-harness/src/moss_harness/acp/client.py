@@ -8,6 +8,7 @@ from typing import Any, NoReturn
 
 from moss_harness.acp.attention import OrderedAttentionProjection
 from moss_harness.acp.models import ACPRunnerConfig, SuspendedPermission
+from moss_harness.acp.peer_arrival import PeerArrival
 from moss_harness.acp.permissions import ACPPermissionAdapter
 from moss_harness.acp.runtime_status import supports_engine_observation
 
@@ -35,9 +36,11 @@ class ACPHostedClient:
         self._is_invalidated = False
         self._attention_supported = False
         self.attention = OrderedAttentionProjection()
+        self.last_peer_arrival: PeerArrival | None = None
 
     def bind_engine_session(self, session_id: str, metadata: dict[str, Any] | None) -> None:
         self._session_id = session_id
+        self.last_peer_arrival = None
         self._is_invalidated = False
         self._attention_supported = supports_engine_observation(metadata, "attention")
         self.attention.invalidate()
@@ -45,6 +48,7 @@ class ACPHostedClient:
     def invalidate_observations(self) -> None:
         self._is_invalidated = True
         self._session_id = None
+        self.last_peer_arrival = None
         self.attention.invalidate()
         self._cancel_permission()
 
@@ -143,7 +147,7 @@ class ACPHostedClient:
             if self._permission_future is future:
                 self._clear_permission()
 
-    async def session_update(self, session_id: str, update: Any, **_: Any) -> None:
+    async def session_update(self, session_id: str, update: Any, **metadata: Any) -> None:
         from acp.schema import (
             AgentMessageChunk,
             AgentPlanUpdate,
@@ -155,7 +159,13 @@ class ACPHostedClient:
             UserMessageChunk,
         )
 
-        _session_id = session_id
+        if isinstance(update, UserMessageChunk):
+            if session_id == self._session_id and not self._is_invalidated:
+                # The ACP SDK expands notification-level _meta into kwargs.
+                arrival = PeerArrival.from_notification(metadata)
+                if arrival is not None:
+                    self.last_peer_arrival = arrival
+            return
         if isinstance(update, AgentMessageChunk):
             await self._accumulate_assistant_content(update.content)
             return
@@ -171,7 +181,7 @@ class ACPHostedClient:
 
         if isinstance(
             update,
-            CurrentModeUpdate | AgentPlanUpdate | AvailableCommandsUpdate | UserMessageChunk,
+            CurrentModeUpdate | AgentPlanUpdate | AvailableCommandsUpdate,
         ):
             return
 

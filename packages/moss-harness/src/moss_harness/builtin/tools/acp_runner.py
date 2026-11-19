@@ -227,6 +227,11 @@ async def _format_status(config: ACPConfig, service_key: str, runner_name: str) 
     lines = [f"runner: {runner_name}", f"session: {state}"]
     observations = await service.get_agent_observations(thread_id=thread_id, runners=[runner_name])
     observation, attention = observations[runner_name]
+    current = await service.get_session(thread_id, runner_name)
+    if current is not None and current is session and current.process.returncode is None:
+        arrival = current.client.last_peer_arrival
+        if arrival is not None:
+            lines.append("last_peer_arrival: " + arrival.model_dump_json(by_alias=True, exclude_none=True))
     lines.append(_format_runtime_observation(observation))
     lines.append("attention: " + attention.model_dump_json(exclude_none=True))
     if pending is not None:
