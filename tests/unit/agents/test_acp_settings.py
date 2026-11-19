@@ -26,13 +26,17 @@ def acp_store(tmp_path: Path) -> tuple[ACPSettingsStore, AgentRepo, int]:
     return store, agents, user_id
 
 
-def test_load_defaults_include_codebuddy(
+def test_load_default_runners(
     acp_store: tuple[ACPSettingsStore, AgentRepo, int],
 ) -> None:
     store, _, user_id = acp_store
     runners = store.load_runners(user_id=user_id)
     assert "opencode" in runners
     assert "codebuddy" in runners
+    assert runners["sudocode"]["command"] == "scode"
+    assert runners["sudocode"]["args"] == ["acp"]
+    assert runners["sudocode"]["enabled"] is False
+    assert runners["sudocode"]["trusted"] is False
     assert "kimi_code" in runners
     assert "cursor_cli" in runners
     assert "pi" in runners

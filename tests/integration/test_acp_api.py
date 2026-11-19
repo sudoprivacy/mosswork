@@ -66,9 +66,10 @@ async def test_acp_custom_runner_crud(env) -> None:
     assert r.status_code == 404
 
 
-async def test_acp_builtin_runner_cannot_delete(env) -> None:
+@pytest.mark.parametrize("runner_name", ["opencode", "sudocode"])
+async def test_acp_builtin_runner_cannot_delete(env, runner_name) -> None:
     c, _srv, auth, agent_id = env
-    r = await c.delete(f"/api/agents/{agent_id}/acp/opencode", headers=auth)
+    r = await c.delete(f"/api/agents/{agent_id}/acp/{runner_name}", headers=auth)
     assert r.status_code == 403
 
 

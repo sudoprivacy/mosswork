@@ -32,11 +32,17 @@ Legacy per-agent `config_json.acp.runners` is migrated to the user-global store 
 | `codebuddy` | `codebuddy` | `--acp` |
 | `claude_code` | `npx` | `-y`, `@zed-industries/claude-agent-acp` |
 | `codex` | `npx` | `-y`, `@zed-industries/codex-acp` |
+| `sudocode` | `scode` | `acp` |
 | `kimi_code` | `kimi` | `acp` |
 | `cursor_cli` | `agent` | `acp` |
 | `pi` | `npx` | `-y`, `pi-acp` |
 
 Install the CLI on the host where `mosswork run` executes, ensure it is on `PATH` (or set an absolute `command` in the runner drawer). Built-in runners cannot be deleted; custom runners can be added from **Add runner**.
+
+The SudoCode runner starts a delegated session with `session/new`. Further messages
+continue on that open connection. Opening an existing SudoCode conversation from
+another host requires its authenticated original binding and `session/load`, as
+described in [native host integration](native-host-integration.md).
 
 ### Enable delegation in chat
 
