@@ -401,6 +401,35 @@ async def test_native_prompt_error_is_sanitized_and_never_replayed():
         assert sum(method == "session/prompt" for method, _ in peer.calls) == 1
 
 
+async def test_retained_sink_preserves_only_engine_level_peer_provenance():
+    async with wire() as (peer, _authority, _host, _context, updates, attach):
+        session = await attach()
+        source = {"from": "peer", "kind": "message", "verified": False}
+        content = {"type": "text", "text": "review"}
+        for kind, metadata in [
+            ("agent_message_chunk", source),
+            ("user_message_chunk", {}),
+            ("user_message_chunk", source),
+        ]:
+            await peer.connection.send_notification(
+                "session/update",
+                {
+                    "sessionId": session.session_id,
+                    "update": {
+                        "sessionUpdate": kind,
+                        "content": content,
+                        "peerArrival": {"verified": True},
+                    },
+                    "_meta": {"sudocode": {"a2a": metadata}},
+                },
+            )
+        await peer.connection.send_request(
+            "_sudocode/session/host_context", {"sessionId": session.session_id}
+        )
+        assert [update.get("peerArrival") for _, update in updates] == [None, None, source]
+        assert all(update["content"] == content for _, update in updates)
+
+
 async def test_foreign_notification_closes_projection_and_future_dispatch():
     async with wire() as (peer, _authority, _host, _context, updates, attach):
         session = await attach()

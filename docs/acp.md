@@ -80,6 +80,12 @@ connection advertises SudoCode's runtime-status extension v1. They preserve
 Reading status starts no session or model turn and remains available while the
 agent is working.
 
+After an incoming peer notification, `action=status` shows `last_peer_arrival`
+on that connection. It reports the sender and verification flag supplied by the
+engine, plus the physical delivery ID and send ID when available. Reopening the
+connection clears the observation. A delivery records arrival. Interpreting a
+reply and deciding whether the work is complete remain with the participant.
+
 Each observation identifies its ACP connection instance and session. Reopening a
 connection creates a new instance identity. The scope is
 `moss-owned-acp-connections`, with `is_complete=false`: it describes this MossWork

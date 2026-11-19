@@ -268,6 +268,52 @@ async def test_runner_list_and_status_use_the_same_scoped_engine_observation(
     assert status_payload["is_complete"] is False
 
 
+async def test_status_reports_only_bound_peer_input_from_notification_metadata(monkeypatch):
+    import json
+
+    from acp.client.router import build_client_router
+    from moss_harness.builtin.tools import acp_runner as runner_tool
+
+    config = ACPConfig(runners={"custom": ACPRunnerConfig(enabled=True)})
+    service = ACPService(config=config)
+    session = bind(service)
+    session.client.bind_engine_session(session.acp_session_id, None)
+    router = build_client_router(session.client)
+    monkeypatch.setattr(runner_tool, "_thread_id_from_config", lambda: "thread")
+    monkeypatch.setattr(runner_tool, "_get_service", lambda *_: service)
+
+    async def notify(kind, metadata, sid=session.acp_session_id):
+        await router(
+            "session/update",
+            {
+                "sessionId": sid,
+                "update": {"sessionUpdate": kind, "content": {"type": "text", "text": "review"}},
+                "_meta": {"sudocode": {"a2a": metadata}},
+            },
+            True,
+        )
+
+    source = {"from": "reviewer", "kind": "message", "verified": True}
+    await notify("agent_message_chunk", source)
+    await notify("user_message_chunk", source, "other-session")
+    await notify("user_message_chunk", {**source, "verified": "true"})
+    assert "last_peer_arrival" not in await runner_tool._format_status(config, "agent", "custom")
+    await notify("user_message_chunk", {**source, "verified": False})
+    assert session.client.last_peer_arrival.verified is False
+    # Older engines omit the physical and logical IDs.
+    assert session.client.last_peer_arrival.delivery_id is None
+    with_ids = {**source, "deliveryId": "physical-id", "sendId": "logical-id"}
+    await notify("user_message_chunk", {**with_ids, "summary": "peer supplied content"})
+    status = await runner_tool._format_status(config, "agent", "custom")
+    observed = json.loads(status.split("last_peer_arrival: ")[1].splitlines()[0])
+    assert observed == with_ids
+    session.client.invalidate_observations()
+    await notify("user_message_chunk", source)
+    assert "last_peer_arrival" not in await runner_tool._format_status(config, "agent", "custom")
+    session.client.bind_engine_session("new-session", None)
+    assert session.client.last_peer_arrival is None
+
+
 async def test_closing_a_connection_releases_its_outstanding_status_request(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:

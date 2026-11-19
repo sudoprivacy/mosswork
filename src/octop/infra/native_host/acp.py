@@ -16,6 +16,7 @@ from typing import TYPE_CHECKING, Any, Literal, NoReturn, SupportsIndex
 from acp.connection import Connection, StreamDirection, StreamEvent
 from acp.exceptions import RequestError
 from moss_harness.acp.attention import OrderedAttentionProjection
+from moss_harness.acp.peer_arrival import PeerArrival
 from moss_harness.acp.runtime_status import supports_engine_observation
 
 from octop import __version__
@@ -462,6 +463,17 @@ class CohostAcpSession:
                         snapshot.revision,
                         lambda current: self._on_update(method, current.model_dump(mode="json")),
                     )
+                elif method == "session/update":
+                    update = dict(params["update"])
+                    # Reserve this sink field for notification-level engine metadata.
+                    update.pop("peerArrival", None)
+                    if update.get("sessionUpdate") == "user_message_chunk":
+                        arrival = PeerArrival.from_notification(params.get("_meta"))
+                        if arrival is not None:
+                            update["peerArrival"] = arrival.model_dump(
+                                by_alias=True, exclude_none=True
+                            )
+                    await self._on_update(method, update)
                 else:
                     await self._on_update(method, params["update"])
             except Exception:
