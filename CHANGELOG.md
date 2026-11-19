@@ -8,6 +8,8 @@
 
 ### Added
 
+- The Apple Silicon release workflow can sign the bundled SudoCode bootstrap and verify the installer downloaded through the existing SudoWork website button.
+
 - Canonical human review captures the original compiler document and reads records through current independent document/page grants and original-member audit. Production providers and comment delivery remain separate integration requirements.
 - Install published market skills into existing skill packages with target selection, per-package install/reinstall/update/rollback states, dependency checks and local-change warnings. Mounted Agents refresh after active conversations finish.
 - Native company clients expose an About dialog with the installed version, platform and selected update server. Ordinary employees can check for updates; both manifests and complete client downloads pass through the selected server from the official COS stable channel.
