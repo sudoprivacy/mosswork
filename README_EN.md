@@ -1,8 +1,8 @@
 <div align="center">
 
 <picture>
-  <source media="(prefers-color-scheme: dark)" srcset="docs/assets/readme-hero-en-dark.png">
-  <img src="docs/assets/readme-hero-en.png" alt="mosswork: AI runs on employee devices, control stays with IT" width="880">
+  <source media="(prefers-color-scheme: dark)" srcset="docs/assets/readme-hero-en-dark-mosswork.png">
+  <img src="docs/assets/readme-hero-en-mosswork.png" alt="mosswork: AI runs on employee devices, control stays with IT" width="880">
 </picture>
 
 <h1>mosswork</h1>
