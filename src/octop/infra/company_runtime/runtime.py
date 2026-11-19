@@ -36,6 +36,10 @@ from octop.infra.company_runtime.client import (
     CompanyModelError,
     CompanyServiceError,
 )
+from octop.infra.company_runtime.connector_side_effects import (
+    adapter_manages_confirmation,
+    side_effect_for,
+)
 from octop.infra.company_runtime.local import (
     LocalArtifactError,
     OperationJournal,
@@ -57,6 +61,24 @@ from octop.infra.utils.asyncio import offload
 
 _IDENTIFIER = re.compile(r"^[A-Za-z0-9_-]{1,128}$")
 logger = logging.getLogger(__name__)
+
+
+async def _load_connector_tools(
+    client: CompanyClient, task_id: str, server_names: list[Any]
+) -> list[dict[str, Any]]:
+    """Load selected connector tools without preventing the local task from starting."""
+    try:
+        result = await client.request(
+            f"tasks/{task_id}/connectors/tools?servers={','.join(str(x) for x in server_names)}"
+        )
+    except Exception as exc:
+        logger.warning(
+            "company connector tool discovery failed for task %s: %s",
+            task_id,
+            type(exc).__name__,
+        )
+        return []
+    return [item for item in result if isinstance(item, dict)] if isinstance(result, list) else []
 
 
 class CompanyModelFactory(ChatModelFactory):
@@ -139,6 +161,7 @@ class EnterpriseRuntime:
         install_safe_grep_fallback()
         self.client: CompanyClient | None = None
         self.tasks: dict[str, dict[str, Any]] = {}
+        self._connector_tools_cache: dict[str, list[dict[str, Any]]] = {}
 
         def emit_scoped(event: dict[str, Any]) -> None:
             task_id = self.tasks.get(event.get("thread_id", ""), {}).get("task_id")
@@ -293,6 +316,7 @@ class EnterpriseRuntime:
                 "hitl_policy",
                 "knowledge_base_ids",
                 "edit_message_id",
+                "mcp_servers",
             )
             if key in params
         }
@@ -497,6 +521,15 @@ class EnterpriseRuntime:
                 lambda event: self.emit({**event, "thread_id": thread}),
                 tool_path=self.tool_path,
             )
+
+            connector_tools: list[dict[str, Any]] = []
+            company_connector_call: Any = None
+            if request.get("mcp_servers"):
+                if task_id not in self._connector_tools_cache:
+                    self._connector_tools_cache[task_id] = await _load_connector_tools(
+                        client, task_id, request["mcp_servers"]
+                    )
+                connector_tools = self._connector_tools_cache[task_id]
 
             async def authorize() -> None:
                 result = await client.request(f"tasks/{task_id}")
@@ -741,10 +774,97 @@ class EnterpriseRuntime:
 
             send_local_file.handle_tool_error = True
 
+            if connector_tools:
+                connector_index = {
+                    (str(item.get("server_name")), str(item.get("tool_name"))): item
+                    for item in connector_tools
+                    if item.get("available") and item.get("tool_name")
+                }
+
+                @tool
+                async def company_connector_call(
+                    server_name: str,
+                    tool_name: str,
+                    arguments: dict[str, Any] | None = None,
+                    tool_call_id: str = "",
+                ) -> str:
+                    """Call a selected company connector tool.
+
+                    Read and external-query operations run directly. Operations
+                    that can change external state require explicit user approval.
+                    Never retry a call whose result is reported as unknown.
+                    """
+                    call_id = tool_call_id.strip() or f"local-{secrets.token_hex(16)}"
+                    args = arguments or {}
+                    descriptor = connector_index.get((server_name, tool_name))
+                    if descriptor is None:
+                        raise ToolException("connector_tool_unavailable")
+                    kind = str(descriptor.get("kind") or "")
+                    effect = side_effect_for(kind, tool_name, descriptor, args).level
+                    adapter_confirmation = adapter_manages_confirmation(kind, tool_name)
+                    confirmed = adapter_confirmation
+                    if effect in {"write", "message_send"} and not adapter_confirmation:
+                        decisions = await self.steering.approvals.decide(
+                            thread,
+                            {
+                                "action_requests": [
+                                    {
+                                        "name": f"connector:{server_name}:{tool_name}",
+                                        "arguments": args,
+                                        "description": str(
+                                            descriptor.get("description") or tool_name
+                                        ),
+                                    }
+                                ]
+                            },
+                            self.emit,
+                            force_manual=True,
+                        )
+                        if decisions[0].get("type") != "approve":
+                            return decisions[0].get("message") or "用户拒绝了连接器操作。"
+                        confirmed = True
+                    result = await client.request(
+                        f"tasks/{task_id}/connectors/call",
+                        {
+                            "server_name": server_name,
+                            "tool_name": tool_name,
+                            "arguments": args,
+                            "tool_call_id": call_id,
+                            "idempotency_key": f"{task_id}:{call_id}",
+                            "confirmed": confirmed,
+                        },
+                    )
+                    status = str(result.get("status") or "")
+                    if status == "unknown":
+                        raise ToolException(
+                            "connector_result_unknown; do not retry automatically; ask the user whether to submit a new call"
+                        )
+                    if status != "completed":
+                        raise ToolException(str(result.get("error") or "connector_call_failed"))
+                    return str(result.get("content") or "")
+
+                company_connector_call.handle_tool_error = True
+            else:
+                company_connector_call = None
+
             instructions = (
                 snapshot["instructions"]
-                + f"\nEnterprise execution: project={project}; selected source folder={self.workspace}; Python={sys.executable}. Shell commands run with the current employee OS permissions. Preserve source files. Never overwrite or delete without user authorization. Do not upload raw media for local processing. Personal memory is provided by the company memory service through memory_search/memory_get/remember. Automatic recall contains durable saved memories; use memory_search and memory_get for details from earlier conversations. Historical assistant statements do not describe current tool availability or current task results. Project documents are project files and are not loaded as personal memory. Expert bootstrap is already complete. Company expert skills are cached at {cache}. Only this task's granted company tools are available. Team delegation and external connectors are unavailable."
+                + f"\nEnterprise execution: project={project}; selected source folder={self.workspace}; Python={sys.executable}. Shell commands run with the current employee OS permissions. Preserve source files. Never overwrite or delete without user authorization. Do not upload raw media for local processing. Personal memory is provided by the company memory service through memory_search/memory_get/remember. Automatic recall contains durable saved memories; use memory_search and memory_get for details from earlier conversations. Historical assistant statements do not describe current tool availability or current task results. Project documents are project files and are not loaded as personal memory. Expert bootstrap is already complete. Company expert skills are cached at {cache}. Only this task's granted company tools are available. Team delegation is unavailable."
             )
+            if connector_tools:
+                instructions += "\nSelected external connectors and tool availability:\n"
+                for item in connector_tools:
+                    if item.get("available"):
+                        kind = str(item.get("kind") or "")
+                        effect = (
+                            "method-dependent"
+                            if kind in {"feishu-cli", "wecom-cli"}
+                            else item.get("side_effect", "write")
+                        )
+                        instructions += f"- {item['server_name']}::{item['tool_name']} ({effect}): {item.get('description', '')}\n"
+                    else:
+                        instructions += f"- {item.get('server_name')}: unavailable ({item.get('reason', 'unknown')})\n"
+                instructions += "Use company_connector_call for selected connectors. External queries may send user data. Write operations require user confirmation. Feishu and WeCom category tools classify read/query methods from arguments.method at call time."
             instructions += (
                 "\nWhen the user asks to display, send or resend an existing local image "
                 "or file, call send_local_file with its project path. Do not merely return "
@@ -868,6 +988,7 @@ class EnterpriseRuntime:
                     ],
                     send_local_file,
                     load_company_skill,
+                    *([company_connector_call] if company_connector_call is not None else []),
                 ],
                 middleware=[
                     CompanyCapabilitiesMiddleware(capabilities=snapshot.get("capabilities", {})),
@@ -1149,6 +1270,7 @@ class EnterpriseRuntime:
                 finally:
                     # No cleanup or disk failure may retain a finished worker slot.
                     self.work.pop(thread, None)
+                    self._connector_tools_cache.pop(task_id, None)
                     self.emit(
                         {
                             "event": "done",

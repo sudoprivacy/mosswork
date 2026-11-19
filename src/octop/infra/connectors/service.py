@@ -34,6 +34,8 @@ from octop.infra.connectors.custom_mcp import (
     server_enabled,
     set_oauth_required_in_spec,
     shared_mcp_server_name,
+    shared_synthetic_instance_id,
+    synthetic_instance_id,
     validate_servers_map,
     wrap_servers,
 )
@@ -98,6 +100,10 @@ class ConnectorService:
         self._secret_repo = secret_repo
         self._settings_repo = settings_repo
         self._config = config
+
+    @property
+    def config(self) -> MossworkConfig:
+        return self._config
 
     def list_user_instances(
         self,
@@ -668,6 +674,66 @@ class ConnectorService:
         if unknown:
             raise ValueError(f"mcp_servers not available for user: {unknown}")
         return list(names)
+
+    def resolve_server_names(self, user_id: int, names: list[str]) -> dict[str, dict[str, Any]]:
+        """Resolve selected MCP server names without exposing credentials.
+
+        The result is broker metadata only.  Credential material is fetched by
+        the broker immediately before a call and is never returned to clients.
+        """
+        wanted = {str(name).strip() for name in names if str(name).strip()}
+        resolved: dict[str, dict[str, Any]] = {}
+        for inst in self._repo.list_visible(user_id):
+            if (
+                inst.mcp_server_name not in wanted
+                or inst.status != "active"
+                or not inst.has_credentials
+            ):
+                continue
+            entry = get_catalog_entry(inst.kind)
+            if entry is None:
+                continue
+            resolved[inst.mcp_server_name] = {
+                "server_name": inst.mcp_server_name,
+                "instance_id": inst.instance_id,
+                "kind": inst.kind,
+                "mcp_mode": entry.mcp_mode,
+                "shared": inst.shared,
+                "entry": entry,
+            }
+
+        own_custom = self.get_custom_servers(user_id)
+        for name, spec in own_custom.items():
+            if name in wanted and isinstance(spec, dict) and server_enabled(spec):
+                resolved[name] = {
+                    "server_name": name,
+                    "instance_id": synthetic_instance_id(name),
+                    "kind": CUSTOM_MCP_KIND,
+                    "mcp_mode": "remote",
+                    "shared": False,
+                    "spec": spec,
+                }
+        for parent in self._repo.list_by_kind(CUSTOM_MCP_KIND):
+            if parent.user_id == user_id or not parent.has_credentials:
+                continue
+            for name, spec in extract_servers(self.decrypt(parent.instance_id)).items():
+                synthetic = shared_mcp_server_name(parent.instance_id, name)
+                if (
+                    synthetic in wanted
+                    and isinstance(spec, dict)
+                    and spec.get("shared") is True
+                    and server_enabled(spec)
+                ):
+                    resolved[synthetic] = {
+                        "server_name": synthetic,
+                        "instance_id": shared_synthetic_instance_id(parent.instance_id, name),
+                        "kind": CUSTOM_MCP_KIND,
+                        "mcp_mode": "remote",
+                        "shared": True,
+                        "spec": spec,
+                        "parent_instance_id": parent.instance_id,
+                    }
+        return resolved
 
     def custom_harness_configs(self, user_id: int) -> dict[str, Any]:
         configs = enabled_harness_configs(self.get_custom_servers(user_id))

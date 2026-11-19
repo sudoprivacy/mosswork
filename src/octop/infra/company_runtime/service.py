@@ -46,6 +46,10 @@ def authenticate_company_device(services: Any, credential: str, origin: str | No
     )
     if identity is None:
         raise denied("device_session_expired", 401)
+    user_repo = getattr(services, "user_repo", None)
+    user = user_repo.get(int(identity["owner_user_id"])) if user_repo is not None else None
+    if user is not None:
+        identity["owner_username"] = user.username
     return identity
 
 

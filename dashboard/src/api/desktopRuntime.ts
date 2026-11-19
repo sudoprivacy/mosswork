@@ -63,6 +63,7 @@ export interface RuntimeStart {
   reasoning_effort?: string;
   conversation_mode?: string;
   hitl_policy?: { mode: string; tools?: string[] } | null;
+  mcp_servers?: string[];
 }
 export interface DesktopRuntimeBridge {
   version: 1;
