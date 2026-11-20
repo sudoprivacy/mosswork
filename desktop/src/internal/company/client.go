@@ -28,17 +28,21 @@ type Status struct {
 	DeviceID    string `json:"device_id"`
 	OwnerUserID int64  `json:"owner_user_id"`
 	ExpiresAt   int64  `json:"expires_at"`
+	RenewAt     int64  `json:"renew_at,omitempty"`
+	PairBlocked bool   `json:"pair_blocked,omitempty"`
 }
 
 type Client struct {
-	mu         sync.Mutex
-	status     Status
-	credential string
-	cancel     context.CancelFunc
-	conn       *websocket.Conn
-	writeMu    sync.Mutex
-	httpClient *http.Client
-	files      *Files
+	mu           sync.Mutex
+	status       Status
+	credential   string
+	pendingLease string
+	deviceHello  hello
+	cancel       context.CancelFunc
+	conn         *websocket.Conn
+	writeMu      sync.Mutex
+	httpClient   *http.Client
+	files        *Files
 }
 
 // NewClient uses the injected receipt directory and starts with no directory grants.
@@ -65,6 +69,8 @@ func (c *Client) Status() Status {
 }
 
 type hello struct {
+	Proof           string           `json:"proof,omitempty"`
+	Candidate       string           `json:"candidate,omitempty"`
 	Type            string           `json:"type"`
 	Credential      string           `json:"credential"`
 	ProtocolVersion int              `json:"protocol_version"`
@@ -82,6 +88,7 @@ type ready struct {
 	HeartbeatSeconds int    `json:"heartbeat_seconds"`
 	ExpiresAt        int64  `json:"expires_at"`
 	Credential       string `json:"credential"`
+	LeaseSupported   bool   `json:"lease_supported,omitempty"`
 }
 
 func (c *Client) connect(ctx context.Context, base string, h hello) (*websocket.Conn, ready, error) {
@@ -107,6 +114,12 @@ func (c *Client) connect(ctx context.Context, base string, h hello) (*websocket.
 		(h.Type == "pair" && !strings.HasPrefix(r.Credential, "mosswork-device.")) {
 		conn.CloseNow()
 		return nil, ready{}, errProtocol
+	}
+	if r.LeaseSupported {
+		if err := wsjson.Write(ctx, conn, map[string]string{"type": "lease_enable"}); err != nil {
+			conn.CloseNow()
+			return nil, ready{}, err
+		}
 	}
 	return conn, r, nil
 }
@@ -156,7 +169,9 @@ func (c *Client) Pair(ctx context.Context, rawURL, code, name, platform string) 
 		return errors.New("配对已取消")
 	}
 	c.conn = conn
-	c.status = Status{"online", r.DeviceID, r.OwnerUserID, r.ExpiresAt}
+	c.status = statusFromReady(r)
+	c.deviceHello = h
+	c.deviceHello.Type, c.deviceHello.Credential = "hello", ""
 	c.credential = r.Credential
 	c.mu.Unlock()
 	h.Type, h.Credential = "hello", r.Credential
@@ -167,12 +182,14 @@ func (c *Client) Pair(ctx context.Context, rawURL, code, name, platform string) 
 func (c *Client) run(ctx context.Context, base string, h hello, conn *websocket.Conn, identity ready) {
 	defer func() {
 		c.mu.Lock()
-		c.files.Reset()
-		c.credential = ""
+		if c.status.RenewAt == 0 || time.Now().Unix() < c.status.ExpiresAt {
+			c.files.Reset()
+			c.credential, c.pendingLease = "", ""
+		}
 		c.conn = nil
 		c.cancel = nil
 		if c.status.State != "unpaired" {
-			if time.Now().Unix() >= identity.ExpiresAt {
+			if time.Now().Unix() >= c.status.ExpiresAt {
 				// Preserve the expiry timestamp so a later runtime request can
 				// distinguish an expired credential from a transient disconnect.
 				status := c.status
@@ -180,16 +197,16 @@ func (c *Client) run(ctx context.Context, base string, h hello, conn *websocket.
 				c.status = status
 			} else {
 				// Server rejection/revocation must clear the native identity.
-				c.status = Status{State: "disconnected"}
+				c.status = Status{State: "disconnected", PairBlocked: identity.LeaseSupported}
 			}
 		}
 		c.mu.Unlock()
 	}()
 	delay := time.Second
 	for {
-		err := serveFiles(ctx, conn, identity, h.Platform, c.files, &c.writeMu)
+		err := serveFiles(ctx, conn, identity, h.Platform, c.files, &c.writeMu, c)
 		conn.CloseNow()
-		if ctx.Err() != nil || time.Now().Unix() >= identity.ExpiresAt || errors.Is(err, errProtocol) {
+		if ctx.Err() != nil || time.Now().Unix() >= c.Status().ExpiresAt || errors.Is(err, errProtocol) {
 			return
 		}
 		code := websocket.CloseStatus(err)
@@ -208,22 +225,29 @@ func (c *Client) run(ctx context.Context, base string, h hello, conn *websocket.
 				return
 			case <-timer.C:
 			}
-			if time.Now().Unix() >= identity.ExpiresAt {
+			if time.Now().Unix() >= c.Status().ExpiresAt {
 				return
 			}
 			attempt, cancel := context.WithTimeout(ctx, 10*time.Second)
 			h.Grants = wireGrants(c.files.Grants())
-			next, r, connectErr := c.connect(attempt, base, h)
+			next, r, key, connectErr := c.resumeLease(attempt, base, h)
 			cancel()
 			if connectErr == nil {
-				if r.DeviceID != identity.DeviceID || r.OwnerUserID != identity.OwnerUserID || r.ExpiresAt != identity.ExpiresAt {
+				if r.DeviceID != identity.DeviceID || r.OwnerUserID != identity.OwnerUserID || (!identity.LeaseSupported && r.ExpiresAt != identity.ExpiresAt) {
 					next.CloseNow()
 					return
 				}
 				conn = next
 				c.mu.Lock()
 				c.conn = conn
-				c.status.State = "online"
+				if ctx.Err() != nil || c.status.State == "unpaired" {
+					c.mu.Unlock()
+					conn.CloseNow()
+					return
+				}
+				identity = r
+				c.status = statusFromReady(r)
+				c.credential, c.pendingLease = key, ""
 				c.mu.Unlock()
 				delay = time.Second
 				break
@@ -242,7 +266,7 @@ func (c *Client) Close(revoke bool) {
 	c.mu.Lock()
 	conn, cancel := c.conn, c.cancel
 	c.status = Status{State: "unpaired"}
-	c.credential = ""
+	c.credential, c.pendingLease = "", ""
 	c.mu.Unlock()
 	if conn != nil && revoke {
 		ctx, done := context.WithTimeout(context.Background(), time.Second)
@@ -261,6 +285,7 @@ func (c *Client) Close(revoke bool) {
 }
 
 type frame struct {
+	Candidate    string                     `json:"candidate,omitempty"`
 	Type         string                     `json:"type"`
 	CallID       string                     `json:"call_id"`
 	TaskID       string                     `json:"task_id"`
@@ -277,12 +302,18 @@ type frame struct {
 
 func serve(parent context.Context, conn *websocket.Conn, identity ready, platform string) error {
 	var writeMu sync.Mutex
-	return serveFiles(parent, conn, identity, platform, nil, &writeMu)
+	return serveFiles(parent, conn, identity, platform, nil, &writeMu, nil)
 }
 
-func serveFiles(parent context.Context, conn *websocket.Conn, identity ready, platform string, files *Files, writeMu *sync.Mutex) error {
-	ctx, cancel := context.WithDeadline(parent, time.Unix(identity.ExpiresAt, 0))
+func serveFiles(parent context.Context, conn *websocket.Conn, identity ready, platform string, files *Files, writeMu *sync.Mutex, client *Client) error {
+	ctx, cancel := context.WithCancel(parent)
 	defer cancel()
+	go watchLeaseDeadline(ctx, cancel, func() int64 {
+		if identity.LeaseSupported && client != nil {
+			return client.Status().ExpiresAt
+		}
+		return identity.ExpiresAt
+	})
 	var lastHeartbeatAck atomic.Int64
 	lastHeartbeatAck.Store(time.Now().UnixNano())
 	go func() {
@@ -320,6 +351,12 @@ func serveFiles(parent context.Context, conn *websocket.Conn, identity ready, pl
 			return err
 		}
 		switch f.Type {
+		case "lease_ack":
+			if !identity.LeaseSupported || client == nil {
+				return errProtocol
+			}
+			client.acceptLease(conn, f)
+			continue
 		case "heartbeat_ack":
 			lastHeartbeatAck.Store(time.Now().UnixNano())
 			continue
@@ -336,7 +373,7 @@ func serveFiles(parent context.Context, conn *websocket.Conn, identity ready, pl
 		case "call":
 			if f.CallID == "" || len(f.CallID) > 64 ||
 				f.DeviceID != identity.DeviceID || f.OwnerUserID != identity.OwnerUserID ||
-				f.ExpiresAt <= time.Now().Unix() || f.ExpiresAt > identity.ExpiresAt {
+				f.ExpiresAt <= time.Now().Unix() || (!identity.LeaseSupported && f.ExpiresAt > identity.ExpiresAt) || (identity.LeaseSupported && f.ExpiresAt > time.Now().Unix()+3601) {
 				_ = conn.Close(4002, "invalid_call")
 				return errProtocol
 			}

@@ -319,6 +319,12 @@ func (a *App) ensureRuntimeProcess(nonce, base, method string, prepare func() (s
 			a.companyMu.Unlock()
 			return nil, errors.New("账号或工作目录已切换，本地运行时启动已取消")
 		}
+		latest, key := client.CurrentLease()
+		if key == "" || latest.DeviceID != identity.DeviceID || latest.OwnerUserID != identity.OwnerUserID {
+			a.companyMu.Unlock()
+			return nil, errors.New("device_disconnected")
+		}
+		credential = key
 		events := make(chan companyruntime.Message, 512)
 		go func() {
 			for m := range events {
@@ -338,7 +344,7 @@ func (a *App) ensureRuntimeProcess(nonce, base, method string, prepare func() (s
 			return nil, errors.New("本地运行时无法启动，请重新安装包含完整工具的企业客户端")
 		}
 		a.companyRuntime = process
-		go a.watchRuntimeIdentity(nonce, base, epoch, identity.ExpiresAt)
+		go a.watchRuntimeIdentity(nonce, base, epoch, credential)
 		a.companyMu.Unlock()
 		a.emitRuntimeProgress(nonce, base, epoch, "runtime")
 		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
@@ -412,7 +418,7 @@ func (a *App) deliverRuntimeEvent(nonce, base string, epoch uint64, m companyrun
 	a.window.ExecJS(`(function(origin,nonce,event){if(location.origin===origin)window.__mossworkRuntimeEvent?.(nonce,event);})(` + jsonString(a.companyPageOriginLocked()) + `,` + jsonString(nonce) + `,` + string(data) + `)`)
 }
 
-func (a *App) watchRuntimeIdentity(nonce, base string, epoch uint64, expires int64) {
+func (a *App) watchRuntimeIdentity(nonce, base string, epoch uint64, credential string) {
 	ticker := time.NewTicker(time.Second)
 	defer ticker.Stop()
 	for range ticker.C {
@@ -421,13 +427,22 @@ func (a *App) watchRuntimeIdentity(nonce, base string, epoch uint64, expires int
 			a.companyMu.Unlock()
 			return
 		}
-		state := a.company.Status().State
-		if state == "unpaired" || state == "disconnected" || time.Now().Unix() >= expires {
+		status, key := a.company.CurrentLease()
+		if status.State == "unpaired" || status.State == "disconnected" || time.Now().Unix() >= status.ExpiresAt {
 			a.stopCompanyRuntimeLocked()
 			a.companyMu.Unlock()
 			return
 		}
+		process := a.companyRuntime
 		a.companyMu.Unlock()
+		if key != "" && key != credential {
+			ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+			_, err := process.Request(ctx, "renew_credential", map[string]string{"credential": key})
+			cancel()
+			if err == nil {
+				credential = key
+			}
+		}
 	}
 }
 
@@ -439,7 +454,7 @@ func runtimeErrorText(code string) string {
 		"device_reconnecting_timeout":            "本机连接正在恢复，但等待已超时；请确认客户端仍在运行后重试。",
 		"device_disconnected":                    "本机设备已断开公司服务，请检查网络和客户端连接后重试。",
 		"device_unpaired":                        "本机设备尚未连接公司服务，请在设置中完成配对。",
-		"device_session_expired":                 "本机设备连接已过期，请重新登录公司账号并配对。",
+		"device_session_expired":                 "本机设备授权已过期。请检查本地工作目录中的连接状态；只有账号登录也已过期时才需要重新登录。",
 		"heartbeat_timeout":                      "本机心跳应答超时，正在重新连接公司服务。",
 		"workspace_file_locked":                  "文件正在被其他程序占用，请关闭文件后再试。",
 		"workspace_permission_denied":            "没有权限读取或写入该文件，请检查文件权限后再试。",

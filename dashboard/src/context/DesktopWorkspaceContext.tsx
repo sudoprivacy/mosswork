@@ -13,6 +13,8 @@ import {
   type DesktopWorkspaceState,
 } from "../api/desktopWorkspace";
 import { useCurrentUser } from "../hooks/useCurrentUser";
+import { getAuthToken } from "../api/request";
+import { tokenSessionIdentity } from "../utils/authSession";
 
 interface WorkspaceContext {
   available: boolean;
@@ -64,6 +66,11 @@ export function DesktopWorkspaceProvider({
     if (!available || !bridge || !owner) return;
     let cancelled = false;
     let attempted = false;
+    let nextAttempt = 0;
+    let delay = 1000;
+    const session = tokenSessionIdentity(getAuthToken());
+    const sameSession = () =>
+      !cancelled && tokenSessionIdentity(getAuthToken()) === session;
     const refresh = async () => {
       if (working.current) return;
       working.current = true;
@@ -81,15 +88,47 @@ export function DesktopWorkspaceProvider({
           setEnabled(devices.enabled);
           if (
             devices.enabled &&
+            !next.renew_at &&
+            !next.pair_blocked &&
             ["unpaired", "disconnected"].includes(next.state)
           ) {
             setBusy(true);
             const pairing = await devicesApi.pair();
-            if (cancelled) return;
+            if (!sameSession()) return;
             next = await bridge.pair(pairing.code);
           }
         }
         if (cancelled) return;
+        if (
+          bridge.renew &&
+          next.renew_at &&
+          next.owner_user_id === owner &&
+          (next.state === "online" || next.state === "disconnected") &&
+          Date.now() >= next.renew_at * 1000 &&
+          Date.now() >= nextAttempt &&
+          sameSession()
+        ) {
+          nextAttempt = Date.now() + delay + Math.random() * 500;
+          delay = Math.min(delay * 2, 30000);
+          try {
+            const { ticket, key_hint } = await devicesApi.renewal(
+              next.device_id,
+            );
+            if (!sameSession()) return;
+            if (ticket)
+              next = await bridge.renew(
+                key_hint ? `${ticket}.${key_hint}` : ticket,
+              );
+          } catch {
+            if (!sameSession()) return;
+            if (next.state === "disconnected")
+              next = { ...next, error: "connection_failed" };
+          }
+        } else if (next.renew_at && Date.now() < next.renew_at * 1000) {
+          delay = 1000;
+          nextAttempt = 0;
+        }
+        if (!sameSession()) return;
         if (next.owner_user_id && next.owner_user_id !== owner) {
           await bridge.disconnect();
           throw new Error("session_changed");
@@ -98,6 +137,7 @@ export function DesktopWorkspaceProvider({
         setError(
           (previous) =>
             next.error ??
+            (next.pair_blocked ? "device_rejected" : undefined) ??
             (next.state === "online" && previous === "connection_failed"
               ? ""
               : previous),
@@ -113,9 +153,15 @@ export function DesktopWorkspaceProvider({
     setError("");
     void refresh();
     const timer = window.setInterval(() => void refresh(), 3000);
+    window.addEventListener("online", refresh);
+    window.addEventListener("focus", refresh);
+    window.addEventListener("mosswork:device-lease-due", refresh);
     return () => {
       cancelled = true;
       window.clearInterval(timer);
+      window.removeEventListener("online", refresh);
+      window.removeEventListener("focus", refresh);
+      window.removeEventListener("mosswork:device-lease-due", refresh);
     };
   }, [available, owner, revision]);
 

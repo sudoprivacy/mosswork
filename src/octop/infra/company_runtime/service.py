@@ -42,7 +42,7 @@ def authenticate_company_device(services: Any, credential: str, origin: str | No
     if not credential.startswith("mosswork-device.") or len(credential) > 256:
         raise denied("device_credential_required", 401)
     identity = services.device_repo.authenticate(
-        hashlib.sha256(credential.encode()).hexdigest(), int(time.time())
+        hashlib.sha256(credential.encode()).hexdigest(), int(time.time()), handover=True
     )
     if identity is None:
         raise denied("device_session_expired", 401)

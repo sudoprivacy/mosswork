@@ -7,12 +7,13 @@ import (
 	"github.com/wailsapp/wails/v3/pkg/application"
 	"log"
 	"strings"
+	"time"
 )
 
 type connectionEventListener struct{ app *App }
 
 // Workspace requests are scoped to a nonce delivered only to the selected origin.
-// The only credential accepted is a short-lived, single-use device pairing code;
+// Only short-lived pairing and device renewal tickets are accepted;
 // account tokens, passwords, file paths and general native calls are not accepted.
 func (l *connectionEventListener) DispatchWailsEvent(event *application.CustomEvent) {
 	if event == nil || l.app.window == nil || event.Sender != l.app.window.Name() {
@@ -71,8 +72,26 @@ func (a *App) installConnectionPanel(open bool) {
 			return
 		}
 		a.workspaceNonce = hex.EncodeToString(nonce[:])
+		go a.notifyLeaseRenewal(a.workspaceNonce)
 	}
 	data, _ := json.Marshal(map[string]any{"address": a.companyPageOriginLocked(), "nonce": a.workspaceNonce})
 	a.companyMu.Unlock()
 	a.window.ExecJS("(" + string(source) + ")(" + string(data) + ")")
+}
+
+func (a *App) notifyLeaseRenewal(nonce string) {
+	ticker := time.NewTicker(5 * time.Second)
+	defer ticker.Stop()
+	for now := range ticker.C {
+		a.companyMu.Lock()
+		if a.workspaceNonce != nonce || a.company == nil || a.window == nil {
+			a.companyMu.Unlock()
+			return
+		}
+		status := a.company.Status()
+		if status.RenewAt > 0 && now.Unix() >= status.RenewAt {
+			a.window.ExecJS(`if(location.origin===` + jsonString(a.companyPageOriginLocked()) + `)window.dispatchEvent(new Event("mosswork:device-lease-due"))`)
+		}
+		a.companyMu.Unlock()
+	}
 }

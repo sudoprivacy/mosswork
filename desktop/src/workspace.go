@@ -103,17 +103,19 @@ func savedOrDefaultWorkspace(base string, owner int64) (string, error) {
 }
 
 type workspaceState struct {
-	State    string         `json:"state"`
-	DeviceID string         `json:"device_id"`
-	Owner    int64          `json:"owner_user_id"`
-	Path     string         `json:"path"`
-	Grant    *company.Grant `json:"grant"`
-	Error    string         `json:"error,omitempty"`
+	State       string         `json:"state"`
+	DeviceID    string         `json:"device_id"`
+	Owner       int64          `json:"owner_user_id"`
+	Path        string         `json:"path"`
+	Grant       *company.Grant `json:"grant"`
+	Error       string         `json:"error,omitempty"`
+	RenewAt     int64          `json:"renew_at,omitempty"`
+	PairBlocked bool           `json:"pair_blocked,omitempty"`
 }
 
 func (a *App) workspaceStateLocked() workspaceState {
 	s := a.company.Status()
-	return workspaceState{s.State, s.DeviceID, s.OwnerUserID, a.workspacePath, a.workspaceGrant, a.workspaceError}
+	return workspaceState{s.State, s.DeviceID, s.OwnerUserID, a.workspacePath, a.workspaceGrant, a.workspaceError, s.RenewAt, s.PairBlocked}
 }
 
 func parseWorkspaceEvent(name, nonce string) (id, action, code string, ok bool) {
@@ -134,6 +136,9 @@ func parseWorkspaceEvent(name, nonce string) (id, action, code string, ok bool) 
 	case "pair":
 		code, _ = url.QueryUnescape(parts[3])
 		ok = strings.HasPrefix(code, "mosswork-pair.") && len(code) <= 128
+	case "renew":
+		code, _ = url.QueryUnescape(parts[3])
+		ok = strings.HasPrefix(code, "mosswork-renew.") && len(code) == len("mosswork-renew.")+43+1+24
 	}
 	return
 }
@@ -182,6 +187,9 @@ func (a *App) performWorkspaceAction(nonce, base, action, code string) error {
 		return errors.New("session_changed")
 	}
 	client := a.company
+	if action == "renew" && client.Status().State == "disconnected" && a.companyRuntime != nil {
+		a.stopCompanyRuntimeLocked()
+	}
 	if action == "disconnect" || action == "pair" {
 		a.stopCompanyRuntimeLocked()
 		client.Close(true)
@@ -195,6 +203,9 @@ func (a *App) performWorkspaceAction(nonce, base, action, code string) error {
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
 	defer cancel()
+	if action == "renew" {
+		return client.Renew(ctx, base, code)
+	}
 	if action == "pair" {
 		name, _ := os.Hostname()
 		if name == "" || len(name) > 80 {

@@ -101,7 +101,7 @@ func testServer(t *testing.T, handler func(context.Context, *websocket.Conn, hel
 			t.Error(err)
 			return
 		}
-		identity := ready{"ready", "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb", 7, ProtocolVersion, 15, time.Now().Add(time.Hour).Unix(), "mosswork-device.test-credential-for-channel-only"}
+		identity := ready{"ready", "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb", 7, ProtocolVersion, 15, time.Now().Add(time.Hour).Unix(), "mosswork-device.test-credential-for-channel-only", false}
 		if err := wsjson.Write(ctx, conn, identity); err != nil {
 			t.Error(err)
 			return
@@ -241,7 +241,7 @@ func TestHTTPPairAndProbe(t *testing.T) {
 			t.Error(err)
 			return
 		}
-		identity := ready{"ready", "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb", 7, ProtocolVersion, 15, time.Now().Add(time.Hour).Unix(), "mosswork-device.test-credential-for-channel-only"}
+		identity := ready{"ready", "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb", 7, ProtocolVersion, 15, time.Now().Add(time.Hour).Unix(), "mosswork-device.test-credential-for-channel-only", false}
 		if err := wsjson.Write(ctx, conn, identity); err != nil {
 			t.Error(err)
 			return
@@ -316,7 +316,7 @@ func TestReconnectUsesDeviceCredentialWithoutRePairing(t *testing.T) {
 		if err := wsjson.Read(ctx, conn, &h); err != nil {
 			return
 		}
-		identity := ready{"ready", "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb", 7, ProtocolVersion, 15, expires, "mosswork-device.test-credential-for-channel-only"}
+		identity := ready{"ready", "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb", 7, ProtocolVersion, 15, expires, "mosswork-device.test-credential-for-channel-only", false}
 		if err := wsjson.Write(ctx, conn, identity); err != nil {
 			t.Error(err)
 			return

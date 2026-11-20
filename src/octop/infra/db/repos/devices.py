@@ -80,14 +80,86 @@ class DeviceRepo:
             ).fetchone()
         return dict(row)
 
-    def authenticate(self, digest: str, now: int) -> dict[str, Any] | None:
+    def issue_renewal(
+        self,
+        device: str,
+        owner: int,
+        session: str,
+        ticket: str,
+        deadline: int,
+        until: int,
+        now: int,
+    ) -> str | None:
+        with self._db.transaction() as conn:
+            row = conn.execute(
+                "UPDATE desktop_devices SET renewal_ticket=?,ticket_deadline=?,renewal_until=? "
+                "WHERE device_id=? AND owner_user_id=? AND session_id=? AND revoked_at IS NULL "
+                "AND expires_at<=? AND protocol_version=2 AND EXISTS(SELECT 1 FROM users "
+                "WHERE id=owner_user_id AND disabled=0) AND NOT EXISTS(SELECT 1 FROM "
+                "communication_revoked_sessions s WHERE s.session_id=desktop_devices.session_id "
+                "AND s.expires_at>?) RETURNING credential_hash",
+                (ticket, deadline, until, device, owner, session, until, now),
+            ).fetchone()
+            return str(row[0]) if row else None
+
+    def renewal_owner(self, ticket: str, now: int) -> int | None:
+        with self._db.connect() as conn:
+            row = conn.execute(
+                "SELECT owner_user_id FROM desktop_devices WHERE renewal_ticket=? "
+                "AND ticket_deadline>? AND revoked_at IS NULL",
+                (ticket, now),
+            ).fetchone()
+        return int(row[0]) if row else None
+
+    def rotate(
+        self, ticket: str, previous: str, candidate: str, now: int, recovery_platform: str = ""
+    ) -> dict[str, Any] | None:
+        if candidate == previous:
+            return None
+        with self._db.transaction() as conn:
+            row = conn.execute(
+                "UPDATE desktop_devices SET prior_hash=credential_hash, "
+                "prior_until=CASE WHEN expires_at<? THEN expires_at ELSE ? END, "
+                "credential_hash=?,expires_at=renewal_until WHERE credential_hash=? "
+                "AND renewal_ticket=? AND ticket_deadline>? AND renewal_until>expires_at "
+                "AND ((?='' AND expires_at>?) OR (platform=? AND expires_at<=?)) "
+                "AND revoked_at IS NULL AND EXISTS(SELECT 1 FROM users WHERE id=owner_user_id "
+                "AND disabled=0) AND NOT EXISTS(SELECT 1 FROM communication_revoked_sessions s "
+                "WHERE s.session_id=desktop_devices.session_id AND s.expires_at>?) RETURNING *",
+                (
+                    now + 60,
+                    now + 60,
+                    candidate,
+                    previous,
+                    ticket,
+                    now,
+                    recovery_platform,
+                    now,
+                    recovery_platform,
+                    now,
+                    now,
+                ),
+            ).fetchone()
+            if row is None:
+                row = conn.execute(
+                    "SELECT * FROM desktop_devices WHERE renewal_ticket=? AND ticket_deadline>? "
+                    "AND credential_hash=? AND prior_hash=? AND revoked_at IS NULL AND expires_at>? "
+                    "AND EXISTS(SELECT 1 FROM users WHERE id=owner_user_id AND disabled=0) "
+                    "AND NOT EXISTS(SELECT 1 FROM communication_revoked_sessions s WHERE "
+                    "s.session_id=desktop_devices.session_id AND s.expires_at>?)",
+                    (ticket, now, candidate, previous, now, now),
+                ).fetchone()
+        return dict(row) if row else None
+
+    def authenticate(self, digest: str, now: int, handover: bool = False) -> dict[str, Any] | None:
         with self._db.connect() as conn:
             row = conn.execute(
                 "SELECT d.* FROM desktop_devices d JOIN users u ON u.id=d.owner_user_id "
-                "WHERE d.credential_hash=? AND d.revoked_at IS NULL AND d.expires_at>? "
+                "WHERE (d.credential_hash=? OR (d.prior_hash=? AND d.prior_until>?)) "
+                "AND d.revoked_at IS NULL AND d.expires_at>? "
                 "AND u.disabled=0 AND NOT EXISTS(SELECT 1 FROM communication_revoked_sessions s "
                 "WHERE s.session_id=d.session_id AND s.expires_at>?)",
-                (digest, now, now),
+                (digest, digest if handover else None, now, now, now),
             ).fetchone()
         return dict(row) if row else None
 

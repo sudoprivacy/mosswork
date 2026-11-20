@@ -27,6 +27,7 @@ function mountConnectionPanel(config) {
   window.mossworkDesktopWorkspace = Object.freeze({
     status: () => request("status"),
     pair: code => request("pair", code),
+    renew: ticket => request("renew", ticket),
     choose: () => request("choose"),
     clear: () => request("clear"),
     disconnect: () => request("disconnect"),
