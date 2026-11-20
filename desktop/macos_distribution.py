@@ -79,10 +79,10 @@ def notarize(artifact, profile, receipt, *, runner=run):
                 "--keychain-profile",
                 profile,
                 "--timeout",
-                "20m",
+                "120m",
                 "--output-format",
                 "json",
-                timeout=1260,
+                timeout=7260,
             )
         )
     except (subprocess.SubprocessError, ValueError):

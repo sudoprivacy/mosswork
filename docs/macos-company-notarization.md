@@ -67,6 +67,9 @@ Artifact hashes and a pending submission record are retained as
 before uploading. If upload is interrupted before an ID is returned, inspect
 `notarytool history` with the signing operator before retrying. An unknown ID
 does not mean the submission failed. Returned IDs are recorded before waiting.
+On GitHub Actions, supply the UUID as `notary_submission_id` on the default
+branch to retrieve Apple's status and any rejection log. Signed jobs allow up
+to two hours for each Apple review.
 If a wait is interrupted or a submission is rejected, inspect that same ID using
 `xcrun notarytool info` and `log` with the existing Keychain profile. The helper
 does not automatically resubmit an uncertain operation. Preserve the failed

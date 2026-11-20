@@ -106,7 +106,7 @@ def test_first_install_and_restart_keep_secrets_private(shell_deployment):
     assert (install / "data/.fake-users").exists()
 
 
-@pytest.mark.parametrize("failure", ["inspect", "--migrate", "300"])
+@pytest.mark.parametrize("failure", ["inspect", "--migrate", "1200"])
 def test_failed_first_install_resumes_without_rotating_keys(shell_deployment, failure):
     install, run, calls = shell_deployment
     assert run(failure=failure).returncode != 0
@@ -125,7 +125,7 @@ def test_upgrade_checks_database_and_only_commits_after_health(shell_deployment)
     (install / ".env").rename(install / "deployment.env")
     config = (install / "deployment.env").read_bytes()
     assert run("v0.0.4").returncode != 0
-    assert run("v0.0.4", upgrade=True, failure="300").returncode != 0
+    assert run("v0.0.4", upgrade=True, failure="1200").returncode != 0
     assert (install / "deployment.env").read_bytes() == config
     assert (install / "current").resolve().name == "v0.0.3"
     result = run("v0.0.4", upgrade=True)

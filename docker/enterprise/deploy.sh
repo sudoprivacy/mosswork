@@ -170,7 +170,7 @@ if [ "$has_users" != t ] || [ "$(query 'SELECT count(*) FROM users')" = 0 ]; the
   "${compose[@]}" run --rm -T --no-deps -e MOSSWORK_ADMIN_USERNAME -e MOSSWORK_ADMIN_PASSWORD \
     moss-server moss-server init --yes
 fi
-"${compose[@]}" up -d --no-build --wait --wait-timeout 300
+"${compose[@]}" up -d --no-build --wait --wait-timeout 1200
 cp "$runtime_config" "$config"
 chmod 600 "$config"
 
