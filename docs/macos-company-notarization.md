@@ -50,6 +50,12 @@ payload checks. A Private payload must be included by its maintained producer
 before signing; changing the app or its archives afterwards invalidates this
 qualification.
 
+The packager signs the native executables, Python extensions and shared libraries
+in a staging copy of the company runtime. On the target Mac it repeats the runtime
+smoke test before recording the hashes for the update ZIP. The bootstrap Python
+archive is signed in staging as well. Its manifest records the original archive
+digest and the delivered digest before the desktop shell embeds the final pins.
+
 The packager verifies the expected team, bundle identifier, version,
 architecture and hardened runtime before submission. It submits the signed
 application, requires `Accepted`, staples its ticket, and checks Gatekeeper.

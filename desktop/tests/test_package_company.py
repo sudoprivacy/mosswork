@@ -114,6 +114,48 @@ class CompanyPackageTest(unittest.TestCase):
                         digest,
                     )
 
+    def test_notarized_zip_uses_smoke_test_and_hashes_of_signed_staging_copy(self):
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            source = self.payload(root)
+            original = (source / "runtime/bin/python3").read_bytes()
+
+            def sign(staged, identity, team):
+                (staged / "runtime/bin/python3").write_bytes(original + b"signature")
+
+            def smoke(argv, **kwargs):
+                interpreter, verifier, staged = map(Path, argv)
+                self.assertEqual(verifier.name, "verify_company_runtime.py")
+                self.assertEqual(interpreter.read_bytes(), original + b"signature")
+                self.assertFalse((staged / "company-runtime-build.json").exists())
+                record = json.loads((source / "company-runtime-build.json").read_bytes())
+                record["file_hashes"]["runtime/bin/python3"] = hashlib.sha256(
+                    interpreter.read_bytes()
+                ).hexdigest()
+                (staged / "company-runtime-build.json").write_text(json.dumps(record))
+
+            with (
+                patch.object(module, "host_target", return_value=("darwin", "arm64")),
+                patch.object(module, "sign_runtime_tree", side_effect=sign),
+                patch.object(module.subprocess, "run", side_effect=smoke) as verify,
+            ):
+                archive = module.package_signed_runtime(
+                    source, root / "runtime.zip", "arm64", "identity", "ABCDEFGHIJ"
+                )
+                verify.assert_called_once()
+            self.assertEqual((source / "runtime/bin/python3").read_bytes(), original)
+            with zipfile.ZipFile(archive) as bundle:
+                prefix = "mosswork-company-darwin-arm64/"
+                manifest = json.loads(bundle.read(prefix + "company-runtime-manifest.json"))
+                self.assertTrue(manifest["target_smoke_verified"])
+                self.assertEqual(
+                    bundle.read(prefix + "runtime/bin/python3"), original + b"signature"
+                )
+                self.assertEqual(
+                    manifest["files"]["runtime/bin/python3"],
+                    hashlib.sha256(original + b"signature").hexdigest(),
+                )
+
     def test_missing_tools_and_wrong_arch_are_rejected(self):
         with tempfile.TemporaryDirectory() as temp:
             root = Path(temp)
