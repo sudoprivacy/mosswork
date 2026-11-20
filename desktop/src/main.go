@@ -102,6 +102,7 @@ func (a *App) ServiceShutdown() error {
 	}
 	a.companyMu.Lock()
 	a.stopCompanyRuntimeLocked()
+	a.workspaceNonce = ""
 	if a.companyUI != nil {
 		a.companyUI.Close()
 		a.companyUI = nil

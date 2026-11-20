@@ -52,6 +52,9 @@ def main() -> None:
                     method, params = request["method"], request.get("params", {})
                     if method == "initialize":
                         result = await runtime.initialize(params)
+                    elif method == "renew_credential" and runtime.client is not None:
+                        runtime.client.replace_credential(params["credential"])
+                        result = {}
                     elif method == "status":
                         result = runtime.status()
                     elif method == "start":

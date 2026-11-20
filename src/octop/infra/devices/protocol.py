@@ -48,7 +48,7 @@ class DeviceSelection(Frame):
 
 
 class Hello(Frame):
-    type: Literal["pair", "hello"]
+    type: Literal["pair", "hello", "recover"]
     credential: str = Field(min_length=32, max_length=128)
     protocol_version: Literal[1, 2]
     name: str = Field(min_length=1, max_length=80, pattern=r"^[^\x00-\x1f\x7f]+$")
@@ -56,8 +56,16 @@ class Hello(Frame):
     capabilities: list[Literal["device_status", "local_files"]] = Field(max_length=2)
     grants: list[DirectoryGrant] = Field(default_factory=list, max_length=16)
 
+    proof: str | None = Field(default=None, pattern=r"^mosswork-device\.[A-Za-z0-9_-]{32,96}$")
+    candidate: str | None = Field(default=None, pattern=r"^[0-9a-f]{64}$")
+
     @model_validator(mode="after")
     def compatible(self) -> Hello:
+        if self.type == "recover":
+            if not self.proof or not self.candidate or self.protocol_version != 2:
+                raise ValueError("invalid renewal proof")
+        elif self.proof is not None or self.candidate is not None:
+            raise ValueError("unexpected renewal proof")
         if self.protocol_version == 1 and (self.grants or "local_files" in self.capabilities):
             raise ValueError("v1 has no file capabilities")
         if len({g.id for g in self.grants}) != len(self.grants):
@@ -84,7 +92,9 @@ class FileResult(Frame):
 
 
 class DeviceMessage(Frame):
-    type: Literal["heartbeat", "result", "cancelled", "revoke", "grants"]
+    type: Literal["heartbeat", "result", "cancelled", "revoke", "grants", "lease_enable", "renew"]
+    ticket: str | None = Field(default=None, pattern=r"^mosswork-renew\.[A-Za-z0-9_-]{43}$")
+    candidate: str | None = Field(default=None, pattern=r"^[0-9a-f]{64}$")
     call_id: str | None = Field(default=None, min_length=1, max_length=64)
     result: ProbeResult | FileResult | None = None
     grants: list[DirectoryGrant] = Field(default_factory=list, max_length=16)

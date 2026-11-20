@@ -10,6 +10,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"runtime"
 	"strings"
@@ -21,9 +22,15 @@ import (
 	"github.com/coder/websocket"
 	"github.com/coder/websocket/wsjson"
 	"mosswork.desktop/internal/company"
+	"mosswork.desktop/internal/companyruntime"
 )
 
 func startupTestApp(t *testing.T) *App {
+	t.Helper()
+	return startupTestAppWithLease(t, time.Now().Add(time.Hour).Unix(), false)
+}
+
+func startupTestAppWithLease(t *testing.T, cutoff int64, renewable bool) *App {
 	t.Helper()
 	t.Setenv("MOSSWORK_HOME", t.TempDir())
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -36,13 +43,20 @@ func startupTestApp(t *testing.T) *App {
 		if wsjson.Read(r.Context(), conn, &hello) != nil {
 			return
 		}
-		if wsjson.Write(r.Context(), conn, map[string]any{"type": "ready", "device_id": strings.Repeat("b", 32), "owner_user_id": 7, "protocol_version": 2, "heartbeat_seconds": 15, "expires_at": time.Now().Add(time.Hour).Unix(), "credential": "mosswork-device.test"}) != nil {
+		if wsjson.Write(r.Context(), conn, map[string]any{"type": "ready", "device_id": strings.Repeat("b", 32), "owner_user_id": 7, "protocol_version": 2, "heartbeat_seconds": 15, "expires_at": cutoff, "credential": "mosswork-device.test", "lease_supported": renewable}) != nil {
 			return
 		}
+		deadline := cutoff
 		for {
 			var frame map[string]any
 			if wsjson.Read(r.Context(), conn, &frame) != nil {
 				return
+			}
+			if renewable && frame["type"] == "renew" {
+				deadline += 120
+				if wsjson.Write(r.Context(), conn, map[string]any{"type": "lease_ack", "candidate": frame["candidate"], "expires_at": deadline}) != nil {
+					return
+				}
 			}
 		}
 	}))
@@ -55,6 +69,73 @@ func startupTestApp(t *testing.T) *App {
 	app.companyURL, app.workspaceNonce = server.URL, "nonce"
 	app.workspacePath, app.workspaceGrant = t.TempDir(), &company.Grant{}
 	return app
+}
+
+func TestRuntimeWatchdogKeepsWorkerAcrossTwoRenewals(t *testing.T) {
+	python := "python3"
+	if runtime.GOOS == "windows" {
+		python = "python"
+	}
+	binary, err := exec.LookPath(python)
+	if err != nil {
+		t.Skip("test worker requires Python")
+	}
+	cutoff := time.Now().Add(4 * time.Second).Unix()
+	app := startupTestAppWithLease(t, cutoff, true)
+	script := filepath.Join(t.TempDir(), "worker.py")
+	worker := `import hashlib,json,os,sys
+digest = ""
+for line in sys.stdin:
+    req = json.loads(line)
+    if req["method"] == "renew_credential":
+        digest = hashlib.sha256(req["params"]["credential"].encode()).hexdigest()
+    print(json.dumps({"id": req["id"], "result": {"pid": os.getpid(), "digest": digest}}), flush=True)
+`
+	if err := os.WriteFile(script, []byte(worker), 0600); err != nil {
+		t.Fatal(err)
+	}
+	process, err := companyruntime.Start(binary, script, app.workspacePath, os.Environ(), func(companyruntime.Message) {})
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer process.Close()
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+	read := func() (int, string) {
+		raw, err := process.Request(ctx, "status", nil)
+		var status struct {
+			PID    int
+			Digest string
+		}
+		if err != nil || json.Unmarshal(raw, &status) != nil || status.PID <= 0 {
+			t.Fatal("worker not responding", err)
+		}
+		return status.PID, status.Digest
+	}
+	pid, _ := read()
+	_, initial := app.company.CurrentLease()
+	app.companyRuntime = process
+	go app.watchRuntimeIdentity("nonce", app.companyURL, app.runtimeEpoch, initial)
+	for round := 1; round <= 2; round++ {
+		if err := app.company.Renew(ctx, app.companyURL, "mosswork-renew.test"); err != nil {
+			t.Fatal(err)
+		}
+		for {
+			status, key := app.company.CurrentLease()
+			current, digest := read()
+			if current != pid {
+				t.Fatal("worker restarted")
+			}
+			if status.ExpiresAt == cutoff+int64(round)*120 && digest == fmt.Sprintf("%x", sha256.Sum256([]byte(key))) {
+				break
+			}
+			time.Sleep(25 * time.Millisecond)
+		}
+	}
+	time.Sleep(time.Until(time.Unix(cutoff+1, 0)))
+	if current, _ := read(); current != pid {
+		t.Fatal("worker restarted at the old cutoff")
+	}
 }
 
 func TestEmitRuntimeProgressWithoutWindowIsSafe(t *testing.T) {

@@ -66,6 +66,11 @@ class CompanyClient:
             verify=tls_context,
         )
 
+    def replace_credential(self, credential: str) -> None:
+        if not credential.startswith("mosswork-device.") or len(credential) > 128:
+            raise ValueError("invalid_device_credential")
+        self.http.headers["X-mosswork-Device-Credential"] = credential
+
     async def request(self, path: str, body: dict[str, Any] | None = None) -> Any:
         timeout = (
             httpx.Timeout(900, connect=10)

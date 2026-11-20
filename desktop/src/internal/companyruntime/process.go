@@ -163,7 +163,7 @@ func (p *Process) Alive() bool {
 		return true
 	}
 }
-func (p *Process) Close() { p.closeOnce.Do(func() { _ = p.stdin.Close(); kill(p.cmd) }) }
+func (p *Process) Close() { p.closeOnce.Do(func() { kill(p.cmd); _ = p.stdin.Close() }) }
 
 // Environment discards ambient Python configuration and uses only packaged tools.
 func Environment(stateDir, root, path, cacheDir string) []string {

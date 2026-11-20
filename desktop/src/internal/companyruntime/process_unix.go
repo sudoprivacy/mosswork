@@ -49,7 +49,7 @@ func kill(cmd *exec.Cmd) {
 	}
 	children := descendants(cmd.Process.Pid)
 	// Invalidate every separate child group immediately, then let the worker flush
-	// its cancellation receipts. stdin is already closed, so its reader also exits.
+	// its cancellation receipts before the caller closes stdin.
 	for _, pid := range children {
 		if group, err := syscall.Getpgid(pid); err == nil && group == pid {
 			_ = syscall.Kill(-group, syscall.SIGKILL)

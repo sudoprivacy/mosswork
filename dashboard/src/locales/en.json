@@ -65,6 +65,7 @@
     "workspaceState_disconnected": "Disconnected",
     "workspaceError_directory_unavailable": "The saved folder is unavailable. Connect its drive or choose another folder.",
     "workspaceError_connection_failed": "Local tools could not connect. Check the company network and retry. Server chat is still available.",
+    "workspaceError_device_rejected": "The device connection was terminated and cannot pair again automatically. Ask your administrator to check device access and the client version.",
     "workspaceError_device_offline": "Local tools are disconnected. Reconnect before choosing a folder.",
     "workspaceError_save_failed": "Could not save the working folder. Check write access to the client settings directory and retry.",
     "workspaceError_session_changed": "The signed-in account changed. Reconnect local tools.",

@@ -39,6 +39,11 @@ class DeviceInfo(BaseModel):
     grants: list[DirectoryGrant] = Field(default_factory=list)
 
 
+class RenewalTicket(BaseModel):
+    ticket: str | None
+    key_hint: str | None
+
+
 class DeviceList(BaseModel):
     enabled: bool
     devices: list[DeviceInfo]
@@ -93,6 +98,29 @@ async def pairing(
     return PairingCode(
         **await manager.issue_pairing(user.id, session_id(raw, claims), int(claims["exp"]))
     )
+
+
+@router.post(
+    "/{device_id}/renewal-ticket",
+    summary="Authorize renewal of this login's desktop lease",
+    description="The native device must also prove possession. A ticket cannot run tools.",
+)
+async def renewal_ticket(
+    device_id: str,
+    request: Request,
+    response: Response,
+    user: User = Depends(current_user),
+    server: MossworkServer = Depends(get_server),
+) -> RenewalTicket:
+    raw = extract_raw_token(authorization=request.headers.get("authorization"))
+    if not raw:
+        raise MossworkError(ErrorCode.AUTH_FAILED, "Authorization header required")
+    claims = _decode(server, raw)
+    response.headers["Cache-Control"] = "no-store"
+    ticket, key_hint = await _manager(server).renewal_ticket(
+        device_id, user.id, session_id(raw, claims), int(claims["exp"])
+    )
+    return RenewalTicket(ticket=ticket, key_hint=key_hint)
 
 
 @router.delete("/{device_id}", status_code=204, summary="Revoke an owned desktop device")

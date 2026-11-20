@@ -65,6 +65,7 @@
     "workspaceState_disconnected": "本机已断开",
     "workspaceError_directory_unavailable": "已保存的文件夹无法访问，请检查磁盘是否连接，或重新选择文件夹。",
     "workspaceError_connection_failed": "本机工具连接失败，请检查公司网络并重试。普通服务器聊天仍可使用。",
+    "workspaceError_device_rejected": "设备连接已被终止，不能自动重新配对。请向管理员确认设备授权和客户端版本。",
     "workspaceError_device_offline": "本机工具已断开，请重新连接后再选择文件夹。",
     "workspaceError_save_failed": "工作目录未能保存，请检查客户端配置目录的写入权限后重试。",
     "workspaceError_session_changed": "登录账号已变化，请重新连接本机工具。",

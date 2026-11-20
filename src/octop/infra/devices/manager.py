@@ -59,6 +59,7 @@ class Connection:
     pending_tasks: dict[str, DeviceTask] = field(default_factory=dict)
     send_lock: asyncio.Lock = field(default_factory=asyncio.Lock)
     generation: int = 0
+    renewable: bool = False
 
     async def send(self, frame: dict[str, Any]) -> None:
         async with self.send_lock:
@@ -86,12 +87,29 @@ class DeviceManager:
         )
         return {"code": code, "expires_at": deadline, "credential_expires_at": credential_deadline}
 
-    async def _identity(self, digest: str) -> dict[str, Any]:
-        row = await _db(self.repo.authenticate, digest, int(time.time()))
+    async def _identity(self, digest: str, handover: bool = False) -> dict[str, Any]:
+        row = await _db(self.repo.authenticate, digest, int(time.time()), handover)
         if row is None:
             # An expired device must not make the dashboard sign out its valid login.
             raise _error("device_credentials_invalid")
         return row
+
+    async def renewal_ticket(
+        self, device: str, owner: int, session: str, expires: int
+    ) -> tuple[str | None, str | None]:
+        now = int(time.time())
+        ticket = "mosswork-renew." + secrets.token_urlsafe(32)
+        issued = await _db(
+            self.repo.issue_renewal,
+            device,
+            owner,
+            session,
+            _digest(ticket),
+            min(now + 60, expires),
+            min(now + 8 * 3600, expires),
+            now,
+        )
+        return (ticket, _digest(ticket + issued)[:24]) if issued else (None, None)
 
     async def serve(self, socket: DeviceSocket) -> None:
         conn: Connection | None = None
@@ -119,6 +137,18 @@ class DeviceManager:
                     raise _error("pairing_code_invalid", status=401)
                 # Recheck session revocation racing code redemption.
                 row = await self._identity(_digest(credential))
+            elif hello.type == "recover":
+                assert hello.proof and hello.candidate
+                row = await _db(
+                    self.repo.rotate,
+                    _digest(hello.credential),
+                    _digest(hello.proof),
+                    hello.candidate,
+                    int(time.time()),
+                    hello.platform,
+                )
+                if row is None:
+                    raise _error("device_renewal_denied")
             else:
                 if not hello.credential.startswith("mosswork-device."):
                     raise _error("device_credentials_invalid", status=401)
@@ -155,6 +185,7 @@ class DeviceManager:
                 "protocol_version": hello.protocol_version,
                 "heartbeat_seconds": HEARTBEAT_SECONDS,
                 "expires_at": row["expires_at"],
+                "lease_supported": hello.protocol_version == 2,
             }
             if credential is not None:
                 ready["credential"] = credential
@@ -167,6 +198,31 @@ class DeviceManager:
                     raise _error("frame_too_large")
                 message = DeviceMessage.model_validate_json(raw)
                 await self._identity(str(row["credential_hash"]))
+                if message.type == "lease_enable" and hello.protocol_version == 2:
+                    conn.renewable = True
+                    continue
+                if message.type == "renew":
+                    if not conn.renewable or not message.ticket or not message.candidate:
+                        raise _error("invalid_renewal_frame")
+                    renewed = await _db(
+                        self.repo.rotate,
+                        _digest(message.ticket),
+                        row["prior_hash"]
+                        if row["credential_hash"] == message.candidate
+                        else row["credential_hash"],
+                        message.candidate,
+                        int(time.time()),
+                    )
+                    if renewed is not None:
+                        row.update(renewed)
+                    await conn.send(
+                        {
+                            "type": "lease_ack",
+                            "candidate": message.candidate,
+                            "expires_at": row["expires_at"] if renewed else 0,
+                        }
+                    )
+                    continue
                 if message.type == "revoke":
                     await self.revoke(int(row["owner_user_id"]), device_id)
                     return
@@ -274,7 +330,7 @@ class DeviceManager:
             row["grants"] = []
             if conn is not None:
                 try:
-                    await self._identity(str(conn.row["credential_hash"]))
+                    await self._identity(str(conn.row["credential_hash"]), handover=True)
                 except MossworkError:
                     await self._close(conn)
                 else:
@@ -291,7 +347,7 @@ class DeviceManager:
         conn = self.connections.get(device_id)
         if conn is None:
             raise _error("device_offline")
-        await self._identity(str(conn.row["credential_hash"]))
+        await self._identity(str(conn.row["credential_hash"]), handover=True)
         if self.connections.get(device_id) is not conn:
             raise _error("device_offline")
         if PROBE_TOOL not in conn.capabilities:
@@ -311,7 +367,7 @@ class DeviceManager:
         conn = self.connections.get(selection.device_id)
         if conn is None or conn.row["owner_user_id"] != owner:
             raise _error("device_offline_or_not_owned")
-        await self._identity(str(conn.row["credential_hash"]))
+        await self._identity(str(conn.row["credential_hash"]), handover=True)
         if "local_files" not in conn.capabilities:
             raise _error("capability_unavailable")
         now = int(time.time())
@@ -341,7 +397,7 @@ class DeviceManager:
             thread_id,
             session_key,
             selection,
-            min(now + 3600, conn.row["expires_at"]),
+            now + 3600 if conn.renewable else min(now + 3600, conn.row["expires_at"]),
             request_id,
         )
         if not task.valid_grant(conn):
@@ -355,7 +411,7 @@ class DeviceManager:
         conn = self.connections.get(task.selection.device_id)
         if conn is None:
             raise _error("device_offline")
-        await self._identity(str(conn.row["credential_hash"]))
+        await self._identity(str(conn.row["credential_hash"]), handover=True)
         if (
             self.connections.get(task.selection.device_id) is not conn
             or "local_files" not in conn.capabilities
@@ -399,6 +455,9 @@ class DeviceManager:
         if task is not None:
             conn.pending_tasks[call_id] = task
         try:
+            deadline = int(time.time() + timeout)
+            if not conn.renewable:
+                deadline = min(deadline, conn.row["expires_at"])
             frame = {
                 "type": "call",
                 "call_id": call_id,
@@ -406,11 +465,7 @@ class DeviceManager:
                 "device_id": conn.row["device_id"],
                 "owner_user_id": owner,
                 "tool": tool,
-                "expires_at": min(
-                    int(time.time() + timeout),
-                    conn.row["expires_at"],
-                    task.expires_at if task else conn.row["expires_at"],
-                ),
+                "expires_at": min(deadline, task.expires_at) if task else deadline,
                 "arguments": arguments,
                 **(
                     {

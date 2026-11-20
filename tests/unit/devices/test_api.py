@@ -41,6 +41,37 @@ def pair_frame(code, **changes):
     }
 
 
+def test_expired_device_needs_both_same_login_ticket_and_native_proof(client, stack):
+    server, _, _, _ = stack
+    code = client.post("/api/devices/pairing", headers=headers(stack)).json()["code"]
+    with client.websocket_connect("/api/devices/ws") as ws:
+        ws.send_json(pair_frame(code, protocol_version=2))
+        ready = ws.receive_json()
+    device, proof = ready["device_id"], ready["credential"]
+    with server.services.db.transaction() as conn:
+        conn.execute("UPDATE desktop_devices SET expires_at=0 WHERE device_id=?", (device,))
+    url = f"/api/devices/{device}/renewal-ticket"
+    assert client.post(url, headers=headers(stack, "bob")).json()["ticket"] is None
+    response = client.post(url, headers=headers(stack))
+    assert response.headers["cache-control"] == "no-store"
+    ticket = response.json()["ticket"]
+    candidate = _digest("mosswork-device." + "a" * 43)
+    message = pair_frame(
+        ticket, type="recover", protocol_version=2, proof=proof, candidate=candidate
+    )
+    with client.websocket_connect("/api/devices/ws") as ws:
+        ws.send_json({**message, "proof": "mosswork-device." + "b" * 43})
+        with pytest.raises(WebSocketDisconnect):
+            ws.receive_json()
+    with client.websocket_connect("/api/devices/ws") as ws:
+        ws.send_json(message)
+        recovered = ws.receive_json()
+        assert recovered["device_id"] == device and recovered["expires_at"] > time.time()
+        assert "credential" not in recovered
+        assert client.post("/api/auth/logout", headers=headers(stack)).status_code == 204
+    assert server.services.device_repo.authenticate(candidate, int(time.time())) is None
+
+
 def test_http_auth_disabled_and_schema(client, stack):
     assert client.get("/api/devices").status_code == 401
     assert (

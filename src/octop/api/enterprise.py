@@ -188,7 +188,11 @@ def build_web_app(
                 hello = Hello.model_validate(json.loads(first_frame))
                 digest = hashlib.sha256(hello.credential.encode()).hexdigest()
                 devices = server.services.device_repo
-                if hello.type == "pair":
+                if hello.type == "recover":
+                    owner = await server.management_io.run(
+                        devices.renewal_owner, digest, int(time.time())
+                    )
+                elif hello.type == "pair":
                     owner = await server.management_io.run(
                         devices.pairing_owner, digest, int(time.time())
                     )

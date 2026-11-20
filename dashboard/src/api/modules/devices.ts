@@ -24,6 +24,11 @@ export interface PairingCode {
 export const devicesApi = {
   list: (signal?: AbortSignal) => request<DeviceList>("/devices", { signal }),
   pair: () => request<PairingCode>("/devices/pairing", { method: "POST" }),
+  renewal: (id: string) =>
+    request<{ ticket: string | null; key_hint?: string | null }>(
+      `/devices/${encodeURIComponent(id)}/renewal-ticket`,
+      { method: "POST" },
+    ),
   revoke: (id: string) =>
     request<void>(`/devices/${encodeURIComponent(id)}`, { method: "DELETE" }),
   probe: (id: string) =>

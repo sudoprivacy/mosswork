@@ -9,7 +9,7 @@ import type { DesktopWorkspaceState } from "../api/desktopWorkspace";
 import { StrictMode } from "react";
 
 vi.mock("../api/modules/devices", () => ({
-  devicesApi: { list: vi.fn(), pair: vi.fn() },
+  devicesApi: { list: vi.fn(), pair: vi.fn(), renewal: vi.fn() },
 }));
 vi.mock("../hooks/useCurrentUser", () => ({
   useCurrentUser: () => ({ id: 7 }),
@@ -63,6 +63,48 @@ beforeEach(() => {
   };
 });
 describe("employee desktop connection", () => {
+  it.each(["online", "disconnected"] as const)(
+    "renews a due %s device without pairing",
+    async (state) => {
+      const native = window.mossworkDesktopWorkspace!;
+      native.renew = vi.fn().mockResolvedValue(connected);
+      vi.mocked(native.status).mockResolvedValue({
+        ...connected,
+        state,
+        renew_at: 1,
+      });
+      vi.mocked(devicesApi.renewal).mockResolvedValue({
+        ticket: "mosswork-renew.test",
+      });
+      render(
+        <DesktopWorkspaceProvider>
+          <Probe />
+        </DesktopWorkspaceProvider>,
+      );
+      await waitFor(() =>
+        expect(native.renew).toHaveBeenCalledWith("mosswork-renew.test"),
+      );
+      expect(devicesApi.renewal).toHaveBeenCalledWith(connected.device_id);
+      expect(native.pair).not.toHaveBeenCalled();
+      expect(native.disconnect).not.toHaveBeenCalled();
+    },
+  );
+
+  it("does not silently re-pair a revoked device", async () => {
+    const native = window.mossworkDesktopWorkspace!;
+    vi.mocked(native.status).mockResolvedValue({
+      ...initial,
+      state: "disconnected",
+      pair_blocked: true,
+    });
+    render(
+      <DesktopWorkspaceProvider>
+        <Probe />
+      </DesktopWorkspaceProvider>,
+    );
+    await waitFor(() => expect(devicesApi.list).toHaveBeenCalled());
+    expect(native.pair).not.toHaveBeenCalled();
+  });
   it("pairs on sign-in and updates the folder inside settings", async () => {
     render(
       <DesktopWorkspaceProvider>

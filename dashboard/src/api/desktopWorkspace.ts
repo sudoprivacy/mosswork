@@ -7,11 +7,14 @@ export interface DesktopWorkspaceState {
   path: string;
   grant: DirectoryGrant | null;
   error?: string;
+  renew_at?: number;
+  pair_blocked?: boolean;
 }
 
 export interface DesktopWorkspaceBridge {
   status: () => Promise<DesktopWorkspaceState>;
   pair: (code: string) => Promise<DesktopWorkspaceState>;
+  renew?: (ticket: string) => Promise<DesktopWorkspaceState>;
   choose: () => Promise<DesktopWorkspaceState>;
   clear: () => Promise<DesktopWorkspaceState>;
   disconnect: () => Promise<DesktopWorkspaceState>;

@@ -20,6 +20,24 @@ class _DelayedStream(httpx.AsyncByteStream):
             yield chunk
 
 
+async def test_lease_rotation_preserves_open_stream_and_changes_next_request():
+    seen = []
+
+    async def handle(request):
+        seen.append(request.headers["X-mosswork-Device-Credential"])
+        return httpx.Response(200, stream=_DelayedStream([(0, b'{"ok":true}')]))
+
+    client = CompanyClient("http://company.test", "old", transport=httpx.MockTransport(handle))
+    try:
+        async with client.http.stream("POST", "tasks/id/model") as response:
+            client.replace_credential("mosswork-device.new")
+            assert await client.request("tasks/id/checkpoint", {}) == {"ok": True}
+            assert await response.aread() == b'{"ok":true}'
+        assert seen == ["old", "mosswork-device.new"]
+    finally:
+        await client.close()
+
+
 @pytest.mark.asyncio
 async def test_first_byte_timeout_is_retryable(monkeypatch):
     monkeypatch.setattr(client_module, "_FIRST_BYTE_TIMEOUT_SECONDS", 0.02)
