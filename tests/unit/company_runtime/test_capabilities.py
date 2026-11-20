@@ -9,16 +9,32 @@ from unittest.mock import AsyncMock
 
 import pytest
 from deepagents.backends import FilesystemBackend
-from langchain_core.messages import AIMessageChunk, ToolMessage
+from langchain_core.messages import AIMessageChunk, SystemMessage, ToolMessage
 from moss_harness.backends.workspace import BackendWorkspace
 from moss_harness.config import MediaGenerationConfig, MediaProviderConfig
 
+from octop.infra.company_runtime.capabilities_middleware import CompanyCapabilitiesMiddleware
 from octop.infra.company_runtime.client import CompanyServiceError
 from octop.infra.errors import ErrorCode, MossworkError
 from octop.infra.users.capabilities import CAPABILITIES
 
 from .test_resilience import runtime_for
 from .test_runtime import acquire, install_agent
+
+
+@pytest.mark.asyncio
+async def test_capabilities_instruction_preserves_connector_tools():
+    original = "Connector tools granted to this task: company_connector_call."
+    request = SimpleNamespace(system_message=SystemMessage(content=original))
+    request.override = lambda **kwargs: SimpleNamespace(**kwargs)
+    handler = AsyncMock()
+
+    await CompanyCapabilitiesMiddleware(capabilities={}).awrap_model_call(request, handler)
+
+    message = handler.await_args.args[0].system_message
+    assert original in message.content
+    assert "none of these service capabilities" in message.content
+    assert "not affected by this list" in message.content
 
 
 @pytest.mark.asyncio

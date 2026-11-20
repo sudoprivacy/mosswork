@@ -14,7 +14,9 @@ import secrets
 import shutil
 import sys
 import time
+from datetime import datetime
 from importlib.metadata import version
+from logging.handlers import RotatingFileHandler
 from pathlib import Path, PurePosixPath
 from typing import Any
 
@@ -63,6 +65,38 @@ _IDENTIFIER = re.compile(r"^[A-Za-z0-9_-]{1,128}$")
 logger = logging.getLogger(__name__)
 
 
+def _attach_octop_file_logging(log_dir: Path) -> None:
+    """Mirror octop warnings into the task state's log dir.
+
+    moss-harness's setup_logging only configures the ``moss_harness`` package
+    logger; without this, octop warnings (e.g. connector tool discovery
+    failures) only reach stderr, which the desktop shell suppresses.
+    """
+    octop_logger = logging.getLogger("octop")
+    name = "octop_company_file_handler"
+    log_dir = Path(log_dir).resolve()
+    log_dir.mkdir(parents=True, exist_ok=True)
+    log_file = log_dir / f"octop-{datetime.now().astimezone().strftime('%Y-%m-%d')}.log"
+    for handler in list(octop_logger.handlers):
+        if getattr(handler, "name", None) != name:
+            continue
+        if Path(getattr(handler, "baseFilename", "")).resolve() == log_file:
+            return
+        handler.close()
+        octop_logger.removeHandler(handler)
+    handler = RotatingFileHandler(
+        filename=str(log_file),
+        maxBytes=10 * 1024 * 1024,
+        backupCount=5,
+        encoding="utf-8",
+    )
+    handler.name = name
+    handler.setLevel(logging.WARNING)
+    handler.setFormatter(logging.Formatter("%(asctime)s [%(levelname)s] %(name)s: %(message)s"))
+    octop_logger.addHandler(handler)
+    octop_logger.setLevel(logging.WARNING)
+
+
 async def _load_connector_tools(
     client: CompanyClient, task_id: str, server_names: list[Any]
 ) -> list[dict[str, Any]]:
@@ -73,9 +107,10 @@ async def _load_connector_tools(
         )
     except Exception as exc:
         logger.warning(
-            "company connector tool discovery failed for task %s: %s",
+            "company connector tool discovery failed for task %s: %s %s",
             task_id,
             type(exc).__name__,
+            getattr(exc, "status", ""),
         )
         return []
     return [item for item in result if isinstance(item, dict)] if isinstance(result, list) else []
@@ -190,6 +225,7 @@ class EnterpriseRuntime:
         from moss_harness.observability.logging import setup_logging
 
         setup_logging(log_dir=self.state / "logs")
+        _attach_octop_file_logging(self.state / "logs")
         install_file = self.state / "installation.json"
         if install_file.exists():
             self.installation_token = json.loads(await offload(install_file.read_text))["token"]
