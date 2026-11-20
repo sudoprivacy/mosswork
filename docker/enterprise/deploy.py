@@ -151,7 +151,7 @@ def deploy(args: argparse.Namespace) -> None:
             },
         )
         print(f"Initial admin credentials: {credentials} (root only; change password after login)")
-    run("up", "-d", "--no-build", "--wait", "--wait-timeout", "300")
+    run("up", "-d", "--no-build", "--wait", "--wait-timeout", "1200")
     write_config(config, values)
     current = install / "current"
     replacement = install / ".current-next"

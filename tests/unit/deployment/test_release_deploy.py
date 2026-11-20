@@ -100,7 +100,7 @@ def test_install_initializes_once_and_keeps_credentials_off_command_line(install
     ]
 
 
-@pytest.mark.parametrize("failure", ["inspect", "--migrate", "300"])
+@pytest.mark.parametrize("failure", ["inspect", "--migrate", "1200"])
 def test_failed_first_install_can_resume_without_rotating_keys(installation, failure):
     module, args, calls, state = installation
     state["fail"] = failure
@@ -123,7 +123,7 @@ def test_upgrade_is_explicit_and_only_commits_configuration_after_health_check(i
         module.deploy(args)
     assert config.read_bytes() == original
     args.upgrade = True
-    state["fail"] = "300"
+    state["fail"] = "1200"
     with pytest.raises(subprocess.CalledProcessError):
         module.deploy(args)
     assert config.read_bytes() == original

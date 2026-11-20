@@ -13,6 +13,10 @@ on:
         description: 'Qualify the Developer ID signed and notarized macOS bootstrap client from main'
         type: boolean
         default: false
+      notary_submission_id:
+        description: 'Inspect a previous Apple submission by UUID without building or publishing'
+        type: string
+        required: false
 
 permissions:
   contents: read
@@ -22,7 +26,39 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
+  notary-status:
+    name: Check an existing Apple notarization
+    if: ${{ github.event_name == 'workflow_dispatch' && inputs.notary_submission_id != '' && github.ref_name == github.event.repository.default_branch && github.ref_type == 'branch' }}
+    runs-on: macos-15
+    timeout-minutes: 10
+    environment: mosswork-macos-release
+    steps:
+      - name: Read Apple's status for the supplied submission
+        env:
+          SUBMISSION_ID: ${{ inputs.notary_submission_id }}
+          APPLE_ID: ${{ secrets.APPLE_ID }}
+          APPLE_ID_PASSWORD: ${{ secrets.APPLE_ID_PASSWORD }}
+          TEAM_ID: ${{ secrets.TEAM_ID }}
+        run: |
+          set -euo pipefail
+          [[ "$SUBMISSION_ID" =~ ^[a-fA-F0-9]{8}(-[a-fA-F0-9]{4}){3}-[a-fA-F0-9]{12}$ ]] || {
+            echo "Supply an Apple submission UUID." >&2; exit 2;
+          }
+          xcrun notarytool store-credentials mosswork-status --apple-id "$APPLE_ID" --team-id "$TEAM_ID" --password "$APPLE_ID_PASSWORD"
+          xcrun notarytool info "$SUBMISSION_ID" --keychain-profile mosswork-status --output-format json > "$RUNNER_TEMP/notary-status.json"
+          jq -e --arg id "$SUBMISSION_ID" 'select((.id | ascii_downcase) == ($id | ascii_downcase)) | {id, status}' "$RUNNER_TEMP/notary-status.json" | tee -a "$GITHUB_STEP_SUMMARY"
+          if jq -e '.status == "Invalid" or .status == "Rejected"' "$RUNNER_TEMP/notary-status.json" >/dev/null; then
+            xcrun notarytool log "$SUBMISSION_ID" --keychain-profile mosswork-status "$RUNNER_TEMP/notary-log.json"
+          fi
+      - uses: actions/upload-artifact@v4
+        with:
+          name: notary-status-${{ inputs.notary_submission_id }}
+          path: ${{ runner.temp }}/notary-*.json
+          if-no-files-found: error
+          retention-days: 7
+
   source:
+    if: ${{ github.event_name != 'workflow_dispatch' || inputs.notary_submission_id == '' }}
     name: Verify tag and export source
     runs-on: ubuntu-24.04
     outputs:
@@ -129,7 +165,7 @@ jobs:
     environment:
       name: ${{ matrix.target == 'darwin' && needs.source.outputs.signed_mac == 'true' && 'mosswork-macos-release' || 'client-build' }}
       deployment: ${{ matrix.target == 'darwin' && needs.source.outputs.signed_mac == 'true' }}
-    timeout-minutes: 90
+    timeout-minutes: ${{ matrix.target == 'darwin' && needs.source.outputs.signed_mac == 'true' && 360 || 90 }}
     strategy:
       fail-fast: false
       matrix:

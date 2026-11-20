@@ -89,7 +89,7 @@ curl -fsSL https://github.com/sudoprivacy/mosswork/releases/latest/download/inst
   sudo bash -s -- --upgrade
 ```
 
-升级保留数据和密钥，先下载、校验并导入镜像，再停止应用和通信服务、执行迁移并启动新版本。只有健康检查通过后才更新 `deployment.env` 和 `current`。失败时保留现场检查日志；数据库迁移可能已经执行，不能只切换旧镜像来回退。需要恢复时，在隔离主机上恢复完整备份并使用对应旧镜像验证，再切换入口。
+升级保留数据和密钥，先下载、校验并导入镜像，再停止应用和通信服务、执行迁移并启动新版本。已有智能体较多时，恢复运行状态可能需要数分钟。安装器最多等待 20 分钟，健康检查一通过便更新 `deployment.env` 和 `current`。失败时保留现场检查日志；数据库迁移可能已经执行，不能只切换旧镜像来回退。需要恢复时，在隔离主机上恢复完整备份并使用对应旧镜像验证，再切换入口。
 
 Release 提供 `moss-server-images-<tag>-linux-amd64.tar.gz`，包含 `moss-server:<version>`、`moss-server-im:<version>` 和 PostgreSQL 镜像。服务端仅支持 Linux amd64；`moss-server-linux-amd64-images.json` 记录镜像 ID、标签及架构，`SHA256SUMS.txt` 记录附件摘要。Compose 仅使用本地已导入的镜像，不自动拉取镜像。源码部署与更细的资源规划见[企业部署与恢复](README.md)。
 
