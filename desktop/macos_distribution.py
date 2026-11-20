@@ -166,17 +166,26 @@ def signed_private_components(bundle, team, architectures, *, runner=run):
             raise ValueError("Private component differs from its producer pin: " + name)
         if sorted(runner("lipo", "-archs", str(path)).split()) != sorted(architectures):
             raise ValueError("Private component architecture differs: " + name)
-        runner("codesign", "--verify", "--strict", str(path))
-        signature = runner("codesign", "--display", "--verbose=4", str(path), stderr=True)
-        if (
-            not re.search(r"^Authority=Developer ID Application:", signature, re.M)
-            or not re.search(r"^TeamIdentifier=" + re.escape(team) + r"$", signature, re.M)
-            or not re.search(r"^CodeDirectory .*flags=.*\bruntime\b", signature, re.M)
-            or not re.search(r"^Timestamp=.+$", signature, re.M)
-        ):
-            raise ValueError(
-                "Private components require Developer ID before Stack assembly: " + name
-            )
+        verify_developer_binary(
+            path,
+            team,
+            runner=runner,
+            error="Private components require Developer ID before Stack assembly",
+        )
+
+
+def verify_developer_binary(
+    path, team, *, runner=run, error="Expected timestamped Developer ID and hardened runtime"
+):
+    runner("codesign", "--verify", "--strict", str(path))
+    signature = runner("codesign", "--display", "--verbose=4", str(path), stderr=True)
+    if (
+        not re.search(r"^Authority=Developer ID Application:", signature, re.M)
+        or not re.search(r"^TeamIdentifier=" + re.escape(team) + r"$", signature, re.M)
+        or not re.search(r"^CodeDirectory .*flags=.*\bruntime\b", signature, re.M)
+        or not re.search(r"^Timestamp=.+$", signature, re.M)
+    ):
+        raise ValueError(f"{error}: {path.name}")
 
 
 @contextmanager

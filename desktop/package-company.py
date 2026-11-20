@@ -19,6 +19,7 @@ import shutil
 import struct
 import subprocess
 import sys
+import tempfile
 import tomllib
 import zipfile
 from email.parser import Parser
@@ -29,6 +30,7 @@ if __name__ == "__main__":
     sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 from desktop.macos_distribution import notarize, notarize_app, verify_distribution
+from desktop.macos_runtime_signing import sign_bootstrap_python, sign_runtime_tree
 from desktop.private_payload import copy_private_bundle
 
 
@@ -123,7 +125,7 @@ def native_binary_target(path: Path) -> tuple[str, str]:
     raise ValueError(f"Not a supported native executable: {path}")
 
 
-def package_runtime(source: Path, destination: Path, platform: str, arch: str) -> Path:
+def runtime_manifest(source: Path, platform: str, arch: str) -> dict:
     """Validate a supplied offline payload and freeze its complete file manifest.
 
     No pip, download or ambient interpreter fallback is permitted during install.
@@ -194,7 +196,6 @@ def package_runtime(source: Path, destination: Path, platform: str, arch: str) -
     if "company-runtime" not in (source / "launch.py").read_text():
         raise ValueError("Portable launcher does not implement the company-runtime entry point")
     files: dict[str, str] = {}
-    entries: list[tuple[str, Path]] = []
     for item in sorted(source.rglob("*")):
         if item.is_symlink() and item.is_dir():
             raise ValueError(f"Materialize directory symlinks before packaging: {item}")
@@ -207,14 +208,13 @@ def package_runtime(source: Path, destination: Path, platform: str, arch: str) -
             continue
         with item.open("rb") as stream:
             files[relative] = hashlib.file_digest(stream, "sha256").hexdigest()
-        entries.append((relative, item))
     if attestation and attestation.get("file_hashes") != {
         key: value for key, value in files.items() if key != "company-runtime-build.json"
     }:
         raise ValueError(
             "Runtime payload changed after its target smoke test; run verify_company_runtime.py again"
         )
-    manifest = {
+    return {
         **release,
         "shell_version": release["mosswork_version"],
         "protocol_version": release["company_protocol_version"],
@@ -225,16 +225,52 @@ def package_runtime(source: Path, destination: Path, platform: str, arch: str) -
         "target_smoke_verified": bool(attestation),
         "files": files,
     }
+
+
+def package_runtime(source: Path, destination: Path, platform: str, arch: str) -> Path:
+    manifest = runtime_manifest(source, platform, arch)
     destination.parent.mkdir(parents=True, exist_ok=True)
     prefix = f"mosswork-company-{platform}-{arch}"
     with zipfile.ZipFile(destination, "w", compression=zipfile.ZIP_DEFLATED) as archive:
-        for relative, item in entries:
+        for relative in manifest["files"]:
             # ZipFile.write follows file symlinks: installed packages have no links.
-            archive.write(item, f"{prefix}/{relative}")
+            archive.write(source / relative, f"{prefix}/{relative}")
         archive.writestr(
             f"{prefix}/company-runtime-manifest.json", json.dumps(manifest, sort_keys=True)
         )
     return destination
+
+
+def package_signed_runtime(
+    source: Path, destination: Path, arch: str, identity: str, team: str
+) -> Path:
+    original = runtime_manifest(source, "darwin", arch)
+    destination.parent.mkdir(parents=True, exist_ok=True)
+    with tempfile.TemporaryDirectory(dir=destination.parent) as temporary:
+        staged = Path(temporary)
+        # Materialize the same regular files as the ZIP, including any interpreter aliases.
+        for name, expected in original["files"].items():
+            target = staged / name
+            target.parent.mkdir(parents=True, exist_ok=True)
+            shutil.copy2(source / name, target)
+            with target.open("rb") as stream:
+                if hashlib.file_digest(stream, "sha256").hexdigest() != expected:
+                    raise ValueError(f"Runtime changed while staging: {name}")
+        sign_runtime_tree(staged, identity, team)
+        # An attestation for unsigned input cannot attest to the modified files.
+        (staged / "company-runtime-build.json").unlink(missing_ok=True)
+        if host_target() == ("darwin", arch):
+            subprocess.run(
+                [
+                    staged / "runtime/bin/python3",
+                    Path(__file__).parent / "portable/verify_company_runtime.py",
+                    staged,
+                ],
+                check=True,
+                stdout=subprocess.DEVNULL,
+                env={**os.environ, "PYTHONDONTWRITEBYTECODE": "1"},
+            )
+        return package_runtime(staged, destination, "darwin", arch)
 
 
 def company_origin(value: str) -> str:
@@ -321,16 +357,18 @@ def main() -> None:
             if args.platform not in ("all", target_platform):
                 continue
             for arch in arches:
-                payloads[target_platform, arch] = package_runtime(
-                    (
-                        args.runtime_dir / f"{target_platform}-{arch}"
-                        if (args.runtime_dir / f"{target_platform}-{arch}").is_dir()
-                        else args.runtime_dir / f"mosswork-{target_platform}-{arch}"
-                    ),
-                    stage / "payloads" / f"mosswork-{target_platform}-{arch}.zip",
-                    target_platform,
-                    arch,
-                )
+                runtime = args.runtime_dir / f"{target_platform}-{arch}"
+                if not runtime.is_dir():
+                    runtime = args.runtime_dir / f"mosswork-{target_platform}-{arch}"
+                archive = stage / "payloads" / f"mosswork-{target_platform}-{arch}.zip"
+                if target_platform == "darwin" and args.notary_profile:
+                    payloads[target_platform, arch] = package_signed_runtime(
+                        runtime, archive, arch, args.sign_identity, args.team_id
+                    )
+                else:
+                    payloads[target_platform, arch] = package_runtime(
+                        runtime, archive, target_platform, arch
+                    )
     run("node", root / "desktop/login/build.mjs", cwd=root)
     run(sys.executable, root / "desktop/build-dashboard.py", cwd=root)
     source = stage / "src"
@@ -342,9 +380,17 @@ def main() -> None:
     if args.bootstrap_bundle:
         # Stage and validate before compiling. Runtime trust comes from pins in
         # the desktop executable, never from a manifest beside mutable scripts.
-        private_payload = copy_private_bundle(
-            args.bootstrap_bundle, stage / "private-bootstrap", args.arch
-        )
+        bootstrap = stage / "private-bootstrap"
+        private_payload = copy_private_bundle(args.bootstrap_bundle, bootstrap, args.arch)
+        if args.notary_profile:
+            private_payload.update(
+                sign_bootstrap_python(
+                    bootstrap,
+                    args.sign_identity,
+                    args.team_id,
+                    native=host_target() == ("darwin", args.arch),
+                )
+            )
     build = source / "build"
     stamp = build / "stamp_version.py"
     run(
