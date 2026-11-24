@@ -119,7 +119,7 @@ async def test_actual_bundle_login_profile_and_docs_use_same_factory_without_loc
     assert environment.native.calls == []
 
 
-async def queued_original(application, environment):
+async def retained_original(application, environment, durable_sid="original_native_history"):
     pair = await http_login(application, environment)
     principal = await canonical_authenticated_request(
         authenticated_request(application, pair["access_token"])
@@ -149,8 +149,8 @@ async def queued_original(application, environment):
         )
         conn.execute(
             "INSERT INTO cohost_sessions VALUES ('original-app',?,'original-native-agent',"
-            "'original_native_history','/original/repo')",
-            (_IDS["homeMember"],),
+            "?,'/original/repo')",
+            (_IDS["homeMember"], durable_sid),
         )
     bindings = RetainedCohostBindingRepo(environment.path)
     selections = ProductCohostSelections(
@@ -163,28 +163,76 @@ async def queued_original(application, environment):
         organization_id=_IDS["homeOrg"],
         owner_id=_IDS["homeMember"],
     )
-    repo = ExecutionRepo(environment.product)
-    repo.register("same-worker", "same-product-boot", "worker")
-    carrier = CanonicalRunAdmissions(repo)
-    run = await carrier.submit(
-        principal,
-        user=user,
-        agent=selection.agent_id,
-        thread=selection.thread_id,
-        operation="chat",
-        key="original-operation-key",
-        request={"request": {"text": "original request"}},
-    )
     return SimpleNamespace(
         principal=principal,
         pair=pair,
         selection=selection,
         bindings=bindings,
         selections=selections,
+        user=user,
+    )
+
+
+async def queued_original(application, environment):
+    original = await retained_original(application, environment)
+    repo = ExecutionRepo(environment.product)
+    repo.register("same-worker", "same-product-boot", "worker")
+    carrier = CanonicalRunAdmissions(repo)
+    run = await carrier.submit(
+        original.principal,
+        user=original.user,
+        agent=original.selection.agent_id,
+        thread=original.selection.thread_id,
+        operation="chat",
+        key="original-operation-key",
+        request={"request": {"text": "original request"}},
+    )
+    return SimpleNamespace(
+        **vars(original),
         repo=repo,
         carrier=carrier,
         run=run,
     )
+
+
+async def test_employee_discovers_only_current_original_conversations(application, environment):
+    existing = await queued_original(application, environment)
+    server = application.state.mosswork_server
+    allowed = True
+
+    async def observe(agent, thread, *, admission, operation):
+        assert (agent, thread) == (existing.selection.agent_id, existing.selection.thread_id)
+        assert operation == "observe"
+        assert (await admission.revalidate()) == existing.principal.identity
+        if not allowed:
+            raise PermissionError("Current observation grant withdrawn")
+
+    backend = SimpleNamespace(assert_chat_current=observe)
+    server.canonical = SimpleNamespace(
+        backend=backend, runtime_inputs=SimpleNamespace(selections=existing.selections)
+    )
+    server.app_runtime = SimpleNamespace(
+        user_manager=None, agent_registry=SimpleNamespace(_managed_backend=backend)
+    )
+    async with httpx.AsyncClient(
+        transport=httpx.ASGITransport(app=application), base_url="http://test"
+    ) as client:
+        url = "/api/identity/conversations"
+        assert (await client.get(url)).status_code == 401
+        headers = {"Authorization": "Bearer " + existing.pair["access_token"]}
+        result = await client.get(url, headers=headers)
+        assert result.status_code == 200 and result.headers["cache-control"] == "no-store"
+        assert result.json() == [
+            {
+                "agent_id": existing.selection.agent_id,
+                "thread_id": existing.selection.thread_id,
+                "title": "Original",
+            }
+        ]
+        allowed = False
+        assert (await client.get(url, headers=headers)).json() == []
+        server.app_runtime.agent_registry._managed_backend = None
+        assert (await client.get(url, headers=headers)).status_code == 503
 
 
 @pytest.mark.parametrize("change", [None, "revoked_before_claim", "original_rebind"])

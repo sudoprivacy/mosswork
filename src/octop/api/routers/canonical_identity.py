@@ -9,8 +9,17 @@ from fastapi.responses import JSONResponse
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from pydantic import BaseModel, Field
 
+from octop.api.common.canonical_identity import canonical_authenticated_request
+from octop.infra.db.repos.retained_cohost import (
+    RetainedBindingInvalid,
+    RetainedSessionUnavailable,
+    RetainedStoreUnavailable,
+)
+from octop.infra.db.repos.retained_session_projection import SessionProjectionUnavailable
 from octop.infra.errors import ErrorCode, MossworkError
+from octop.infra.execution.selection import ProductCohostSelections
 from octop.infra.identity.canonical import CanonicalSnapshotService
+from octop.infra.native_host.context import HostSelection, HostUnavailable
 from octop.infra.utils.locale import resolve_request_locale
 
 _BEARER = HTTPBearer(
@@ -63,6 +72,54 @@ class CanonicalOrganizationsResponse(BaseModel):
 def build_canonical_identity_router(service: CanonicalSnapshotService) -> APIRouter:
     """Bind a single trusted authority; request data cannot choose its provider."""
     router = APIRouter()
+
+    @router.get(
+        "/conversations", summary="List retained conversations the current employee can read"
+    )
+    async def conversations(request: Request) -> JSONResponse:
+        headers = {"Cache-Control": "no-store"}
+        try:
+            principal = await canonical_authenticated_request(request)
+            server = request.app.state.mosswork_server
+            canonical = getattr(server, "canonical", None)
+            backend = getattr(canonical, "backend", None)
+            guard = getattr(backend, "assert_chat_current", None)
+            registry = getattr(getattr(server, "app_runtime", None), "agent_registry", None)
+            selections = getattr(getattr(canonical, "runtime_inputs", None), "selections", None)
+            if (
+                type(selections) is not ProductCohostSelections
+                or not callable(guard)
+                or getattr(registry, "_managed_backend", None) is not backend
+            ):
+                raise MossworkError.localized(ErrorCode.INTERNAL_ERROR, status=503)
+            identity = await principal.revalidate()
+            items = []
+            for agent, thread, title in await selections.for_member(identity.projection):
+                try:
+                    await selections.current(identity.snapshot, HostSelection(agent, thread))
+                    verdict = await guard(agent, thread, admission=principal, operation="observe")
+                    if verdict is not None:
+                        raise MossworkError.localized(ErrorCode.FORBIDDEN, status=403)
+                    await selections.current(identity.snapshot, HostSelection(agent, thread))
+                except (PermissionError, SessionProjectionUnavailable, RetainedSessionUnavailable):
+                    continue
+                except (RetainedBindingInvalid, RetainedStoreUnavailable, HostUnavailable):
+                    raise MossworkError.localized(ErrorCode.INTERNAL_ERROR, status=503) from None
+                except MossworkError as error:
+                    if error.status == 403:
+                        continue
+                    raise
+                items.append({"agent_id": agent, "thread_id": thread, "title": title})
+            await principal.revalidate()
+            if getattr(registry, "_managed_backend", None) is not backend:
+                raise MossworkError.localized(ErrorCode.INTERNAL_ERROR, status=503)
+            return JSONResponse(items, headers=headers)
+        except MossworkError as error:
+            return JSONResponse(
+                error.to_envelope(locale=resolve_request_locale(request)),
+                status_code=error.status,
+                headers=headers,
+            )
 
     @router.get(
         "/me",

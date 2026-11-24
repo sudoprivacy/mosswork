@@ -7348,7 +7348,14 @@
     "retry": "重试",
     "error": "暂时无法完成请求，请重试。",
     "logoutUnconfirmed": "已退出本机登录，尚未确认服务器退出结果。",
-    "runtimePending": "登录成功，工作区暂未开放。"
+    "runtimePending": "登录成功，工作区暂未开放。",
+    "openConversations": "刷新会话",
+    "noConversations": "当前账号在这个组织下还没有可用的会话。",
+    "turnUnconfirmed": "暂时无法确认这条消息的处理结果。",
+    "resumeObservation": "重新连接这条回复",
+    "message": "给你的智能体发消息",
+    "sendMessage": "发送",
+    "backToConversations": "返回会话列表"
   },
   "canonicalOrganization": {
     "open": "成员与部门",

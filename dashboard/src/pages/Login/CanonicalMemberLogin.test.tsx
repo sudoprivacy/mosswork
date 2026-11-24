@@ -71,6 +71,7 @@ it("uses ordinary organization password login without requiring personal Moss en
   expect(fetchMock.mock.calls.map(([url]) => url)).toEqual([
     "/api/identity/password/login",
     "/api/identity/me",
+    "/api/identity/conversations",
   ]);
   expect(fetchMock.mock.calls.some(([url]) => url.includes("/moss/"))).toBe(
     false,

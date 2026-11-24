@@ -40,6 +40,7 @@ class ACPHostedClient:
 
     def bind_engine_session(self, session_id: str, metadata: dict[str, Any] | None) -> None:
         self._session_id = session_id
+        self._assistant_text = ""
         self.last_peer_arrival = None
         self._is_invalidated = False
         self._attention_supported = supports_engine_observation(metadata, "attention")
@@ -48,6 +49,8 @@ class ACPHostedClient:
     def invalidate_observations(self) -> None:
         self._is_invalidated = True
         self._session_id = None
+        self._assistant_text = ""
+        self._on_message = None
         self.last_peer_arrival = None
         self.attention.invalidate()
         self._cancel_permission()
@@ -159,12 +162,13 @@ class ACPHostedClient:
             UserMessageChunk,
         )
 
+        if self._is_invalidated or session_id != self._session_id:
+            return
         if isinstance(update, UserMessageChunk):
-            if session_id == self._session_id and not self._is_invalidated:
-                # The ACP SDK expands notification-level _meta into kwargs.
-                arrival = PeerArrival.from_notification(metadata)
-                if arrival is not None:
-                    self.last_peer_arrival = arrival
+            # The ACP SDK expands notification-level _meta into kwargs.
+            arrival = PeerArrival.from_notification(metadata)
+            if arrival is not None:
+                self.last_peer_arrival = arrival
             return
         if isinstance(update, AgentMessageChunk):
             await self._accumulate_assistant_content(update.content)

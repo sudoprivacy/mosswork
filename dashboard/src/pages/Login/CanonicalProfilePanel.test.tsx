@@ -55,6 +55,7 @@ const profile = {
 it("loads self-profile only on request and sends one original self nickname write", async () => {
   let nickname = profile.nickname;
   const fetchMock = vi.fn(async (url: string, options?: RequestInit) => {
+    if (url === "/api/identity/conversations") return Response.json([]);
     if (url === "/api/identity/profile/nickname") {
       expect(new Headers(options?.headers).get("Authorization")).toBe(
         "Bearer original-access",
@@ -78,9 +79,10 @@ it("loads self-profile only on request and sends one original self nickname writ
   render(
     <CanonicalMemberLogin phoneLoginAvailable={false} passwordLoginAvailable />,
   );
-  await screen.findByText("canonical.runtimePending");
+  await screen.findByText("canonical.noConversations");
   expect(fetchMock.mock.calls.map(([url]) => url)).toEqual([
     "/api/identity/me",
+    "/api/identity/conversations",
   ]);
   fireEvent.click(
     screen.getByRole("button", { name: "canonical.profileDetails" }),
@@ -107,6 +109,7 @@ it("withholds malformed write success and reloads without replaying the possible
   let nickname = profile.nickname;
   let writes = 0;
   const fetchMock = vi.fn(async (url: string) => {
+    if (url === "/api/identity/conversations") return Response.json([]);
     if (url === "/api/identity/profile/nickname") {
       writes++;
       nickname = "Committed nickname";
@@ -125,7 +128,7 @@ it("withholds malformed write success and reloads without replaying the possible
   render(
     <CanonicalMemberLogin phoneLoginAvailable={false} passwordLoginAvailable />,
   );
-  await screen.findByText("canonical.runtimePending");
+  await screen.findByText("canonical.noConversations");
   fireEvent.click(
     screen.getByRole("button", { name: "canonical.profileDetails" }),
   );
