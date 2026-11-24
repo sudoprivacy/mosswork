@@ -1,5 +1,6 @@
 import { useCallback, useState } from "react";
-import { Download, Eye, Paperclip } from "lucide-react";
+import { Download, Eye, FolderOpen } from "lucide-react";
+import { fileTreeIcon } from "@/utils/fileTreeIcon";
 import { useTranslation } from "react-i18next";
 import { downloadAuthFile } from "../../../components/AuthFileDownloadLink";
 import {
@@ -47,6 +48,18 @@ export function MessageFileCard({
   const [loading, setLoading] = useState(false);
   const needsAuth = needsAuthBlobFetch(url) || isDataUrl(url);
   const label = filename || url;
+  const displayName = label.split(/[\\/]/).pop() || label;
+  const extension = displayName.includes(".")
+    ? displayName.split(".").pop()?.toUpperCase()
+    : "";
+  const size = localFile
+    ? localFile.size < 1024
+      ? `${localFile.size} B`
+      : localFile.size < 1024 * 1024
+      ? `${(localFile.size / 1024).toFixed(1)} KB`
+      : `${(localFile.size / (1024 * 1024)).toFixed(1)} MB`
+    : "";
+  const canDownload = !localFile || Boolean(window.__mossworkRuntime);
 
   const resolvedPath = workspacePath || workspacePathFromAccessUrl(url) || "";
   const previewable = Boolean(
@@ -101,14 +114,21 @@ export function MessageFileCard({
   return (
     <div className={styles.messageFileCard}>
       <div className={styles.messageFileMeta}>
-        <Paperclip
-          size={16}
-          strokeWidth={2}
-          className={styles.messageFileIcon}
-          aria-hidden
-        />
-        <span className={styles.messageFileName} title={label}>
-          {label}
+        <span className={styles.messageFileIcon}>
+          {fileTreeIcon(displayName, 22)}
+        </span>
+        <span className={styles.messageFileDetails}>
+          <span className={styles.messageFileName} title={label}>
+            {displayName}
+          </span>
+          <span className={styles.messageFileDescription}>
+            {[extension || t("chat.file"), size].filter(Boolean).join(" · ")}
+          </span>
+          {localFile && (
+            <span className={styles.messageFilePath} title={localFile.path}>
+              {localFile.path}
+            </span>
+          )}
         </span>
       </div>
       {previewable && (
@@ -122,19 +142,23 @@ export function MessageFileCard({
           <Eye size={15} strokeWidth={2} />
         </button>
       )}
-      <button
-        type="button"
-        className={styles.messageFileActionBtn}
-        onClick={(e) => {
-          e.stopPropagation();
-          void handleDownload();
-        }}
-        disabled={loading}
-        title={localFile ? "打开文件位置" : t("common.download")}
-        aria-label={localFile ? "打开文件位置" : t("common.download")}
-      >
-        <Download size={15} strokeWidth={2} />
-      </button>
+      {canDownload && (
+        <button
+          type="button"
+          className={styles.messageFileActionBtn}
+          onClick={(e) => {
+            e.stopPropagation();
+            void handleDownload();
+          }}
+          disabled={loading}
+          title={localFile ? t("chat.openFileLocation") : t("common.download")}
+          aria-label={
+            localFile ? t("chat.openFileLocation") : t("common.download")
+          }
+        >
+          {localFile ? <FolderOpen size={16} /> : <Download size={16} />}
+        </button>
+      )}
     </div>
   );
 }

@@ -1340,6 +1340,10 @@
     "path_outside_root": "文件路径超出当前专家的存储根目录，无法读写。请改用存储根目录内的路径，或在专家设置中扩大存储根目录（Windows 上请显式指定盘符路径，例如 D:/mosswork-data）。"
   },
   "chat": {
+    "localArtifacts": "本地任务成果",
+    "localArtifactsWebHint": "成果保存在任务电脑，当前网页不能直接访问",
+    "openFileLocation": "打开文件位置",
+    "file": "文件",
     "sharedExpert": {
       "banner": "共享专家 · 由 {{name}} 提供",
       "flag": "共享"
