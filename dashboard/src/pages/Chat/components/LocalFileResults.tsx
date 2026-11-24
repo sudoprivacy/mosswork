@@ -1,3 +1,4 @@
+import { MessageFileCard } from "./MessageFileCard";
 import { LocalImagePreview, isLocalPreviewImage } from "./LocalImagePreview";
 import { Alert, Button, Image, Space, Typography } from "antd";
 import { useTranslation } from "react-i18next";
@@ -84,10 +85,13 @@ export function LocalFileResults({ messages }: { messages: ChatMessage[] }) {
       .catch((err: unknown) =>
         message.error(err instanceof Error ? err.message : "无法打开文件位置"),
       );
+  const receipts = localFileResults(messages);
+  if (!local.size && !receipts.length) return null;
+
   return (
-    <Space direction="vertical" style={{ width: "100%" }}>
-      {images.length > 0 && (
-        <div className={styles.turnInset}>
+    <div className={styles.turnInset}>
+      <div className={styles.localFileResults}>
+        {images.length > 0 && (
           <div className={styles.toolMediaStrip}>
             <div className={styles.messageImages}>
               <Image.PreviewGroup key={previewScope}>
@@ -112,48 +116,43 @@ export function LocalFileResults({ messages }: { messages: ChatMessage[] }) {
               </Image.PreviewGroup>
             </div>
           </div>
-        </div>
-      )}
-      {files.map(({ file }) => (
-        <Alert
-          key={file.path + file.sha256}
-          type="success"
-          message={
-            native ? "本地任务成果" : "成果保存在任务电脑，当前网页不能直接访问"
-          }
-          description={
-            <>
-              <Typography.Text copyable>{file.path}</Typography.Text>
-              <div>
-                {file.size} bytes · SHA-256 {file.sha256}
-              </div>
-              {native && (
-                <Button onClick={() => openFileLocation(file)}>
-                  打开文件位置
-                </Button>
-              )}
-            </>
-          }
-        />
-      ))}
-      {localFileResults(messages).map((r) => (
-        <Alert
-          key={r.id}
-          showIcon
-          type={r.completed ? "success" : "warning"}
-          message={t(
-            r.completed ? "devices.savedLocal" : "devices.localUncertain",
-          )}
-          description={
-            <>
-              <div>{r.path}</div>
-              <div>{r.device}</div>
-              <Typography.Text copyable>{r.id}</Typography.Text>
-              <div>{t("devices.localResultHint")}</div>
-            </>
-          }
-        />
-      ))}
-    </Space>
+        )}
+        {files.length > 0 && (
+          <>
+            <div className={styles.localFileResultsLabel}>
+              {t(native ? "chat.localArtifacts" : "chat.localArtifactsWebHint")}
+            </div>
+            <div className={styles.messageFiles}>
+              {files.map(({ file }) => (
+                <MessageFileCard
+                  key={file.path + file.sha256}
+                  url=""
+                  filename={file.path.split(/[\\/]/).pop() || file.path}
+                  localFile={file}
+                />
+              ))}
+            </div>
+          </>
+        )}
+        {receipts.map((r) => (
+          <Alert
+            key={r.id}
+            showIcon
+            type={r.completed ? "success" : "warning"}
+            message={t(
+              r.completed ? "devices.savedLocal" : "devices.localUncertain",
+            )}
+            description={
+              <>
+                <div>{r.path}</div>
+                <div>{r.device}</div>
+                <Typography.Text copyable>{r.id}</Typography.Text>
+                <div>{t("devices.localResultHint")}</div>
+              </>
+            }
+          />
+        ))}
+      </div>
+    </div>
   );
 }

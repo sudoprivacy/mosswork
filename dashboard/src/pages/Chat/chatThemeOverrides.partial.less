@@ -860,65 +860,90 @@
   background: var(--fn-bg-secondary);
 }
 
+.localFileResults {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  min-width: 0;
+  margin: 8px 0 12px;
+}
+
+.localFileResultsLabel {
+  font-size: 12px;
+  line-height: 1.5;
+  color: var(--fn-text-tertiary);
+}
+
 .messageFileCard {
   display: inline-flex;
   align-items: center;
-  gap: 4px;
+  gap: 12px;
+  box-sizing: border-box;
   max-width: 100%;
   width: fit-content;
-  min-height: 36px;
-  padding: 3px 6px 3px 14px;
-  border-radius: 10px;
-  border: 1px solid color-mix(in srgb, var(--fn-color-brand) 22%, transparent);
-  background: color-mix(
-    in srgb,
-    var(--fn-color-brand) 5%,
-    var(--fn-bg-primary)
-  );
-  color: var(--fn-text-secondary);
+  min-height: 64px;
+  padding: 10px 12px;
+  border-radius: 12px;
+  border: 1px solid var(--fn-border-secondary);
+  background: var(--fn-bg-primary);
+  color: var(--fn-text-primary);
   font-size: 13px;
-  font-weight: 500;
   line-height: 1.4;
   transition:
-    color 0.15s ease,
     background 0.15s ease,
-    border-color 0.15s ease,
-    box-shadow 0.15s ease;
+    border-color 0.15s ease;
 
-  &:hover {
-    color: var(--fn-color-brand);
-    background: color-mix(
-      in srgb,
-      var(--fn-color-brand) 9%,
-      var(--fn-bg-primary)
-    );
-    border-color: color-mix(in srgb, var(--fn-color-brand) 38%, transparent);
-    box-shadow: 0 2px 8px
-      color-mix(in srgb, var(--fn-color-brand) 12%, transparent);
-
-    .messageFileActionBtn {
-      color: var(--fn-color-brand);
-    }
+  &:hover,
+  &:focus-within {
+    background: var(--fn-bg-secondary);
+    border-color: var(--fn-border-primary);
   }
 }
 
 .messageFileMeta {
   display: inline-flex;
   align-items: center;
-  gap: 8px;
+  gap: 12px;
   min-width: 0;
 }
 
 .messageFileIcon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
   flex-shrink: 0;
-  color: var(--fn-color-brand);
+  width: 38px;
+  height: 42px;
+  border-radius: 8px;
+  background: var(--fn-bg-secondary);
 }
 
-.messageFileName {
+.messageFileDetails {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  min-width: 0;
+}
+
+.messageFileName,
+.messageFilePath {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-  color: inherit;
+}
+
+.messageFileName {
+  font-weight: 500;
+}
+
+.messageFileDescription,
+.messageFilePath {
+  font-size: 11px;
+  color: var(--fn-text-tertiary);
+}
+
+.messageFilePath {
+  max-width: 280px;
 }
 
 .messageFileActionBtn {
