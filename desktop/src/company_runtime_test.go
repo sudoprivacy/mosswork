@@ -5,6 +5,7 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
+	"errors"
 	"net/url"
 	"os"
 	"path/filepath"
@@ -83,6 +84,18 @@ func TestRuntimeDeviceErrorsHaveActionableClassification(t *testing.T) {
 	}
 	if got := runtimeErrorAction("workspace_file_locked"); got != "close_file_and_retry" {
 		t.Fatalf("unexpected locked-file action: %s", got)
+	}
+}
+
+func TestRuntimePreparationErrorsAreSafelyRetryable(t *testing.T) {
+	code, stage, retryable, _ := runtimeErrorMetadata(&runtimePreparationError{cause: errors.New("temporary startup failure")})
+	if code != "local_runtime_error" || stage != "runtime_preparing" || !retryable {
+		t.Fatalf("unexpected preparation metadata: code=%q stage=%q retryable=%t", code, stage, retryable)
+	}
+
+	_, stage, retryable, _ = runtimeErrorMetadata(errors.New("temporary startup failure"))
+	if stage == "runtime_preparing" || retryable {
+		t.Fatalf("unmarked runtime error became retryable: stage=%q retryable=%t", stage, retryable)
 	}
 }
 
