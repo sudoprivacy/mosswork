@@ -194,6 +194,37 @@ export function matchesRuntimeTask(
   );
 }
 
+const LOCAL_RUNTIME_PREPARATION_RETRY_DELAYS_MS = [500, 1_500] as const;
+
+type RuntimeStartError = Error & {
+  stage?: string;
+  retryable?: boolean;
+};
+
+function shouldRetryRuntimePreparation(error: unknown): boolean {
+  const runtimeError = error as RuntimeStartError;
+  return (
+    error instanceof Error &&
+    runtimeError.stage === "runtime_preparing" &&
+    runtimeError.retryable === true
+  );
+}
+
+function waitForRuntimePreparationRetry(
+  signal: AbortSignal,
+  delayMs: number,
+): Promise<void> {
+  return new Promise((resolve) => {
+    const timer = window.setTimeout(done, delayMs);
+    function done() {
+      window.clearTimeout(timer);
+      signal.removeEventListener("abort", done);
+      resolve();
+    }
+    signal.addEventListener("abort", done, { once: true });
+  });
+}
+
 /** Subscribe before starting: a short task may complete before its start reply. */
 export async function runLocalTurn(
   params: RuntimeStart,
@@ -251,13 +282,36 @@ export async function runLocalTurn(
       finish(new Error("任务已取消"));
       return;
     }
-    void runtime
-      .start(params)
-      .then(() => {
-        if (!finished) onStarted?.();
-      })
-      .catch((err: unknown) => {
-        finish(err instanceof Error ? err : new Error("无法启动本地任务。"));
-      });
+    void (async () => {
+      let preparationRetry = 0;
+      while (!finished && !signal.aborted) {
+        try {
+          await runtime.start(params);
+          if (!finished) onStarted?.();
+          return;
+        } catch (err) {
+          if (
+            preparationRetry <
+              LOCAL_RUNTIME_PREPARATION_RETRY_DELAYS_MS.length &&
+            shouldRetryRuntimePreparation(err) &&
+            !signal.aborted
+          ) {
+            await waitForRuntimePreparationRetry(
+              signal,
+              LOCAL_RUNTIME_PREPARATION_RETRY_DELAYS_MS[preparationRetry],
+            );
+            preparationRetry += 1;
+            continue;
+          }
+          if (signal.aborted) {
+            finish();
+            return;
+          }
+          finish(err instanceof Error ? err : new Error("无法启动本地任务。"));
+          return;
+        }
+      }
+      if (signal.aborted) finish();
+    })();
   });
 }

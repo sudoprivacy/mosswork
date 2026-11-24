@@ -22,6 +22,13 @@ import (
 
 const runtimeEventPrefix = "desktop:runtime:"
 
+// runtimePreparationError proves the task start RPC has not been written to the
+// local process, so the dashboard may safely retry the same task identity.
+type runtimePreparationError struct{ cause error }
+
+func (e *runtimePreparationError) Error() string { return e.cause.Error() }
+func (e *runtimePreparationError) Unwrap() error { return e.cause }
+
 func companyStateDir(base string, owner int64) string {
 	sum := sha256.Sum256([]byte(fmt.Sprintf("%s\x00%d", base, owner)))
 	return filepath.Join(mossworkHome(), "company-runtime", "accounts", hex.EncodeToString(sum[:]))
@@ -81,12 +88,12 @@ func (a *App) dispatchRuntimeEvent(name string) {
 		}
 		payload := map[string]any{"id": id, "result": result}
 		if err != nil {
-			code := runtimeErrorCode(err.Error())
+			code, stage, retryable, action := runtimeErrorMetadata(err)
 			payload["error"] = runtimeErrorText(code)
 			payload["error_code"] = code
-			payload["stage"] = runtimeErrorStage(code)
-			payload["retryable"] = runtimeErrorRetryable(code)
-			if action := runtimeErrorAction(code); action != "" {
+			payload["stage"] = stage
+			payload["retryable"] = retryable
+			if action != "" {
 				payload["action"] = action
 			}
 		}
@@ -226,6 +233,16 @@ func runtimeErrorCode(value string) string {
 	}
 }
 
+func runtimeErrorMetadata(err error) (code, stage string, retryable bool, action string) {
+	code = runtimeErrorCode(err.Error())
+	stage, retryable, action = runtimeErrorStage(code), runtimeErrorRetryable(code), runtimeErrorAction(code)
+	var preparationErr *runtimePreparationError
+	if errors.As(err, &preparationErr) {
+		stage, retryable, action = "runtime_preparing", true, ""
+	}
+	return code, stage, retryable, action
+}
+
 func runtimeErrorStage(code string) string {
 	switch {
 	case strings.HasPrefix(code, "device_"), code == "heartbeat_timeout":
@@ -303,7 +320,7 @@ func (a *App) ensureRuntimeProcess(nonce, base, method string, prepare func() (s
 		a.emitRuntimeProgress(nonce, base, epoch, "tools")
 		root, err := prepare()
 		if err != nil {
-			return nil, err
+			return nil, &runtimePreparationError{cause: err}
 		}
 		stateDir := companyStateDir(base, identity.OwnerUserID)
 		if err = os.MkdirAll(stateDir, 0700); err != nil {
@@ -341,7 +358,7 @@ func (a *App) ensureRuntimeProcess(nonce, base, method string, prepare func() (s
 			close(events)
 			a.companyMu.Unlock()
 			readyCompanyPortable.invalidate(root)
-			return nil, errors.New("本地运行时无法启动，请重新安装包含完整工具的企业客户端")
+			return nil, &runtimePreparationError{cause: errors.New("本地运行时无法启动，请重新安装包含完整工具的企业客户端")}
 		}
 		a.companyRuntime = process
 		go a.watchRuntimeIdentity(nonce, base, epoch, credential)
@@ -362,7 +379,7 @@ func (a *App) ensureRuntimeProcess(nonce, base, method string, prepare func() (s
 			if exited {
 				readyCompanyPortable.invalidate(root)
 			}
-			return nil, err
+			return nil, &runtimePreparationError{cause: err}
 		}
 		if a.companyRuntime != process || !a.runtimePreviewScopeCurrent(nonce, base, workspace, epoch) {
 			a.companyMu.Unlock()
