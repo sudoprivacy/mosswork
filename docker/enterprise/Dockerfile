@@ -11,6 +11,10 @@ RUN apt-get update && apt-get install -y --no-install-recommends ffmpeg \
     && chown -R mosswork:mosswork /data
 COPY docker/enterprise/verify_runtime.py /usr/local/libexec/mosswork/verify_runtime.py
 USER 1000:1000
+RUN --network=none node --version && npm --version \
+    && lark-cli --help > /dev/null \
+    && wecom-cli --help > /dev/null \
+    && agently-cli --help > /dev/null
 # Verify the actual non-root browser launch as well as embedding imports, offline.
 RUN --network=none python /usr/local/libexec/mosswork/verify_runtime.py
 # Bootstrap is an explicit one-off command, including on PostgreSQL installations.

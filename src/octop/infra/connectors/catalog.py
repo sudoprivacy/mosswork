@@ -111,6 +111,21 @@ def get_mcp_oauth_remote(kind: str) -> ConnectorCatalogEntry | None:
 
 _CATALOG: tuple[ConnectorCatalogEntry, ...] = (
     ConnectorCatalogEntry(
+        kind="slack",
+        name="Slack",
+        description="搜索 Slack 工作区并使用已授权的工具",
+        auth_kind="oauth2",
+        doc_url="https://docs.slack.dev/ai/slack-mcp-server/",
+        icon="slack",
+        color="#4a154b",
+        phase="available",
+        mcp_mode="remote",
+        category="office",
+        oauth_issuer="https://mcp.slack.com",
+        mcp_url="https://mcp.slack.com/mcp",
+        remote_transport="streamable_http",
+    ),
+    ConnectorCatalogEntry(
         kind="tencent-docs",
         name="腾讯文档",
         description="读写腾讯文档、智能表格与空间文件",
@@ -624,6 +639,8 @@ def catalog_entry_to_dict(
         "name": entry.name,
         "description": tr("connector.agently.description", locale)
         if entry.kind == "agently-cli"
+        else tr("connector.slack.description", locale)
+        if entry.kind == "slack"
         else entry.description,
         "auth_kind": entry.auth_kind,
         "doc_url": entry.doc_url,

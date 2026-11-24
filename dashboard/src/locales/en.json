@@ -5961,6 +5961,24 @@
     }
   },
   "connectors": {
+    "slack": {
+      "guide": {
+        "title": "Slack connector setup guide",
+        "apps": "Open Slack app settings",
+        "credentials": "Select an internal app your workspace allows, or choose Create New App → From scratch and select the target workspace. Under Basic Information → App Credentials, copy the Client ID and Client Secret into the matching fields below.",
+        "redirect": "Open mosswork at an HTTPS address your authorization browser can reach. Copy the full OAuth redirect URL below. In Slack, go to OAuth & Permissions → Redirect URLs, choose Add New Redirect URL, paste the address, and save it.",
+        "scopes": "Go to OAuth & Permissions → Scopes → User Token Scopes → Add an OAuth Scope. Add the permissions you need and enter the same values in OAuth scopes below. For example, emoji:read lets you find emoji and search:read.public lets you search public channel messages.",
+        "authorize": "Save the connector, then open the authorization page and confirm the workspace and permissions in Slack. Return here when the status reads Connected to Slack and run the probe to see the number of available tools. Save and reauthorize after changing permissions.",
+        "reference": "See Slack’s tool and scope reference"
+      },
+      "scopeHint": "Enter at least one User Token Scope and press Enter to confirm it. If Slack reports No scopes requested, check the scopes in both places, save, and authorize again.",
+      "callback": "OAuth redirect URL",
+      "register": "If Slack reports redirect_uri did not match, check the registered HTTPS address, including the host, port, and path.",
+      "https": "Open mosswork over HTTPS to authorize Slack.",
+      "connected": "Connected to Slack",
+      "pending": "Awaiting Slack authorization",
+      "reauthorize": "Reauthorize"
+    },
     "tabMine": "My connections",
     "loadFailed": "Failed to load connectors",
     "tabCatalog": "Catalog",

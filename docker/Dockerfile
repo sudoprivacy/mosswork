@@ -83,6 +83,7 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
 ARG PIP_INDEX_URL=
 ARG PIP_TRUSTED_HOST=
 ARG APT_MIRROR=
+ARG NPM_REGISTRY=
 
 RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
     --mount=type=cache,target=/var/lib/apt,sharing=locked \
@@ -93,11 +94,21 @@ RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
     && apt-get update && apt-get install -y --no-install-recommends \
         build-essential \
         libffi-dev \
+        nodejs \
+        npm \
         postgresql-client \
         curl \
         git \
         ripgrep \
     && rm -rf /var/lib/apt/lists/*
+
+RUN --mount=type=cache,target=/root/.npm,sharing=locked \
+    npm install --global --prefix /usr/local --cache /root/.npm \
+        --registry="${NPM_REGISTRY:-https://registry.npmjs.org/}" --no-audit --no-fund \
+        @larksuite/cli@1.0.100 @wecom/cli@1.3.4 @tencent-qqmail/agently-cli@1.0.18 \
+    && lark-cli --help > /dev/null \
+    && wecom-cli --help > /dev/null \
+    && agently-cli --help > /dev/null
 
 COPY --from=ghcr.io/astral-sh/uv:0.7 /uv /uvx /bin/
 

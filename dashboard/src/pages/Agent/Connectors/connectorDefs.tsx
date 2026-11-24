@@ -1,4 +1,4 @@
-import { Cable, Mail } from "lucide-react";
+import { Cable, Mail, Slack } from "lucide-react";
 
 import { getConnectorLogo } from "../../../assets/connectors";
 import type { ConnectorCatalogEntry } from "../../../api/modules/connectors";
@@ -70,7 +70,8 @@ export function ConnectorLogo({
   const src =
     getConnectorLogo(kind) ?? (icon ? getConnectorLogo(icon) : undefined);
   if (!src) {
-    const Icon = kind === "agently-cli" ? Mail : Cable;
+    const Icon =
+      kind === "slack" ? Slack : kind === "agently-cli" ? Mail : Cable;
     return (
       <Icon
         size={size}

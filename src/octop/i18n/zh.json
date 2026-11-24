@@ -330,6 +330,7 @@
     }
   },
   "connector": {
+    "slack": {"description": "搜索 Slack 工作区并使用已授权的工具"},
     "oauth": {
       "callback_auth_failed": "授权失败：{error}",
       "callback_missing_params": "缺少 code 或 state。",
