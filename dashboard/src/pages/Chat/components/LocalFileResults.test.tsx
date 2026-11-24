@@ -92,11 +92,9 @@ it("deduplicates persisted local paths and never offers native file opening in a
     <LocalFileResults messages={[item, { ...item, id: "receipt-copy" }]} />,
   );
   expect(screen.getAllByText("/work/local-result.pdf")).toHaveLength(1);
+  expect(screen.getByText("chat.localArtifactsWebHint")).toBeInTheDocument();
   expect(
-    screen.getByText("成果保存在任务电脑，当前网页不能直接访问"),
-  ).toBeInTheDocument();
-  expect(
-    screen.queryByRole("button", { name: "打开文件位置" }),
+    screen.queryByRole("button", { name: "chat.openFileLocation" }),
   ).not.toBeInTheDocument();
 });
 
@@ -125,8 +123,10 @@ it("checks native file availability instead of treating a rotated connection id 
       ]}
     />,
   );
-  expect(screen.getByText("本地任务成果")).toBeInTheDocument();
+  expect(screen.getByText("chat.localArtifacts")).toBeInTheDocument();
   expect(screen.queryByText(/成果保存在原电脑/)).not.toBeInTheDocument();
-  fireEvent.click(screen.getByRole("button", { name: "打开文件位置" }));
+  fireEvent.click(
+    screen.getByRole("button", { name: "chat.openFileLocation" }),
+  );
   expect(reveal).toHaveBeenCalledWith({ path: file.path, sha256: file.sha256 });
 });
