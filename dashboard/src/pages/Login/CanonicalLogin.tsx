@@ -21,6 +21,7 @@ import {
 import { parseApiError } from "../../utils/apiError";
 import BrandLockup from "../../components/BrandLockup";
 import { CanonicalProfilePanel } from "./CanonicalProfilePanel";
+import { CanonicalConversations } from "./CanonicalConversations";
 import { CanonicalOrganizationPanel } from "./CanonicalOrganizationPanel";
 import { showsOrganizationDirectory } from "../../hooks/useCanonicalOrganization";
 
@@ -299,7 +300,13 @@ export function CanonicalAccountScreen({
             <Typography.Title level={3}>
               {t("canonical.account")}
             </Typography.Title>
-            <Alert type="info" message={t("canonical.runtimePending")} />
+            <CanonicalConversations
+              key={JSON.stringify([
+                session.identity.account_id,
+                session.identity.organization.id,
+                session.identity.member.id,
+              ])}
+            />
             <CanonicalError error={session.error} />
             <Typography.Text>
               {session.identity.organization.name}

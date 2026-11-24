@@ -314,6 +314,49 @@ async def test_status_reports_only_bound_peer_input_from_notification_metadata(m
     assert session.client.last_peer_arrival is None
 
 
+async def test_current_turn_uses_only_its_bound_session_output_and_receipts():
+    from acp.client.router import build_client_router
+    from moss_harness.acp.client import ACPHostedClient
+
+    client = ACPHostedClient(runner_name="sudocode", runner_config=ACPRunnerConfig(), cwd=".")
+    router = build_client_router(client)
+    peer = {"from": "reviewer", "kind": "message", "verified": True, "deliveryId": "record-1"}
+
+    async def deliver(sid, kind, text, metadata=None):
+        await router(
+            "session/update",
+            {
+                "sessionId": sid,
+                "update": {"sessionUpdate": kind, "content": {"type": "text", "text": text}},
+                "_meta": metadata or {},
+            },
+            True,
+        )
+
+    client.bind_engine_session("first", None)
+    await deliver("first", "agent_message_chunk", "First task.")
+    await deliver("first", "user_message_chunk", "First review", {"sudocode": {"a2a": peer}})
+    assert client.last_peer_arrival.delivery_id == "record-1"
+    client.invalidate_observations()
+    client.bind_engine_session("second", None)
+    await deliver("second", "agent_message_chunk", "Review requested.")
+    await deliver("first", "agent_message_chunk", "The first task is complete.")
+    await deliver("first", "user_message_chunk", "First review", {"sudocode": {"a2a": peer}})
+    assert (await client.finish_prompt())["text"] == "Review requested."
+    assert client.last_peer_arrival is None
+    await deliver(
+        "second",
+        "user_message_chunk",
+        "Still reviewing",
+        {"sudocode": {"a2a": {**peer, "deliveryId": "record-2"}}},
+    )
+    assert client.last_peer_arrival.delivery_id == "record-2"
+    client.invalidate_observations()
+    await deliver("second", "agent_message_chunk", "Late continuation.")
+    assert await client.finish_prompt() is None
+    assert client.last_peer_arrival is None
+
+
 async def test_closing_a_connection_releases_its_outstanding_status_request(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:

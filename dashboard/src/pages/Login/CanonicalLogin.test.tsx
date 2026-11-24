@@ -199,6 +199,7 @@ it("signs in through the dedicated Moss password path without a forbidden organi
   const fetchMock = vi.fn(async (url: string, _options?: RequestInit) => {
     if (url.endsWith("/organizations"))
       throw new Error("This credential cannot switch organizations");
+    if (url.endsWith("/conversations")) return Response.json([]);
     const data = url.endsWith("/moss/password/login")
       ? {
           access_token: "password-access",
@@ -250,11 +251,14 @@ it("signs in through the dedicated Moss password path without a forbidden organi
   expect(fetchMock.mock.calls.map(([url]) => url)).toEqual([
     "/api/identity/moss/password/login",
     "/api/identity/me",
+    "/api/identity/conversations",
   ]);
   expect(fetchMock.mock.calls[0][1]).toMatchObject({
     body: JSON.stringify({ username: "home", password: "public-password" }),
   });
-  expect(screen.getByText("canonical.runtimePending")).toBeInTheDocument();
+  expect(
+    await screen.findByText("canonical.noConversations"),
+  ).toBeInTheDocument();
 });
 
 it("shows wrong-password errors without token events or redirecting", async () => {

@@ -7348,7 +7348,14 @@
     "retry": "Retry",
     "error": "Unable to complete this request. Please try again.",
     "logoutUnconfirmed": "Signed out on this device. Server sign-out could not be confirmed.",
-    "runtimePending": "You are signed in. The workspace is not available yet."
+    "runtimePending": "You are signed in. The workspace is not available yet.",
+    "openConversations": "Refresh conversations",
+    "noConversations": "No conversations are available for this account in this organization.",
+    "turnUnconfirmed": "The outcome of this message could not be confirmed.",
+    "resumeObservation": "Reconnect to this reply",
+    "message": "Message your agent",
+    "sendMessage": "Send",
+    "backToConversations": "Back to conversations"
   },
   "canonicalOrganization": {
     "open": "Members and departments",

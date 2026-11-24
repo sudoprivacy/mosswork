@@ -3,11 +3,15 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from typing import TYPE_CHECKING
 
 from octop.infra.db.pool import DatabasePool
 from octop.infra.db.repos._base import DbRow, now_ts
 from octop.infra.db.repos.canonical_identity import CanonicalIdentityProjectionRepo
 from octop.infra.db.repos.retained_cohost import RetainedCohostBinding
+
+if TYPE_CHECKING:
+    from octop.infra.identity.projection import CanonicalLocalUserProjection
 
 
 class SessionProjectionUnavailable(LookupError):
@@ -38,14 +42,17 @@ def _projection(row: DbRow) -> RetainedSessionProjection:
     )
 
 
-_SELECT = """SELECT p.*, q.account_id, q.local_user_id
-FROM retained_session_projections p
+_JOINS = """FROM retained_session_projections p
 JOIN threads t ON t.thread_id=p.thread_id AND t.agent_id=p.agent_id
 JOIN agents a ON a.agent_id=p.agent_id AND a.user_id=t.user_id
 JOIN canonical_user_projections q ON q.authority_id=p.authority_id
     AND q.organization_id=p.organization_id AND q.member_id=p.owner_id
-    AND q.local_user_id=t.user_id
-WHERE p.thread_id=? AND p.agent_id=? AND p.authority_id=?"""
+    AND q.local_user_id=t.user_id"""
+_SELECT = (
+    "SELECT p.*, q.account_id, q.local_user_id "
+    + _JOINS
+    + " WHERE p.thread_id=? AND p.agent_id=? AND p.authority_id=?"
+)
 
 
 class RetainedSessionProjectionRepo:
@@ -61,6 +68,25 @@ class RetainedSessionProjectionRepo:
     def __init__(self, product_db: DatabasePool) -> None:
         self._db = product_db
         self._identities = CanonicalIdentityProjectionRepo(product_db)
+
+    def for_member(self, member: CanonicalLocalUserProjection) -> list[tuple[str, str, str]]:
+        identity = member.identity
+        with self._db.connect() as conn:
+            rows = conn.execute(
+                "SELECT p.agent_id, p.thread_id, COALESCE(NULLIF(t.title,''),a.name) AS title "
+                + _JOINS
+                + """ WHERE p.authority_id=? AND q.account_id=? AND p.organization_id=?
+                    AND p.owner_id=? AND q.local_user_id=?
+                    ORDER BY t.last_active DESC, p.thread_id""",
+                (
+                    identity.authority_id,
+                    identity.account_id,
+                    identity.organization_id,
+                    identity.member_id,
+                    member.local_user_id,
+                ),
+            ).fetchall()
+        return [(row["agent_id"], row["thread_id"], row["title"]) for row in rows]
 
     def get(self, authority_id: str, agent_id: str, thread_id: str) -> RetainedSessionProjection:
         with self._db.connect() as conn:

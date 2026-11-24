@@ -201,6 +201,15 @@ def is_canonical_identity_request(request: Request) -> bool:
         ) and type(getattr(request.app.state, "canonical_requests", None)) is (
             CanonicalRequestIdentityResolver
         )
+    if request.method == "GET" and request.url.path == "/api/identity/conversations":
+        from octop.infra.identity.projection import CanonicalRequestIdentityResolver
+
+        resolver = getattr(request.app.state, "canonical_requests", None)
+        return type(
+            resolver
+        ) is CanonicalRequestIdentityResolver and resolver._snapshots is getattr(
+            request.app.state, "canonical_identity", None
+        )
     if request.url.path in {"/api/identity/me", "/api/identity/organizations"}:
         return isinstance(
             getattr(request.app.state, "canonical_identity", None), CanonicalSnapshotService

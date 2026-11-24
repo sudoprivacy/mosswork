@@ -15,6 +15,7 @@ from octop.infra.db.repos.retained_session_projection import (
     SessionProjectionUnavailable,
 )
 from octop.infra.identity.canonical import CanonicalIdentitySnapshot
+from octop.infra.identity.projection import CanonicalLocalUserProjection
 from octop.infra.native_host.context import HostSelection
 
 
@@ -23,6 +24,10 @@ class ProductCohostSelections:
         self, products: RetainedSessionProjectionRepo, originals: RetainedCohostBindingRepo
     ) -> None:
         self._products, self._originals = products, originals
+
+    async def for_member(self, member: CanonicalLocalUserProjection) -> list[tuple[str, str, str]]:
+        """Find candidate product IDs. The caller must check current observation authority."""
+        return await asyncio.to_thread(self._products.for_member, member)
 
     async def record_existing(
         self,
