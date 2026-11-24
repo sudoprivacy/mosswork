@@ -223,6 +223,59 @@ def test_current_foreign_actor_cannot_replay_original_run(chat):
         assert chat.repo.get(run_id) == before
 
 
+def history(socket, before=None):
+    socket.send_json({"type": "history", "thread_id": "one", "before": before})
+    frames = []
+    while True:
+        frame = socket.receive_json()
+        assert frame["thread_id"] == "one"
+        if frame["type"] == "history_end":
+            return frames, frame["before"]
+        assert frame["type"] in {"history_turn", "history_text"}
+        frames.append(frame)
+
+
+def test_new_login_reads_original_chat_pages_without_reopening_runs(chat):
+    with TestClient(chat.app) as client:
+        for n in range(14):
+            with client.websocket_connect(url()) as ws:
+                ws.send_json(turn(text=f"question {n}", client_request_id=f"request-{n}"))
+                run_id = ws.receive_json()["execution_id"]
+            if n < 13:
+                chat.repo.command(run_id, user=chat.user, key="stop", kind="cancel", payload={})
+        snapshot = chat.repo.get(run_id)
+        with client.websocket_connect(url()) as ws:
+            recent, before = history(ws)
+            earlier, end = history(ws, before)
+            assert before == recent[0]["execution_id"] and end is None
+            assert [f["question"] for f in earlier + recent] == [f"question {n}" for n in range(14)]
+            assert recent[-1]["state"] == "queued"
+        with client.websocket_connect(url(_token("sms_company_actual_member"))) as ws:
+            assert history(ws) == ([], None)
+        assert chat.repo.get(run_id) == snapshot
+
+
+def test_history_rechecks_resource_after_reading_events(chat, monkeypatch):
+    with TestClient(chat.app) as client:
+        with client.websocket_connect(url()) as ws:
+            run_id = admitted(ws)
+        read = chat.repo.events
+
+        def withdraw(*args, **kwargs):
+            events = read(*args, **kwargs)
+            chat.backend.refuse = True
+            return events
+
+        monkeypatch.setattr(chat.repo, "events", withdraw)
+        with client.websocket_connect(url()) as ws:
+            ws.send_json({"type": "history", "thread_id": "one"})
+            assert ws.receive_json()["execution_id"] == run_id
+            with pytest.raises(WebSocketDisconnect) as error:
+                ws.receive_json()
+            assert error.value.code == 4003
+        assert chat.repo.get(run_id)["state"] == "queued"
+
+
 def test_cancel_uses_existing_original_command_and_never_claims_native_completion(chat):
     with TestClient(chat.app) as client, client.websocket_connect(url()) as socket:
         run_id = admitted(socket)

@@ -45,6 +45,7 @@ from tests.unit.test_canonical_business_product_composition import (
 )
 
 
+@pytest.mark.live
 @pytest.mark.skipif(
     not os.getenv("MOSSWORK_LIVE_EMPLOYEE_BROWSER"), reason="Opt-in live browser/model test"
 )
@@ -159,8 +160,15 @@ async def test_employee_opens_and_continues_retained_sudocode(application, envir
             session = await engine.get_session(thread_id, "sudocode")
             assert session and session.acp_session_id == observed_sessions[0]
 
+        followup_started = asyncio.Event()
+        continue_followup = asyncio.Event()
+        followup = "Write a short agenda heading that includes the exact same project name."
+
         async def stream(agent, request, *, admission):
             await check(agent, request["thread_id"], admission=admission, operation="submit")
+            if request["text"] == followup:
+                followup_started.set()
+                await asyncio.wait_for(continue_followup.wait(), 30)
             yield {"type": "token", "content": await ask(request["text"], True)}
             yield {"type": "done"}
 
@@ -215,8 +223,8 @@ async def test_employee_opens_and_continues_retained_sudocode(application, envir
             entry = urlunsplit(parts._replace(query="ui_locale=zh"))
             async with async_playwright() as pw:
                 browser = await pw.chromium.launch(executable_path=pw.chromium.executable_path)
-                try:
-                    page = await browser.new_page(locale="zh-CN")
+
+                async def login(page):
                     await page.goto(entry)
                     await page.locator("#canonical-phone").fill(_NUMBER)
                     async with page.expect_response(
@@ -226,19 +234,55 @@ async def test_employee_opens_and_continues_retained_sudocode(application, envir
                     assert (await sent.value).ok
                     await page.locator("#canonical-code").fill(environment.sender.sent[-1][1])
                     await page.locator("form button[type=submit]").click()
-                    for i in range(2):
+                    await expect(page.get_by_role("heading", name="Original")).to_be_visible()
+
+                try:
+                    page = await browser.new_page(locale="zh-CN")
+                    await login(page)
+                    questions = [
+                        "What was the full project name in the meeting title we discussed?",
+                        followup,
+                    ]
+                    answers = []
+                    for i, question in enumerate(questions):
                         if i:
                             await page.reload()
-                        await expect(page.get_by_role("heading", name="Original")).to_be_visible()
+                            await expect(page.get_by_role("log")).to_contain_text(answers[0])
+                            await page.get_by_role("button", name="退出登录").click()
+                            await expect(page.locator("#canonical-phone")).to_be_visible()
+                            await browser.close()
+                            now += environment.kwargs["phone_config"].resend_cooldown_sec + 1
+                            browser = await pw.chromium.launch(
+                                executable_path=pw.chromium.executable_path
+                            )
+                            page = await browser.new_page(locale="zh-CN")
+                            await login(page)
+                            await expect(page.get_by_role("log").locator("p")).to_have_text(
+                                [questions[0], answers[0]]
+                            )
+                            assert len(observed_sessions) == 2
                         prompt = page.get_by_role("textbox", name="给你的智能体发消息")
-                        await prompt.fill(
-                            "What was the full project name in the meeting title we discussed?"
-                        )
+                        await prompt.fill(question)
                         await page.get_by_role("button", name=re.compile(r"^发\s*送$")).click()
-                        await expect(page.get_by_role("log")).to_contain_text(
-                            project_name, timeout=95000
-                        )
+                        if i:
+                            await asyncio.wait_for(followup_started.wait(), 15)
+                            try:
+                                await page.reload()
+                                await expect(page.get_by_role("log").locator("p")).to_have_text(
+                                    [questions[0], answers[0], question, ""]
+                                )
+                                await expect(prompt).to_be_disabled()
+                            finally:
+                                continue_followup.set()
+                        reply = page.get_by_role("log").locator("div").nth(i).locator("p").nth(1)
+                        await expect(reply).to_contain_text(project_name, timeout=95000)
                         await expect(prompt).to_be_enabled()
+                        answers.append(await reply.inner_text())
+                    await page.reload()
+                    transcript = page.get_by_role("log").locator("p")
+                    await expect(transcript).to_have_text(
+                        [questions[0], answers[0], questions[1], answers[1]]
+                    )
                     assert observed_sessions == [observed_sessions[0]] * 3
                 finally:
                     await browser.close()
