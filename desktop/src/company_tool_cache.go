@@ -52,8 +52,8 @@ func companyCheckPath(home, archive string) string {
 }
 
 // Full content verification belongs to installation/update. On subsequent
-// launches read only the manifest and stat the startup files and their parents;
-// do not walk/hash tens of thousands of unchanged dependency files again.
+// At startup, check the manifest, required files and the immediate contents
+// of their parent directories. Leave the full dependency walk to installation.
 func companyStartupStamp(root string) (string, error) {
 	paths := map[string]bool{".": true, "company-runtime-manifest.json": false}
 	for _, name := range companyRuntimeRequired(root) {
@@ -70,7 +70,8 @@ func companyStartupStamp(root string) (string, error) {
 	h := sha256.New()
 	encoder := json.NewEncoder(h)
 	for _, name := range names {
-		info, err := os.Lstat(filepath.Join(root, filepath.FromSlash(name)))
+		path := filepath.Join(root, filepath.FromSlash(name))
+		info, err := os.Lstat(path)
 		if err != nil {
 			return "", err
 		}
@@ -78,6 +79,17 @@ func companyStartupStamp(root string) (string, error) {
 			return "", fmt.Errorf("企业运行时启动文件异常：%s", name)
 		}
 		_ = encoder.Encode(companyToolStamp{name, info.Size(), info.ModTime().UnixNano(), info.Mode()})
+		if info.IsDir() {
+			// A directory timestamp alone may not change between two updates.
+			// ReadDir returns names in sorted order on every supported platform.
+			entries, err := os.ReadDir(path)
+			if err != nil {
+				return "", err
+			}
+			for _, entry := range entries {
+				_ = encoder.Encode([]string{entry.Name(), entry.Type().String()})
+			}
+		}
 	}
 	manifest, err := os.ReadFile(filepath.Join(root, "company-runtime-manifest.json"))
 	if err != nil {
