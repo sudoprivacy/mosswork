@@ -86,6 +86,17 @@ func TestRuntimeDeviceErrorsHaveActionableClassification(t *testing.T) {
 	}
 }
 
+func TestRuntimeRepliesPreserveKnownErrors(t *testing.T) {
+	for _, code := range []string{"runtime_launch_failed", "runtime_process_disconnected", "company_protocol_incompatible", "company_runtime_disabled", "thread_already_running"} {
+		if got := runtimeErrorCode(code); got != code {
+			t.Errorf("runtimeErrorCode(%q) = %q", code, got)
+		}
+	}
+	if code := runtimeErrorCode("private exception details"); code != "local_runtime_error" {
+		t.Errorf("unrecognized error was exposed: %q", code)
+	}
+}
+
 func TestCompanyRuntimeAccountDirectoriesAreIsolated(t *testing.T) {
 	t.Setenv("MOSSWORK_HOME", t.TempDir())
 	a := companyStateDir("https://one", 1)

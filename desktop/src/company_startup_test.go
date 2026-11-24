@@ -197,6 +197,76 @@ func TestRuntimePreparationDiscardsRevokedDirectory(t *testing.T) {
 	}
 }
 
+func TestRuntimeRepairsCachedToolsBeforeSendingTask(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("fixture uses a POSIX shell as the bundled worker")
+	}
+	a := startupTestApp(t)
+	t.Cleanup(func() {
+		a.companyMu.Lock()
+		defer a.companyMu.Unlock()
+		a.stopCompanyRuntimeLocked()
+	})
+	source := validRuntimeFixture(t)
+	worker := `#!/bin/sh
+test "$(wc -c < "$MOSSWORK_COMPANY_PACKAGES/octop/company_runtime.py")" -eq 2048 || exit 1
+while IFS= read -r request; do
+    case "$request" in
+        *'"method":"initialize"'*) printf '%s\n' '{"id":"1","result":{}}' ;;
+        *'"method":"start"'*)
+            printf '%s\n' start >> submissions
+            printf '%s\n' '{"id":"2","result":{"task_id":"recovered"}}' ;;
+    esac
+done
+` + strings.Repeat("#\n", 512)
+	if err := os.WriteFile(pythonExe(source), []byte(worker), 0755); err != nil {
+		t.Fatal(err)
+	}
+	manifestPath := filepath.Join(source, "company-runtime-manifest.json")
+	data, err := os.ReadFile(manifestPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var manifest companyManifest
+	if err := json.Unmarshal(data, &manifest); err != nil {
+		t.Fatal(err)
+	}
+	relative, _ := filepath.Rel(source, pythonExe(source))
+	digest := sha256.Sum256([]byte(worker))
+	manifest.Files[filepath.ToSlash(relative)] = hex.EncodeToString(digest[:])
+	data, _ = json.Marshal(manifest)
+	if err := os.WriteFile(manifestPath, data, 0600); err != nil {
+		t.Fatal(err)
+	}
+	archive := filepath.Join(t.TempDir(), "tools.zip")
+	companyToolArchive(t, source, archive)
+	t.Setenv("MOSSWORK_DESKTOP_PORTABLE_ZIP", archive)
+	root, err := ensureCompanyPortable()
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { readyCompanyPortable.invalidate(root) })
+	dependency := filepath.Join(root, "packages", "octop", "company_runtime.py")
+	if err := os.WriteFile(dependency, []byte("damaged"), 0600); err != nil {
+		t.Fatal(err)
+	}
+
+	result, err := a.performRuntimeAction("nonce", a.companyURL, "start", json.RawMessage(`{}`))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if reply, ok := result.(json.RawMessage); !ok || string(reply) != `{"task_id":"recovered"}` {
+		t.Fatalf("unexpected task reply: %v", result)
+	}
+	submissions, err := os.ReadFile(filepath.Join(a.workspacePath, "submissions"))
+	if err != nil || string(submissions) != "start\n" {
+		t.Fatalf("expected a single task submission, got %q (%v)", submissions, err)
+	}
+	if err := validateCompanyRuntime(root); err != nil {
+		t.Fatalf("startup did not restore the bundled files: %v", err)
+	}
+}
+
 func validRuntimeFixture(t *testing.T) string {
 	t.Helper()
 	root := t.TempDir()

@@ -51,6 +51,8 @@ type Process struct {
 	closeOnce sync.Once
 }
 
+var ErrDisconnected = errors.New("runtime_process_disconnected")
+
 func Start(python, launch, dir string, env []string, event func(Message)) (*Process, error) {
 	// Embedded Windows Python can ignore environment flags; -X also fixes
 	// default file encoding before any package is imported.
@@ -128,7 +130,7 @@ func (p *Process) Request(ctx context.Context, method string, params any) (json.
 	err := json.NewEncoder(p.stdin).Encode(map[string]any{"id": id, "method": method, "params": params})
 	p.writeMu.Unlock()
 	if err != nil {
-		return nil, errors.New("本地运行时连接已中断，请核对任务状态后重试")
+		return nil, ErrDisconnected
 	}
 	select {
 	case m := <-ch:
@@ -137,7 +139,7 @@ func (p *Process) Request(ctx context.Context, method string, params any) (json.
 		}
 		return m.Result, nil
 	case <-p.done:
-		return nil, errors.New("本地运行时已退出，请重新连接")
+		return nil, ErrDisconnected
 	case <-ctx.Done():
 		return nil, errors.New("本地运行时响应超时；请核对任务状态，避免重复执行")
 	}
@@ -163,7 +165,8 @@ func (p *Process) Alive() bool {
 		return true
 	}
 }
-func (p *Process) Close() { p.closeOnce.Do(func() { kill(p.cmd); _ = p.stdin.Close() }) }
+func (p *Process) Done() <-chan struct{} { return p.done }
+func (p *Process) Close()                { p.closeOnce.Do(func() { kill(p.cmd); _ = p.stdin.Close() }) }
 
 // Environment discards ambient Python configuration and uses only packaged tools.
 func Environment(stateDir, root, path, cacheDir string) []string {
