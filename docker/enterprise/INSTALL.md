@@ -39,7 +39,8 @@ sudo cat /opt/moss-server/initial-admin.json
 | --- | --- |
 | `/opt/moss-server/.env` | 镜像版本、端口和私有配置；`deployment.env` 是兼容链接 |
 | `/opt/moss-server/docker-compose.yml` | 可直接使用的 Compose 文件 |
-| `/opt/moss-server/start.sh`、`stop.sh` | 一键启动、停止；停止保留数据 |
+| `/opt/moss-server/start.sh`、`stop.sh` | 已部署实例的日常启停，分别执行 Compose `up` 和 `down` |
+| `/opt/moss-server/deploy.sh` | 首次部署和升级 |
 | `/opt/moss-server/data/` | 数据库、应用数据、媒体和通信密钥 |
 | `/opt/moss-server/current/` | 最近一次成功启动版本的 Compose 和部署工具 |
 | `/opt/moss-server/releases/<tag>/` | 各版本部署文件 |
@@ -56,7 +57,7 @@ curl -fsS http://127.0.0.1:8088/api/health/ready
 
 首次安装中断时，可用同一版本重新执行安装命令。已生成的密码、密钥和数据会保留；数据库已有用户时不会再次创建管理员。初始化文件记录的是初始密码，用户修改密码后不会更新此文件。
 
-日常启动和停止：
+实例部署完成后，可以用以下命令启动服务或移除容器并保留数据。
 
 ```sh
 sudo bash /opt/moss-server/start.sh
@@ -65,9 +66,13 @@ sudo bash /opt/moss-server/stop.sh
 
 ## 复制为另一个环境
 
-将同一 Release 的部署包解压到新目录，编辑其中的 `.env`，将 `MOSSWORK_PROJECT_NAME` 和 `MOSSWORK_PORT` 改成未占用的项目名和端口。`MOSSWORK_DATA_ROOT` 留空时自动创建该目录内的 `data/`；也可指定独立的绝对路径。镜像已导入后，在新目录执行 `sudo bash start.sh` 即可生成新密码、密钥和数据库并启动。
+将同一 Release 的部署包解压到新目录，编辑其中的 `.env`，将 `MOSSWORK_PROJECT_NAME` 和 `MOSSWORK_PORT` 改成未占用的项目名和端口。`MOSSWORK_DATA_ROOT` 留空时自动创建该目录内的 `data/`，也可指定独立的绝对路径。镜像导入后，在解压出的 `moss-server/` 目录执行部署命令，将示例中的版本替换为部署包的版本。
 
-已有环境也可在停止服务后复制整个目录，再修改副本 `.env` 的项目名、端口和 `MOSSWORK_DATA_ROOT`（改为副本的数据目录绝对路径）。副本会保留原账号和资料；两个环境不能共用同一数据目录。
+```sh
+sudo bash deploy.sh --version v0.0.7 --install-dir "$PWD"
+```
+
+已有环境也可在停止服务后复制整个目录，再修改副本 `.env` 的项目名、端口和 `MOSSWORK_DATA_ROOT`（改为副本的数据目录绝对路径），然后用副本的 `start.sh` 启动。副本会保留原账号和资料，两个环境各自使用独立的数据目录。
 
 ## 升级与备份
 

@@ -6,6 +6,10 @@ case "$0" in
   *) script_dir=. ;;
 esac
 script_dir=$(CDPATH='' cd -- "$script_dir" && pwd)
+compose_dir=$script_dir
+if [ -f "$script_dir/current/compose.release.yml" ]; then
+  compose_dir=$(CDPATH='' cd -P -- "$script_dir/current" && pwd -P)
+fi
 env_file=$script_dir/.env
 [ -f "$env_file" ] || env_file=$script_dir/deployment.env
 [ -f "$env_file" ] || { echo "Missing environment file: $env_file" >&2; exit 1; }
@@ -14,4 +18,4 @@ set -a
 . "$env_file"
 set +a
 exec docker compose --project-name "${MOSSWORK_PROJECT_NAME:-moss-server}" \
-  --env-file "$env_file" --file "$script_dir/compose.release.yml" down "$@"
+  --env-file "$env_file" --file "$compose_dir/compose.release.yml" down "$@"

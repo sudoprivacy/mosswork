@@ -52,13 +52,21 @@ elif 'init' in args:
     env = {key: value for key, value in os.environ.items() if not key.startswith("MOSSWORK_")}
     env.update(PATH=str(binary) + os.pathsep + env["PATH"], DEPLOY_TEST_ROOT=str(tmp_path))
 
-    def run(version="v0.0.3", *, failure="", upgrade=False, directory=install, script=None):
+    def run(
+        version="v0.0.3",
+        *,
+        failure="",
+        upgrade=False,
+        directory=install,
+        script=None,
+        source=SCRIPTS,
+    ):
         if script:
             command = ["bash", str(directory / script)]
         else:
             command = [
                 "bash",
-                str(SCRIPTS / "deploy.sh"),
+                str(source / "deploy.sh"),
                 "--version",
                 version,
                 "--install-dir",
@@ -95,14 +103,29 @@ def test_first_install_and_restart_keep_secrets_private(shell_deployment):
     assert (install / "docker-compose.yml").is_file()
     # PostgreSQL executes this bind-mounted script as the container's postgres user.
     assert (install / "current/init-databases.sh").stat().st_mode & 0o777 == 0o755
+    deploy_calls = calls()
+    compose_file = str((install / "current/compose.release.yml").resolve())
+    assert deploy_calls[-1][deploy_calls[-1].index("-f") + 1] == compose_file
+    compose = [
+        "compose",
+        "--project-name",
+        "moss-server",
+        "--env-file",
+        str(install / ".env"),
+        "--file",
+        compose_file,
+    ]
+    assert run(script="stop.sh").returncode == 0
     result = run(script="start.sh")
     assert result.returncode == 0, result.stderr
+    assert calls()[len(deploy_calls) :] == [
+        [*compose, "down"],
+        [*compose, "up", "-d", "--no-build", "--wait", "--wait-timeout", "300"],
+    ]
     assert (install / "initial-admin.json").read_bytes() == initial
     assert (install / ".env").read_text() == config
     assert sum("init" in call for call in calls()) == 1
     assert password not in json.dumps(calls())
-    assert run(script="stop.sh").returncode == 0
-    assert calls()[-1][-1] == "down"
     assert (install / "data/.fake-users").exists()
 
 
@@ -147,12 +170,19 @@ def test_copied_directory_uses_new_project_port_and_data(shell_deployment, tmp_p
     result = run(directory=copy, script="start.sh")
     assert result.returncode == 0, result.stderr
     assert (copy / "current").resolve().is_relative_to(copy)
-    assert "18089" in result.stdout
     assert "MOSSWORK_PORT=8088" in (install / ".env").read_text()
-    assert calls()[-1][calls()[-1].index("--project-name") + 1] == "moss-server-test"
+    assert calls()[-1][:7] == [
+        "compose",
+        "--project-name",
+        "moss-server-test",
+        "--env-file",
+        str(copy / ".env"),
+        "--file",
+        str((copy / "current/compose.release.yml").resolve()),
+    ]
 
 
-def test_release_template_can_start_in_place(shell_deployment, tmp_path):
+def test_release_template_is_deployed_in_place_before_start(shell_deployment, tmp_path):
     _, run, _ = shell_deployment
     bundle = tmp_path / "bundle"
     bundle.mkdir()
@@ -168,6 +198,12 @@ def test_release_template_can_start_in_place(shell_deployment, tmp_path):
     (bundle / ".env").write_text(
         (SCRIPTS / ".env.example").read_text().replace("@@MOSSWORK_RELEASE_TAG@@", "v0.0.3")
     )
+    result = run(directory=bundle, script="start.sh")
+    assert result.returncode != 0
+    assert "Run deploy.sh first." in result.stderr
+    assert not (bundle / "data").exists()
+    result = run(directory=bundle, source=bundle)
+    assert result.returncode == 0, result.stderr
     result = run(directory=bundle, script="start.sh")
     assert result.returncode == 0, result.stderr
     assert (bundle / "data/.fake-users").exists()
