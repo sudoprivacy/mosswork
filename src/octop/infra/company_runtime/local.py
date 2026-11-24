@@ -164,6 +164,7 @@ class ReceiptMiddleware(AgentMiddleware[_ReceiptState]):
             "company_web_search",
             "send_local_file",
             "load_company_skill",
+            "company_connector_call",
         }
     )
 

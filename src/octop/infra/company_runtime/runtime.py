@@ -889,17 +889,17 @@ class EnterpriseRuntime:
             )
             if connector_tools:
                 instructions += "\nSelected external connectors and tool availability:\n"
-                for item in connector_tools:
-                    if item.get("available"):
-                        kind = str(item.get("kind") or "")
+                for connector_item in connector_tools:
+                    if connector_item.get("available"):
+                        kind = str(connector_item.get("kind") or "")
                         effect = (
                             "method-dependent"
                             if kind in {"feishu-cli", "wecom-cli"}
-                            else item.get("side_effect", "write")
+                            else connector_item.get("side_effect", "write")
                         )
-                        instructions += f"- {item['server_name']}::{item['tool_name']} ({effect}): {item.get('description', '')}\n"
+                        instructions += f"- {connector_item['server_name']}::{connector_item['tool_name']} ({effect}): {connector_item.get('description', '')}\n"
                     else:
-                        instructions += f"- {item.get('server_name')}: unavailable ({item.get('reason', 'unknown')})\n"
+                        instructions += f"- {connector_item.get('server_name')}: unavailable ({connector_item.get('reason', 'unknown')})\n"
                 instructions += "Use company_connector_call for selected connectors. External queries may send user data. Write operations require user confirmation. Feishu and WeCom category tools classify read/query methods from arguments.method at call time."
             instructions += (
                 "\nWhen the user asks to display, send or resend an existing local image "

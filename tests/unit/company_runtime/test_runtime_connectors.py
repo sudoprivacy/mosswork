@@ -1,12 +1,17 @@
 import logging
 from datetime import UTC
 from datetime import datetime as RealDateTime
+from typing import Any
 from unittest.mock import AsyncMock
 
 import pytest
+from langchain.agents.middleware.types import ModelRequest
+from langchain_core.messages import HumanMessage
+from langchain_core.tools import tool
 
 import octop.infra.company_runtime.runtime as runtime_module
 from octop.infra.company_runtime.client import CompanyServiceError
+from octop.infra.company_runtime.local import ReceiptMiddleware
 from octop.infra.company_runtime.runtime import _attach_octop_file_logging, _load_connector_tools
 
 
@@ -99,3 +104,48 @@ def test_octop_file_handler_is_idempotent_and_switches_files(tmp_path, monkeypat
     )
     assert third_handler is not second_handler
     assert third_handler.baseFilename.endswith("octop-2026-01-02.log")
+
+
+@pytest.mark.asyncio
+async def test_receipt_middleware_keeps_connector_tool_for_model():
+    middleware = ReceiptMiddleware(None, None, None)
+
+    @tool
+    async def company_connector_call(
+        server_name: str,
+        tool_name: str,
+        arguments: dict[str, Any] | None = None,
+        tool_call_id: str = "",
+    ) -> str:
+        """Call a selected company connector tool.
+
+        Read and external-query operations run directly. Operations
+        that can change external state require explicit user approval.
+        Never retry a call whose result is reported as unknown.
+        """
+        return "ok"
+
+    @tool
+    async def not_in_allowlist(query: str) -> str:
+        """A stub tool that is not granted to this task."""
+        return "x"
+
+    async def handler(request):
+        return request
+
+    request = ModelRequest(
+        model=None,
+        messages=[HumanMessage(content="hi")],
+        tools=[company_connector_call, not_in_allowlist],
+    )
+    filtered = await middleware.awrap_model_call(request, handler)
+
+    names = [item.name for item in filtered.tools]
+    assert "company_connector_call" in names
+    assert "not_in_allowlist" not in names
+
+
+def test_receipt_middleware_allows_connector_tool_execution():
+    # awrap_tool_call (local.py) rejects any call whose name is not in ALLOWED;
+    # company_connector_call must pass the same allowlist it is shown to the model.
+    assert "company_connector_call" in ReceiptMiddleware.ALLOWED
