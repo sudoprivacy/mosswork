@@ -24,6 +24,9 @@
         padding: 8px 20px;
         cursor: pointer;
       }
+      #change-server {
+        display: block;
+      }
       @media (prefers-color-scheme: dark) {
         body {
           background: #0e0e0e;
@@ -35,12 +38,14 @@
   <body>
     <div id="status" role="status">正在进入工作界面…</div>
     <button id="retry" type="button" hidden>重试</button>
+    <button id="change-server" type="button" hidden>更换服务器</button>
     <script id="mosswork-resume">
       (function () {
         // Fresh logins still use the native, origin-bound nonce handoff.
         if (location.hash !== "#resume") return;
         var status = document.getElementById("status");
         var retry = document.getElementById("retry");
+        var changeServer = document.getElementById("change-server");
         var english = localStorage.getItem("mosswork:ui-locale") === "en";
         document.title = english ? "mosswork" : "mosswork 企业版";
         document.documentElement.lang = english ? "en" : "zh-CN";
@@ -75,6 +80,9 @@
         function signIn() {
           if (!emit("show-login")) location.replace("/login");
         }
+        function changeServerAddress() {
+          if (!emit("show-login")) location.replace("/login.html?server=1");
+        }
         async function resume() {
           retry.hidden = true;
           status.textContent = english
@@ -108,12 +116,15 @@
             location.replace("/chat");
           } catch (_) {
             status.textContent = english
-              ? "The company server is temporarily unavailable. Retry when it is ready."
-              : "公司服务器暂时无法连接，恢复后点击重试。";
+              ? "The company server is temporarily unavailable. Retry when it is ready, or change the server address."
+              : "公司服务器暂时无法连接，恢复后点击重试，或更换服务器地址。";
             retry.hidden = false;
+            changeServer.textContent = english ? "Change server" : "更换服务器";
+            changeServer.hidden = false;
           }
         }
         retry.onclick = resume;
+        changeServer.onclick = changeServerAddress;
         void resume();
       })();
     </script>

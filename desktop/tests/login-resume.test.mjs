@@ -9,7 +9,7 @@ const source=html.match(/<script id="mosswork-resume">([\s\S]*?)<\/script>/)[1];
 async function fixture({token='saved-session',hash='#resume',status=200,renewed=null,error=false,bridge='wails'}={}) {
   const local=new Map(token?[['auth_token',token]]:[]),temporary=new Map();
   const events=[],navigation=[],requests=[];
-  const elements={status:{textContent:''},retry:{hidden:true,onclick:null}};
+  const elements={status:{textContent:''},retry:{hidden:true,onclick:null},'change-server':{hidden:true,onclick:null,textContent:''}};
   const timers=[];
   const window={};
   const connect=()=>{window._wails={invoke:value=>events.push(value)};};
@@ -69,6 +69,7 @@ test('a server restart preserves the session and permits retry',async()=>{
     const p=await fixture(options);
     assert.equal(p.local.get('auth_token'),'saved-session');
     assert.equal(p.elements.retry.hidden,false);
+    assert.equal(p.elements['change-server'].hidden,false);
     assert.deepEqual(p.events,['wails:event:emit:desktop:login-resumed']);
     assert.deepEqual(p.navigation,[]);
     p.recover();
@@ -77,6 +78,13 @@ test('a server restart preserves the session and permits retry',async()=>{
     assert.equal(p.local.get('auth_token'),'saved-session');
     assert.deepEqual(p.navigation,['/chat']);
   }
+});
+
+test('offline sessions can open the server address form',async()=>{
+  const p=await fixture({error:true});
+  p.elements['change-server'].onclick();
+  assert.deepEqual(p.events,['wails:event:emit:desktop:login-resumed','wails:event:emit:desktop:show-login']);
+  assert.deepEqual(p.navigation,[]);
 });
 
 test('missing sessions request sign-in and nonce handoffs remain untouched',async()=>{
