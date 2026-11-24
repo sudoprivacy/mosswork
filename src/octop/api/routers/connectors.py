@@ -6,6 +6,7 @@ import asyncio
 import json
 import logging
 import secrets
+import time
 from html import escape
 from typing import Any, Literal
 from urllib.parse import parse_qsl, urlencode, urlparse, urlsplit
@@ -54,6 +55,7 @@ from octop.infra.connectors.oauth import (
     load_oauth_ctx,
     oauth_ready_for_kind,
     save_oauth_ctx,
+    slack,
     start_oauth_for_target,
 )
 from octop.infra.connectors.oauth.registry import (
@@ -232,6 +234,8 @@ async def _begin_oauth_flow(
     state_id = new_ulid()
     base = resolve_public_base(request)
     redirect_uri = f"{base}/api/connectors/oauth/callback"
+    if target_type == "catalog" and kind == "slack" and urlsplit(redirect_uri).scheme != "https":
+        raise MossworkError(ErrorCode.CONNECTOR_OAUTH_HTTPS_REQUIRED, "Slack requires HTTPS")
     if oauth_target_requires_https(target) and _is_public_http_uri(redirect_uri):
         label = str(target.get("kind") or target.get("server_name") or "MCP")
         raise MossworkError(
@@ -250,13 +254,20 @@ async def _begin_oauth_flow(
         mcp_url = _resolve_custom_mcp_url(_connector_service(server), user.id, server_name)
 
     try:
-        authorize_url, verifier, ctx = await start_oauth_for_target(
-            target=target,
-            redirect_uri=redirect_uri,
-            state=state,
-            settings_repo=server.services.settings_repo,
-            mcp_url=mcp_url,
-        )
+        if target_type == "catalog" and kind == "slack":
+            authorize_url, verifier, ctx = _connector_service(server).start_slack(
+                str(target.get("instance_id") or ""), user.id, redirect_uri, state, state_id
+            )
+        else:
+            authorize_url, verifier, ctx = await start_oauth_for_target(
+                target=target,
+                redirect_uri=redirect_uri,
+                state=state,
+                settings_repo=server.services.settings_repo,
+                mcp_url=mcp_url,
+            )
+    except MossworkError:
+        raise
     except ValueError as exc:
         raise MossworkError(ErrorCode.CONNECTOR_INVALID_CREDENTIALS, str(exc)) from exc
     except Exception as exc:
@@ -373,6 +384,13 @@ def _credentials_preview(kind: str, creds: dict[str, Any]) -> dict[str, Any]:
     if entry is None or not creds:
         return {}
     preview: dict[str, Any] = {}
+    if kind == "slack":
+        return {
+            "client_id": creds.get("client_id"),
+            "client_secret_configured": bool(creds.get("client_secret")),
+            "scopes": creds.get("scopes", ""),
+            "oauth_configured": bool(creds.get("access_token")),
+        }
     if entry.auth_kind == "personal_token":
         if entry.kind == "tencent-weiyun":
             if str(creds.get("token") or "").strip():
@@ -476,6 +494,8 @@ def _schedule_connector_reload(
 
 
 def _can_manage_connector(inst: Any, user: Any) -> bool:
+    if inst.kind == "slack":
+        return bool(inst.user_id == user.id)
     return bool(inst.user_id == user.id or user.role == "admin")
 
 
@@ -532,14 +552,19 @@ async def get_catalog(
     """List supported connector kinds and whether OAuth is configured for each."""
     del user
     settings = server.services.settings_repo
-    return [
-        catalog_entry_to_dict(
-            e,
-            oauth_ready=oauth_ready_for_kind(e.kind, settings),
-            locale=resolve_request_locale(request),
+    entries = []
+    locale = resolve_request_locale(request)
+    for entry in list_catalog():
+        item = catalog_entry_to_dict(
+            entry, oauth_ready=oauth_ready_for_kind(entry.kind, settings), locale=locale
         )
-        for e in list_catalog()
-    ]
+        if entry.kind == "slack":
+            item.update(
+                mcp_url=entry.mcp_url,
+                redirect_uri=f"{resolve_public_base(request)}/api/connectors/oauth/callback",
+            )
+        entries.append(item)
+    return entries
 
 
 @router.get("/connectors/weknora/detect-local", summary="Detect local WeKnora")
@@ -739,10 +764,14 @@ async def create_instance(
     if repo.name_exists(user.id, display_name) or _custom_name_exists(svc, user.id, display_name):
         _raise_name_taken(display_name)
     cred_input = dict(body.credentials)
+    if body.kind == "slack" and body.shared:
+        raise MossworkError(ErrorCode.FORBIDDEN, "Slack credentials are personal")
 
     try:
-        cred_payload = await _prepare_credentials(
-            body.kind, cred_input, server.services.settings_repo
+        cred_payload = (
+            slack.configure(cred_input, {})
+            if body.kind == "slack"
+            else await _prepare_credentials(body.kind, cred_input, server.services.settings_repo)
         )
     except ValueError as exc:
         raise MossworkError(
@@ -835,6 +864,8 @@ async def patch_instance(
     if inst is None:
         raise MossworkError(ErrorCode.CONNECTOR_NOT_FOUND, f"instance {instance_id!r} not found")
     _assert_can_manage_connector(inst, user)
+    if inst.kind == "slack" and body.shared:
+        raise MossworkError(ErrorCode.FORBIDDEN, "Slack credentials are personal")
     if is_custom_mcp_kind(inst.kind):
         raise MossworkError(
             ErrorCode.CONNECTOR_KIND_UNSUPPORTED,
@@ -866,9 +897,15 @@ async def patch_instance(
         repo.update_metadata(instance_id, shared=body.shared)
     if body.credentials is not None:
         svc = _connector_service(server)
-        merged = _merge_credentials(svc.decrypt(instance_id), body.credentials, kind=inst.kind)
+        existing = svc.decrypt(instance_id)
         try:
-            prepared = await _prepare_credentials(inst.kind, merged, server.services.settings_repo)
+            if inst.kind == "slack":
+                prepared = slack.configure(body.credentials, existing)
+            else:
+                merged = _merge_credentials(existing, body.credentials, kind=inst.kind)
+                prepared = await _prepare_credentials(
+                    inst.kind, merged, server.services.settings_repo
+                )
         except ValueError as exc:
             raise MossworkError(
                 ErrorCode.CONNECTOR_INVALID_CREDENTIALS,
@@ -1320,6 +1357,8 @@ async def refresh_instance(
         raise MossworkError(ErrorCode.FORBIDDEN, "not your connector instance")
     svc = _connector_service(server)
     creds = await svc.ensure_fresh_credentials(instance_id, inst.kind)
+    if inst.kind == "slack" and not creds:
+        raise MossworkError(ErrorCode.CONNECTOR_INVALID_CREDENTIALS, "Slack authorization required")
     return {"ok": True, "expires_at": creds.get("expires_at")}
 
 
@@ -1458,20 +1497,36 @@ async def oauth_callback(
     redirect_uri = f"{base}/api/connectors/oauth/callback"
 
     try:
-        tokens = await exchange_oauth_code(
-            kind=row.kind,
-            code=code,
-            redirect_uri=redirect_uri,
-            code_verifier=row.code_verifier,
-            settings_repo=server.services.settings_repo,
-            state_id=row.state_id,
-        )
-        ctx = load_oauth_ctx(server.services.settings_repo, row.state_id)
-        if ctx.get("client_id"):
-            tokens["oauth_client_id"] = ctx["client_id"]
-        if ctx.get("client_secret"):
-            tokens["oauth_client_secret"] = ctx["client_secret"]
-        delete_oauth_ctx(server.services.settings_repo, row.state_id)
+        if row.kind == "slack":
+            ctx = load_oauth_ctx(server.services.settings_repo, row.state_id)
+            delete_oauth_ctx(server.services.settings_repo, row.state_id)
+            if time.time() - row.created_at > 600:
+                raise ValueError("expired_state")
+            await _connector_service(server).finish_slack(
+                ctx["instance_id"],
+                row.user_id,
+                ctx["redirect_uri"],
+                row.state_id,
+                code,
+                row.code_verifier,
+            )
+            _schedule_connector_reload(server, row.user_id)
+            tokens = {}
+        else:
+            tokens = await exchange_oauth_code(
+                kind=row.kind,
+                code=code,
+                redirect_uri=redirect_uri,
+                code_verifier=row.code_verifier,
+                settings_repo=server.services.settings_repo,
+                state_id=row.state_id,
+            )
+            ctx = load_oauth_ctx(server.services.settings_repo, row.state_id)
+            if ctx.get("client_id"):
+                tokens["oauth_client_id"] = ctx["client_id"]
+            if ctx.get("client_secret"):
+                tokens["oauth_client_secret"] = ctx["client_secret"]
+            delete_oauth_ctx(server.services.settings_repo, row.state_id)
     except Exception as exc:
         logger.exception("oauth callback failed for %s", row.kind)
         return _oauth_callback_html(
@@ -1486,6 +1541,8 @@ async def oauth_callback(
         "kind": row.kind,
         "tokens": tokens,
     }
+    if row.kind == "slack":
+        pending_payload["applied"] = True
     if row.kind == CUSTOM_MCP_KIND:
         server_name = str(ctx.get("server_name") or "")
         issuer = str(ctx.get("issuer") or "")
@@ -1517,6 +1574,8 @@ async def oauth_callback(
         pending_key,
         json.dumps(pending_payload),
     )
+    if row.kind == "slack":
+        return _oauth_callback_html(request, "callback_success")
     redirect = urlsplit(sanitize_redirect_after(row.redirect_after, default="/connectors"))
     query = [
         (key, value)

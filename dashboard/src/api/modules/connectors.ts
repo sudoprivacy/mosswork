@@ -28,6 +28,8 @@ export interface ConnectorCatalogEntry {
   supports_quick_auth?: boolean;
   oauth_mode?: "dynamic" | "configured" | null;
   oauth_ready?: boolean;
+  mcp_url?: string;
+  redirect_uri?: string;
   credential_fields?: ConnectorCredentialField[];
 }
 
@@ -150,7 +152,7 @@ export interface CustomMcpServerSpec {
 }
 
 export type OAuthStartTarget =
-  | { type: "catalog"; kind: string }
+  | { type: "catalog"; kind: string; instance_id?: string }
   | { type: "custom_mcp"; server_name: string };
 
 export type CustomMcpServers = Record<string, CustomMcpServerSpec>;

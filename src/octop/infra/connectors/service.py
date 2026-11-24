@@ -47,7 +47,7 @@ from octop.infra.connectors.gateway.feishu_user_auth import (
     complete_user_device_login,
     start_user_device_login,
 )
-from octop.infra.connectors.oauth import refresh_oauth_credentials
+from octop.infra.connectors.oauth import refresh_oauth_credentials, slack
 from octop.infra.connectors.oauth.registry import refresh_custom_mcp_oauth
 from octop.infra.db.repos.connectors import ConnectorRepo, ConnectorRow
 from octop.infra.db.repos.secrets import SecretRepo
@@ -62,6 +62,7 @@ _OAUTH_REFRESH_SKEW_SEC = 120
 # Shared only within one process and application repository.
 _QCC_LOCKS: WeakKeyDictionary[ConnectorRepo, dict[str, asyncio.Lock]] = WeakKeyDictionary()
 _AGENTLY_LOCKS: WeakKeyDictionary[ConnectorRepo, dict[str, asyncio.Lock]] = WeakKeyDictionary()
+_SLACK_LOCKS: WeakKeyDictionary[ConnectorRepo, dict[str, asyncio.Lock]] = WeakKeyDictionary()
 
 
 class ConnectorNameTakenError(ValueError):
@@ -149,11 +150,85 @@ class ConnectorService:
         blob = encrypt_credentials(self._secret_repo, stored)
         self._repo.upsert_credentials(instance_id=instance_id, blob=blob, expires_at=exp)
 
+    def _slack_credentials(self, instance_id: str, user_id: int) -> dict[str, Any]:
+        row = self._repo.get(instance_id)
+        if not row or row.kind != "slack" or row.user_id != user_id or row.shared:
+            raise MossworkError(ErrorCode.CONNECTOR_NOT_FOUND, "Slack instance unavailable")
+        creds = self.decrypt(instance_id)
+        if not creds.get("client_secret"):
+            raise MossworkError(ErrorCode.CONNECTOR_INVALID_CREDENTIALS, "Slack client missing")
+        return creds
+
+    def start_slack(
+        self, instance_id: str, user_id: int, redirect_uri: str, state: str, state_id: str
+    ) -> tuple[str, str, dict[str, Any]]:
+        creds = self._slack_credentials(instance_id, user_id)
+        url, verifier = slack.start(creds, redirect_uri, state)
+        self.encrypt_and_store(
+            instance_id=instance_id, payload={**creds, "pending_state": state_id}
+        )
+        return url, verifier, {"instance_id": instance_id, "redirect_uri": redirect_uri}
+
+    async def finish_slack(
+        self,
+        instance_id: str,
+        user_id: int,
+        redirect_uri: str,
+        state_id: str,
+        code: str,
+        verifier: str,
+    ) -> None:
+        creds = self._slack_credentials(instance_id, user_id)
+        if creds.get("pending_state") != state_id:
+            raise MossworkError(ErrorCode.CONNECTOR_INVALID_CREDENTIALS, "obsolete OAuth state")
+        tokens = await slack.token(
+            creds,
+            {
+                "grant_type": "authorization_code",
+                "code": code,
+                "code_verifier": verifier,
+                "redirect_uri": redirect_uri,
+            },
+        )
+        current = self._slack_credentials(instance_id, user_id)
+        if current.pop("pending_state", None) != state_id:
+            raise MossworkError(ErrorCode.CONNECTOR_INVALID_CREDENTIALS, "obsolete OAuth state")
+        self.encrypt_and_store(instance_id=instance_id, payload={**current, **tokens})
+
+    async def _fresh_slack(self, instance_id: str) -> dict[str, Any]:
+        locks = _SLACK_LOCKS.setdefault(self._repo, {})
+        async with locks.setdefault(instance_id, asyncio.Lock()):
+            creds = self.decrypt(instance_id)
+            if not creds.get("access_token"):
+                return {}
+            expires = int(creds.get("expires_at") or 0)
+            if not expires or expires > time.time() + _OAUTH_REFRESH_SKEW_SEC:
+                return creds
+            if not creds.get("refresh_token"):
+                return creds if expires > time.time() else {}
+            try:
+                tokens = await slack.token(
+                    creds, {"grant_type": "refresh_token", "refresh_token": creds["refresh_token"]}
+                )
+            except Exception:
+                return creds if expires > time.time() else {}
+            current = self.decrypt(instance_id)
+            if (
+                current.get("refresh_token") != creds["refresh_token"]
+                or current.get("access_token") != creds["access_token"]
+            ):
+                return current if current.get("access_token") else {}
+            current.update(tokens)
+            self.encrypt_and_store(instance_id=instance_id, payload=current)
+            return current
+
     async def ensure_fresh_credentials(
         self,
         instance_id: str,
         kind: str,
     ) -> dict[str, Any]:
+        if kind == "slack":
+            return await self._fresh_slack(instance_id)
         if kind == "qcc":
             return await self._fresh_qcc(instance_id)
         creds = self.decrypt(instance_id)

@@ -5961,6 +5961,24 @@
     }
   },
   "connectors": {
+    "slack": {
+      "guide": {
+        "title": "Slack 连接器配置指南",
+        "apps": "打开 Slack 应用管理页",
+        "credentials": "选择工作区允许的内部应用，或选择 Create New App → From scratch，在目标工作区创建应用。在 Basic Information → App Credentials 复制 Client ID 和 Client Secret，填入下方同名字段。",
+        "redirect": "通过授权浏览器可访问的 HTTPS 地址打开 mosswork。复制下方完整的「OAuth 回调地址」，在 Slack 的 OAuth & Permissions → Redirect URLs 中点击 Add New Redirect URL，粘贴地址并保存。",
+        "scopes": "在 OAuth & Permissions → Scopes → User Token Scopes 中点击 Add an OAuth Scope，按需添加权限，在下方 OAuth scopes 填入相同值。例如，查找表情用 emoji:read，搜索公开频道消息用 search:read.public。",
+        "authorize": "点击「保存」，再点「前往授权」，在 Slack 确认工作区和权限。回到本页，看到「已连接 Slack」后点击「探测」查看可用工具数量。修改权限后请保存并重新授权。",
+        "reference": "查看 Slack 官方工具与权限对照表"
+      },
+      "scopeHint": "至少填一个 User Token Scope，输入后按回车确认。若 Slack 提示 No scopes requested，请核对两处权限并保存后重新授权。",
+      "callback": "OAuth 回调地址",
+      "register": "若 Slack 提示 redirect_uri did not match，请核对已登记的 HTTPS 地址，包括域名、端口和路径。",
+      "https": "请通过 HTTPS 打开 mosswork，再授权 Slack。",
+      "connected": "已连接 Slack",
+      "pending": "等待 Slack 授权",
+      "reauthorize": "重新授权"
+    },
     "tabMine": "我的连接",
     "loadFailed": "加载连接器失败",
     "tabCatalog": "服务目录",

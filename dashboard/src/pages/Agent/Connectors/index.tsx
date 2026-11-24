@@ -44,6 +44,7 @@ import {
   type FeishuUserAuthStartResult,
 } from "../../../api/modules/connectors";
 import { ConnectorCard } from "./ConnectorCard";
+import { SlackDrawer } from "./SlackDrawer";
 import { AgentlyAuth } from "./AgentlyAuth";
 import { ConnectorInstanceCard } from "./ConnectorInstanceCard";
 import { CustomMcpTab } from "./CustomMcpTab";
@@ -2465,16 +2466,29 @@ export default function ConnectorsPage() {
         </>
       )}
 
-      <ConnectorConfigDrawer
-        open={drawerEntry !== null}
-        entry={drawerEntry}
-        instance={drawerInstance}
-        onClose={handleCloseDrawer}
-        onSaved={(created) => {
-          if (created) setDrawerInstance(created);
-          void handleSaved();
-        }}
-      />
+      {drawerEntry?.kind === "slack" ? (
+        <SlackDrawer
+          key={drawerInstance?.instance_id ?? "new"}
+          entry={drawerEntry}
+          instance={drawerInstance}
+          onClose={handleCloseDrawer}
+          onSaved={(saved) => {
+            setDrawerInstance(saved);
+            void handleSaved();
+          }}
+        />
+      ) : (
+        <ConnectorConfigDrawer
+          open={drawerEntry !== null}
+          entry={drawerEntry}
+          instance={drawerInstance}
+          onClose={handleCloseDrawer}
+          onSaved={(created) => {
+            if (created) setDrawerInstance(created);
+            void handleSaved();
+          }}
+        />
+      )}
     </PageShell.Tabbed>
   );
 }
