@@ -116,6 +116,32 @@ async def _load_connector_tools(
     return [item for item in result if isinstance(item, dict)] if isinstance(result, list) else []
 
 
+def _resolve_connector_descriptor(
+    connector_index: dict[tuple[str, str], dict[str, Any]],
+    server_name: str,
+    tool_name: str,
+) -> tuple[str, str, dict[str, Any]] | None:
+    """Resolve a connector call target, accepting merged ``server::tool`` names.
+
+    Instructions list connectors as ``server_name::tool_name``; models
+    sometimes pass the combined token as server_name. Exact match wins;
+    the merged form is only consulted when the exact key is absent.
+    Server names cannot contain ``::`` (enforced at creation), so the
+    split is unambiguous.
+    """
+    descriptor = connector_index.get((server_name, tool_name))
+    if descriptor is not None:
+        return server_name, tool_name, descriptor
+    if "::" in server_name:
+        head, _, tail = server_name.partition("::")
+        for candidate in (tool_name, tail):
+            if candidate:
+                merged = connector_index.get((head, candidate))
+                if merged is not None:
+                    return head, candidate, merged
+    return None
+
+
 class CompanyModelFactory(ChatModelFactory):
     def __init__(
         self,
@@ -826,15 +852,21 @@ class EnterpriseRuntime:
                 ) -> str:
                     """Call a selected company connector tool.
 
+                    server_name and tool_name must be the separate values shown
+                    in the connector listing; never pass the combined
+                    ``server::tool`` token.
                     Read and external-query operations run directly. Operations
                     that can change external state require explicit user approval.
                     Never retry a call whose result is reported as unknown.
                     """
                     call_id = tool_call_id.strip() or f"local-{secrets.token_hex(16)}"
                     args = arguments or {}
-                    descriptor = connector_index.get((server_name, tool_name))
-                    if descriptor is None:
+                    resolved = _resolve_connector_descriptor(
+                        connector_index, server_name, tool_name
+                    )
+                    if resolved is None:
                         raise ToolException("connector_tool_unavailable")
+                    server_name, tool_name, descriptor = resolved
                     kind = str(descriptor.get("kind") or "")
                     effect = side_effect_for(kind, tool_name, descriptor, args).level
                     adapter_confirmation = adapter_manages_confirmation(kind, tool_name)
@@ -897,7 +929,11 @@ class EnterpriseRuntime:
                             if kind in {"feishu-cli", "wecom-cli"}
                             else connector_item.get("side_effect", "write")
                         )
-                        instructions += f"- {connector_item['server_name']}::{connector_item['tool_name']} ({effect}): {connector_item.get('description', '')}\n"
+                        instructions += (
+                            f"- server_name={connector_item['server_name']} "
+                            f"tool_name={connector_item['tool_name']} "
+                            f"({effect}): {connector_item.get('description', '')}\n"
+                        )
                     else:
                         instructions += f"- {connector_item.get('server_name')}: unavailable ({connector_item.get('reason', 'unknown')})\n"
                 instructions += "Use company_connector_call for selected connectors. External queries may send user data. Write operations require user confirmation. Feishu and WeCom category tools classify read/query methods from arguments.method at call time."

@@ -12,7 +12,11 @@ from langchain_core.tools import tool
 import octop.infra.company_runtime.runtime as runtime_module
 from octop.infra.company_runtime.client import CompanyServiceError
 from octop.infra.company_runtime.local import ReceiptMiddleware
-from octop.infra.company_runtime.runtime import _attach_octop_file_logging, _load_connector_tools
+from octop.infra.company_runtime.runtime import (
+    _attach_octop_file_logging,
+    _load_connector_tools,
+    _resolve_connector_descriptor,
+)
 
 
 @pytest.fixture(autouse=True)
@@ -149,3 +153,60 @@ def test_receipt_middleware_allows_connector_tool_execution():
     # awrap_tool_call (local.py) rejects any call whose name is not in ALLOWED;
     # company_connector_call must pass the same allowlist it is shown to the model.
     assert "company_connector_call" in ReceiptMiddleware.ALLOWED
+
+
+def _feishu_index() -> dict[tuple[str, str], dict[str, Any]]:
+    return {
+        ("feishu-cli__x", tool): {"server_name": "feishu-cli__x", "tool_name": tool}
+        for tool in ("doc", "base", "calendar", "im", "help")
+    }
+
+
+def test_resolve_connector_descriptor_exact_match_returns_target():
+    index = _feishu_index()
+    assert _resolve_connector_descriptor(index, "feishu-cli__x", "doc") == (
+        "feishu-cli__x",
+        "doc",
+        index[("feishu-cli__x", "doc")],
+    )
+
+
+def test_resolve_connector_descriptor_accepts_merged_doc_name():
+    # Observed in task 9528f2b7/36b9ef9c: the model passed the combined
+    # "server::tool" listing token as server_name.
+    assert _resolve_connector_descriptor(_feishu_index(), "feishu-cli__x::doc", "doc") == (
+        "feishu-cli__x",
+        "doc",
+        {"server_name": "feishu-cli__x", "tool_name": "doc"},
+    )
+
+
+def test_resolve_connector_descriptor_accepts_merged_help_name():
+    assert _resolve_connector_descriptor(_feishu_index(), "feishu-cli__x::help", "help") == (
+        "feishu-cli__x",
+        "help",
+        {"server_name": "feishu-cli__x", "tool_name": "help"},
+    )
+
+
+def test_resolve_connector_descriptor_falls_back_to_merged_tail_when_tool_empty():
+    assert _resolve_connector_descriptor(_feishu_index(), "feishu-cli__x::doc", "") == (
+        "feishu-cli__x",
+        "doc",
+        {"server_name": "feishu-cli__x", "tool_name": "doc"},
+    )
+
+
+def test_resolve_connector_descriptor_prefers_explicit_tool_over_merged_tail():
+    resolved = _resolve_connector_descriptor(_feishu_index(), "feishu-cli__x::doc", "base")
+    assert resolved is not None
+    assert resolved[:2] == ("feishu-cli__x", "base")
+
+
+def test_resolve_connector_descriptor_returns_none_for_unknown_server():
+    index = {("other-srv", "doc"): {"server_name": "other-srv", "tool_name": "doc"}}
+    assert _resolve_connector_descriptor(index, "feishu-cli__x::doc", "base") is None
+
+
+def test_resolve_connector_descriptor_returns_none_without_separator():
+    assert _resolve_connector_descriptor(_feishu_index(), "feishu-cli__x", "nope") is None
