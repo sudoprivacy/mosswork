@@ -13,7 +13,7 @@ COPY docker/enterprise/verify_runtime.py /usr/local/libexec/mosswork/verify_runt
 USER 1000:1000
 RUN --network=none node --version && npm --version \
     && lark-cli --help > /dev/null \
-    && wecom-cli --help > /dev/null \
+    && wecom-cli --version \
     && agently-cli --help > /dev/null
 # Verify the actual non-root browser launch as well as embedding imports, offline.
 RUN --network=none python /usr/local/libexec/mosswork/verify_runtime.py

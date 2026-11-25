@@ -107,7 +107,7 @@ RUN --mount=type=cache,target=/root/.npm,sharing=locked \
         --registry="${NPM_REGISTRY:-https://registry.npmjs.org/}" --no-audit --no-fund \
         @larksuite/cli@1.0.100 @wecom/cli@1.3.4 @tencent-qqmail/agently-cli@1.0.18 \
     && lark-cli --help > /dev/null \
-    && wecom-cli --help > /dev/null \
+    && wecom-cli --version \
     && agently-cli --help > /dev/null
 
 COPY --from=ghcr.io/astral-sh/uv:0.7 /uv /uvx /bin/
