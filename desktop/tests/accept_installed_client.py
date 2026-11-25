@@ -8,14 +8,11 @@ import os
 import platform
 import plistlib
 import re
-import socket
 import subprocess
 import time
 from collections.abc import Callable, Iterator
 from contextlib import contextmanager
 from pathlib import Path
-from urllib.error import URLError
-from urllib.request import urlopen
 
 from desktop.macos_distribution import digest, mounted_dmg, one_app, write_receipt
 
@@ -65,59 +62,37 @@ def client(binary: Path, env: dict[str, str], log: Path) -> Iterator[subprocess.
 def windows(
     installer: Path, target: Path, env: dict[str, str], evidence: Path, sums: dict[str, str]
 ) -> dict[str, object]:
-    from playwright.sync_api import expect, sync_playwright
-
     run(installer, "/S", f"/D={target}", timeout=300)
     binary = target / "mosswork.exe"
     update = installer.with_name(f"{installer.stem}-update.exe")
     installed_digest = digest(binary)
     if installed_digest != sums[update.name]:
         raise ValueError("Installed executable differs from the published update executable")
-    with socket.socket() as sock:
-        sock.bind(("127.0.0.1", 0))
-        port = sock.getsockname()[1]
-    endpoint = f"http://127.0.0.1:{port}"
-    env["WEBVIEW2_USER_DATA_FOLDER"] = str(target.parent / "webview2-profile")
-    env["WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS"] = f"--remote-debugging-port={port}"
-    env["NO_PROXY"] = "127.0.0.1,localhost"
-
-    def browser_version() -> str:
-        try:
-            with urlopen(f"{endpoint}/json/version", timeout=1) as response:
-                return str(json.load(response)["Browser"])
-        except (URLError, TimeoutError):
-            return ""
-
-    with client(binary, env, evidence / "client.log") as process, sync_playwright() as pw:
-        version = wait_for(process, browser_version, "WebView2 CDP endpoint")
-        browser = pw.chromium.connect_over_cdp(endpoint, timeout=15_000)
-        page = wait_for(
-            process,
-            lambda: next(
-                (
-                    page
-                    for context in browser.contexts
-                    for page in context.pages
-                    if "/login.html" in page.url
-                ),
-                None,
-            ),
-            "bundled employee login page",
-        )
-        assert page is not None
-        expect(page.locator(".login-card")).to_have_attribute("aria-busy", "false")
-        page.get_by_role("button", name="English", exact=True).click()
-        expect(page.get_by_role("heading", name="Employee sign in")).to_be_visible()
+    app_data = target.parent / "app-data"
+    app_data.mkdir()
+    env["APPDATA"] = str(app_data)
+    driver = Path(__file__).with_name("accept_installed_windows_ui.ps1")
+    command = (
+        "powershell.exe",
+        "-NoProfile",
+        "-NonInteractive",
+        "-STA",
+        "-ExecutionPolicy",
+        "Bypass",
+        "-File",
+        driver,
+    )
+    with client(binary, env, evidence / "client-first-launch.log") as process:
+        run(*command, "-ClientPid", str(process.pid), "-SwitchToEnglish", timeout=120)
         settings = Path(env["MOSSWORK_HOME"]) / "desktop-settings.json"
         assert json.loads(settings.read_text(encoding="utf-8"))["locale"] == "en"
-        page.reload()
-        expect(page.get_by_role("heading", name="Employee sign in")).to_be_visible()
-        page.screenshot(path=evidence / "employee-login.png")
-        assert Path(env["WEBVIEW2_USER_DATA_FOLDER"]).is_dir()
+        assert (app_data / binary.name).is_dir()
+    with client(binary, env, evidence / "client-relaunch.log") as process:
+        run(*command, "-ClientPid", str(process.pid), timeout=66)
     return {
         "installed_executable_sha256": installed_digest,
-        "webview2_browser": version,
-        "locale_round_trip_and_reload": True,
+        "windows_ui_automation_login_heading": "Employee sign in",
+        "locale_persisted_after_relaunch": True,
     }
 
 

@@ -106,12 +106,7 @@ jobs:
         env:
           RELEASE_TAG: ${{ inputs.release_tag }}
         run: |
-          if [ "$RUNNER_OS" = Windows ]; then
-            mode=(--locked)
-          else
-            mode=(--no-project)
-          fi
-          uv run "${mode[@]}" python -m desktop.tests.accept_installed_client \
+          uv run --no-project python -m desktop.tests.accept_installed_client \
             --version "${RELEASE_TAG#v}" --release-dir "$RUNNER_TEMP/mosswork-release" \
             --output "$RUNNER_TEMP/mosswork-installed-client"
       - uses: actions/upload-artifact@v4
