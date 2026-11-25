@@ -31,6 +31,7 @@ async def test_catalog(env):
     kinds = {e["kind"] for e in r.json()}
     assert "tencent-docs" in kinds
     assert "notion" in kinds
+    assert "slack" in kinds
     assert "figma" not in kinds
     assert "baidu-netdisk" not in kinds
     for kind in (

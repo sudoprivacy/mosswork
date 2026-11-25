@@ -55,15 +55,92 @@ it("subscribes before start, filters other threads, and waits for native complet
   expect(events).toHaveBeenCalledTimes(2);
   expect(listener).toBeUndefined();
 });
+it("retries classified pre-task preparation failures with bounded backoff", async () => {
+  vi.useFakeTimers();
+  try {
+    const events = vi.fn();
+    const preparationError = Object.assign(new Error("preparing"), {
+      stage: "runtime_preparing",
+      retryable: true,
+    });
+    vi.mocked(bridge.start)
+      .mockRejectedValueOnce(preparationError)
+      .mockRejectedValueOnce(preparationError)
+      .mockImplementationOnce(async () => {
+        listener?.({ event: "done", thread_id: "thread", status: "completed" });
+        return { task_id: "task" };
+      });
+
+    const pending = runLocalTurn(params, events, new AbortController().signal);
+    await Promise.resolve();
+    await vi.advanceTimersByTimeAsync(500);
+    await vi.advanceTimersByTimeAsync(1_500);
+    await expect(pending).resolves.toBeUndefined();
+
+    expect(bridge.start).toHaveBeenCalledTimes(3);
+    expect(events).toHaveBeenCalledWith(
+      expect.objectContaining({ event: "done", status: "completed" }),
+    );
+  } finally {
+    vi.useRealTimers();
+  }
+});
+
+it("stops after three total preparation attempts", async () => {
+  vi.useFakeTimers();
+  try {
+    const preparationError = Object.assign(new Error("preparing"), {
+      stage: "runtime_preparing",
+      retryable: true,
+    });
+    vi.mocked(bridge.start).mockRejectedValue(preparationError);
+
+    const pending = runLocalTurn(params, vi.fn(), new AbortController().signal);
+    const rejected = expect(pending).rejects.toThrow("preparing");
+    await Promise.resolve();
+    await vi.advanceTimersByTimeAsync(500);
+    await vi.advanceTimersByTimeAsync(1_500);
+    await rejected;
+
+    expect(bridge.start).toHaveBeenCalledTimes(3);
+  } finally {
+    vi.useRealTimers();
+  }
+});
+
+it("does not retry when cancellation arrives during preparation backoff", async () => {
+  vi.useFakeTimers();
+  try {
+    const controller = new AbortController();
+    const preparationError = Object.assign(new Error("preparing"), {
+      stage: "runtime_preparing",
+      retryable: true,
+    });
+    vi.mocked(bridge.start).mockRejectedValueOnce(preparationError);
+
+    const pending = runLocalTurn(params, vi.fn(), controller.signal);
+    await Promise.resolve();
+    controller.abort();
+    await expect(pending).resolves.toBeUndefined();
+
+    expect(bridge.start).toHaveBeenCalledOnce();
+    expect(bridge.cancel).toHaveBeenCalledWith({ thread_id: "thread" });
+  } finally {
+    vi.useRealTimers();
+  }
+});
+
 it("does not replay or fall back when the worker exits or start fails", async () => {
   const pending = runLocalTurn(params, vi.fn(), new AbortController().signal);
   listener?.({ event: "runtime_exit", error: "结果未知" });
   await expect(pending).rejects.toThrow("结果未知");
   expect(bridge.start).toHaveBeenCalledOnce();
+  vi.mocked(bridge.start).mockClear();
   vi.mocked(bridge.start).mockRejectedValueOnce(new Error("旧会话只读"));
   await expect(
     runLocalTurn(params, vi.fn(), new AbortController().signal),
   ).rejects.toThrow("旧会话只读");
+  expect(bridge.start).toHaveBeenCalledOnce();
 });
 it("cancel requests remain pending until the native task terminates", async () => {
   const controller = new AbortController();

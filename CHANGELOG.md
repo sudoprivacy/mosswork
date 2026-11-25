@@ -6,6 +6,19 @@
 
 ## [Unreleased]
 
+## [0.0.9] - 2026-11-25
+
+### Added
+
+- Start a cloud task in the desktop client and reopen the same conversation in a browser to follow progress, retrieve results and continue chatting.
+- Restore retained employee conversations and completed turns after signing back in.
+- Connect Slack through remote MCP. Server images include connector command-line tools.
+
+### Fixed
+
+- Recover the desktop tool cache and retry runtime preparation before submitting a local task.
+- Display chat artifacts as file cards and allow the user to change servers after desktop session recovery fails.
+
 ### Added
 
 - The Apple Silicon release workflow can sign the bundled SudoCode bootstrap and verify the installer downloaded through the existing SudoWork website button.

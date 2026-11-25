@@ -889,6 +889,20 @@ class ExecutionRepo:
             ).fetchone()
             return dict(row) if row else None
 
+    def chat_candidates(self, agent: str, thread: str, before: str | None) -> list[dict[str, Any]]:
+        """Read a bounded page of original requests; their actors still need checking."""
+        with self.db.connect() as conn:
+            query = (
+                "SELECT run_id, request_json FROM execution_runs "
+                "WHERE operation='chat' AND agent_id=? AND thread_id=?"
+            )
+            args = [agent, thread]
+            if before is not None:
+                query += " AND run_id<?"
+                args.append(before)
+            rows = conn.execute(query + " ORDER BY run_id DESC LIMIT 24", args).fetchall()
+            return [dict(row) for row in rows]
+
     def by_request(self, *, user: int, operation: str, key: str) -> dict[str, Any] | None:
         with self.db.connect() as conn:
             row = conn.execute(

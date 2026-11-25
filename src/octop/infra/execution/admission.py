@@ -178,6 +178,25 @@ class CanonicalRunAdmissions:
         self._check_actor(current, principal)
         return current
 
+    async def chat_page(
+        self, principal: CanonicalAuthenticatedRequest, agent: str, thread: str, before: str | None
+    ) -> tuple[list[str], str | None]:
+        """Page this employee's dashboard turns, including turns on delegated resources."""
+        actor = _actor(_principal(principal))
+        found: list[str] = []
+        while True:
+            await principal.revalidate()
+            rows = await asyncio.to_thread(self.repo.chat_candidates, agent, thread, before)
+            for row in rows:
+                payload = json.loads(row["request_json"])
+                if payload.get("canonical_actor") == actor and payload.get("mode") == "harness":
+                    if len(found) == 12:
+                        return found[::-1], found[-1]
+                    found.append(row["run_id"])
+            if not rows:
+                return found[::-1], None
+            before = rows[-1]["run_id"]
+
     async def reauthenticate_human(
         self,
         run_id: str,

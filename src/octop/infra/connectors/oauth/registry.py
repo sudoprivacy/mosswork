@@ -72,6 +72,8 @@ def oauth_ready_for_kind(kind: str, settings_repo: Any) -> bool:
 
 
 def oauth_mode_for_kind(kind: str) -> str | None:
+    if kind == "slack":
+        return "configured"
     if get_mcp_oauth_remote(kind) is not None:
         return "dynamic"
     return None

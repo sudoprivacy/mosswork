@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import re
 import secrets
+import time
 from typing import Any
 from urllib.parse import quote, urlsplit, urlunsplit
 
@@ -499,6 +500,10 @@ def _iter_active_connectors(
         creds = svc.decrypt(inst.instance_id)
         if not creds:
             continue
+        if inst.kind == "slack":
+            expires = creds.get("expires_at")
+            if not creds.get("access_token") or (expires and expires <= time.time()):
+                continue
         yield inst, entry, creds
 
 

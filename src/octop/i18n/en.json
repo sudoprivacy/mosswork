@@ -330,6 +330,7 @@
     }
   },
   "connector": {
+    "slack": {"description": "Search your Slack workspace and use authorized tools"},
     "oauth": {
       "callback_auth_failed": "Authorization failed: {error}",
       "callback_missing_params": "Missing authorization code or state.",

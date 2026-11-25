@@ -365,6 +365,55 @@ class ExecutionService:
             if not events:
                 await asyncio.sleep(0.1)
 
+    async def chat_history(
+        self, principal: CanonicalAuthenticatedRequest, agent: str, thread: str, before: str | None
+    ) -> AsyncIterator[dict[str, Any]]:
+        """Project visible dashboard text through the stored event watermark without waiting on a run."""
+        admissions = self.human_admissions
+        if admissions is None:
+            raise ExecutionConflict("current_human_admission_required")
+        ids, older = await admissions.chat_page(principal, agent, thread, before)
+        for run_id in ids:
+            run = await admissions.original_actor(run_id, principal)
+            if run["agent_id"] != agent or run["thread_id"] != thread:
+                raise ExecutionConflict("original_request_selection_changed")
+            request = json.loads(run["request_json"])["request"]
+            yield {
+                "type": "history_turn",
+                "execution_id": run_id,
+                "thread_id": thread,
+                "question": request.get("text") or "",
+                "state": run["state"],
+                "event_seq": run["event_seq"],
+            }
+            after = 0
+            while after < run["event_seq"]:
+                events = await self.io.run(
+                    self.repo.events, run_id, user=run["user_id"], after=after
+                )
+                if not events:
+                    raise ExecutionConflict("original_chat_events_unavailable")
+                await admissions.original_actor(run_id, principal)
+                for event in events:
+                    if after == run["event_seq"]:
+                        break
+                    if event["seq"] != after + 1:
+                        raise ExecutionConflict("original_chat_events_unavailable")
+                    after = event["seq"]
+                    content = "".join(
+                        frame["content"]
+                        for frame in public_frames(event, run=run_id, thread=thread)
+                        if frame.get("type") == "token" and isinstance(frame.get("content"), str)
+                    )
+                    if content:
+                        yield {
+                            "type": "history_text",
+                            "thread_id": thread,
+                            "execution_id": run_id,
+                            "content": content,
+                        }
+        yield {"type": "history_end", "thread_id": thread, "before": older}
+
     async def close(self, *, grace: float = 10) -> None:
         self._accepting = False
         with suppress(Exception):

@@ -25,6 +25,13 @@ const runtimeEventPrefix = "desktop:runtime:"
 
 var errRuntimeLaunch = errors.New("runtime_launch_failed")
 
+// runtimePreparationError proves the task start RPC has not been written to the
+// local process, so the dashboard may safely retry the same task identity.
+type runtimePreparationError struct{ cause error }
+
+func (e *runtimePreparationError) Error() string { return e.cause.Error() }
+func (e *runtimePreparationError) Unwrap() error { return e.cause }
+
 func companyStateDir(base string, owner int64) string {
 	sum := sha256.Sum256([]byte(fmt.Sprintf("%s\x00%d", base, owner)))
 	return filepath.Join(mossworkHome(), "company-runtime", "accounts", hex.EncodeToString(sum[:]))
@@ -84,12 +91,12 @@ func (a *App) dispatchRuntimeEvent(name string) {
 		}
 		payload := map[string]any{"id": id, "result": result}
 		if err != nil {
-			code := runtimeErrorCode(err.Error())
+			code, stage, retryable, action := runtimeErrorMetadata(err)
 			payload["error"] = runtimeErrorText(code)
 			payload["error_code"] = code
-			payload["stage"] = runtimeErrorStage(code)
-			payload["retryable"] = runtimeErrorRetryable(code)
-			if action := runtimeErrorAction(code); action != "" {
+			payload["stage"] = stage
+			payload["retryable"] = retryable
+			if action != "" {
 				payload["action"] = action
 			}
 		}
@@ -227,6 +234,16 @@ func runtimeErrorCode(value string) string {
 	return "local_runtime_error"
 }
 
+func runtimeErrorMetadata(err error) (code, stage string, retryable bool, action string) {
+	code = runtimeErrorCode(err.Error())
+	stage, retryable, action = runtimeErrorStage(code), runtimeErrorRetryable(code), runtimeErrorAction(code)
+	var preparationErr *runtimePreparationError
+	if errors.As(err, &preparationErr) {
+		stage, retryable, action = "runtime_preparing", true, ""
+	}
+	return code, stage, retryable, action
+}
+
 func runtimeErrorStage(code string) string {
 	switch {
 	case strings.HasPrefix(code, "device_"), code == "heartbeat_timeout":
@@ -323,7 +340,7 @@ func (a *App) startRuntimeProcess(nonce, base, workspace string, epoch uint64, i
 	a.emitRuntimeProgress(nonce, base, epoch, "tools")
 	root, err := prepare()
 	if err != nil {
-		return nil, err
+		return nil, &runtimePreparationError{cause: err}
 	}
 	stateDir := companyStateDir(base, identity.OwnerUserID)
 	if err = os.MkdirAll(stateDir, 0700); err != nil {
@@ -366,7 +383,7 @@ func (a *App) startRuntimeProcess(nonce, base, workspace string, epoch uint64, i
 		close(events)
 		a.companyMu.Unlock()
 		readyCompanyPortable.invalidate(root)
-		return nil, errRuntimeLaunch
+		return nil, &runtimePreparationError{cause: errRuntimeLaunch}
 	}
 	a.companyRuntime = process
 	a.companyMu.Unlock()
@@ -393,16 +410,16 @@ func (a *App) startRuntimeProcess(nonce, base, workspace string, epoch uint64, i
 	a.companyMu.Unlock()
 	process.Close()
 	if err != nil && !errors.Is(err, companyruntime.ErrDisconnected) {
-		return nil, err
+		return nil, &runtimePreparationError{cause: err}
 	}
 	readyCompanyPortable.invalidate(root)
 	// Wait for the child to release the tool files before repair, particularly
 	// on Windows where a running executable cannot be replaced.
 	select {
 	case <-process.Done():
-		return nil, errRuntimeLaunch
+		return nil, &runtimePreparationError{cause: errRuntimeLaunch}
 	case <-time.After(3 * time.Second):
-		return nil, companyruntime.ErrDisconnected
+		return nil, &runtimePreparationError{cause: companyruntime.ErrDisconnected}
 	}
 }
 

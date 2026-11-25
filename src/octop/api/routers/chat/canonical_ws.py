@@ -121,6 +121,24 @@ async def canonical_chat_ws(websocket: WebSocket, agent_id: str) -> None:
                 if kind == "ping":
                     await websocket.send_json({"type": "pong"})
                     continue
+                if kind == "history":
+                    thread = payload.get("thread_id")
+                    before = payload.get("before")
+                    if (
+                        not isinstance(thread, str)
+                        or not thread
+                        or (
+                            before is not None
+                            and (not isinstance(before, str) or len(before) != 26)
+                        )
+                    ):
+                        raise ValueError
+                    await current(thread, "observe")
+                    async for history_frame in service.chat_history(
+                        principal, agent_id, thread, before
+                    ):
+                        await send(history_frame, thread)
+                    continue
                 if kind in {"subscribe", "cancel"}:
                     run_id = payload.get("execution_id")
                     thread = payload.get("thread_id")
