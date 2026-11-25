@@ -1927,7 +1927,7 @@ function ChatPageInner() {
                 deviceInitializing ||
                 Boolean(device && (!device.device_id || !device.grant_id))
               }
-              localRuntime={composerSession?.executionLocation !== "server"}
+              localRuntime={composerSession?.executionLocation === "desktop"}
               initialText={prefillInputRef.current}
               onComposerCleared={() => {
                 prefillInputRef.current = "";
