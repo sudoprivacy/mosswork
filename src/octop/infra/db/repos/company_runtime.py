@@ -140,6 +140,8 @@ class CompanyRuntimeRepo:
             if binding and binding["installation_hash"] != installation_hash:
                 raise RuntimeConflict("project_on_another_device")
             if not binding:
+                if thread["execution_mode_locked"] and thread["execution_mode"] == "server":
+                    raise RuntimeConflict("execution_mode_server")
                 if not _thread_is_empty_for_local_claim(conn, thread_id, thread["last_active"]):
                     if conn.execute(
                         "SELECT 1 FROM sessions WHERE thread_id=?", (thread_id,)
@@ -149,6 +151,10 @@ class CompanyRuntimeRepo:
                 conn.execute(
                     "INSERT INTO company_runtime_threads VALUES(?,?,?,?,?,?,?)",
                     (thread_id, owner, agent_id, device_id, thread_id, installation_hash, now),
+                )
+                conn.execute(
+                    "UPDATE threads SET execution_mode='local',execution_mode_locked=1 WHERE thread_id=?",
+                    (thread_id,),
                 )
             active = conn.execute(
                 "SELECT task_id FROM company_runtime_tasks WHERE thread_id=? AND status IN ('running','cancel_requested','unknown')",
@@ -558,10 +564,15 @@ class CompanyRuntimeRepo:
     def thread_state(self, thread_id: str) -> dict[str, Any]:
         with self.db.connect() as conn:
             binding = conn.execute(
-                "SELECT device_id FROM company_runtime_threads WHERE thread_id=?", (thread_id,)
+                "SELECT t.execution_mode,t.execution_mode_locked,d.device_id FROM threads t "
+                "LEFT JOIN company_runtime_threads d ON d.thread_id=t.thread_id WHERE t.thread_id=?",
+                (thread_id,),
             ).fetchone()
-            if not binding:
-                return {"execution_location": "server"}
+            if not binding or (binding["execution_mode"] == "server" and not binding["device_id"]):
+                return {
+                    "execution_location": "server",
+                    "cloud_task": bool(binding and binding["execution_mode_locked"]),
+                }
             task = conn.execute(
                 "SELECT task_id,status FROM company_runtime_tasks WHERE thread_id=? ORDER BY id DESC LIMIT 1",
                 (thread_id,),

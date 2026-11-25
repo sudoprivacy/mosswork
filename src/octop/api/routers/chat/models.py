@@ -180,6 +180,12 @@ class PolishBody(BaseModel):
     default_model: str | None = None
 
 
+class CreateServerThreadBody(BaseModel):
+    execution_mode: Literal["server"] = Field(
+        description="Reserve this conversation for execution on the server."
+    )
+
+
 class CancelThreadResponse(BaseModel):
     thread_id: str = Field(description="Thread targeted by the cancellation request.")
     requested: bool = Field(

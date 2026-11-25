@@ -11,7 +11,6 @@ import {
   PinOff,
   GitFork,
   ChevronRight,
-  MessageSquarePlus,
 } from "lucide-react";
 import type { MossworkAgent } from "../../../context/AgentContext";
 import { ExpertIcon } from "../../Experts/components/iconForName";
@@ -32,6 +31,7 @@ import {
 import SharedExpertHint from "./SharedExpertHint";
 import RemoteExpertHint from "./RemoteExpertHint";
 import SessionWorkStatusIcon from "./SessionWorkStatusIcon";
+import NewTaskButton from "./NewTaskButton";
 import TeamChatBadge from "./TeamChatBadge";
 import styles from "../index.module.less";
 
@@ -72,6 +72,7 @@ interface MinimalAgentSessionNavProps {
   onAgentSelect: (agentId: string) => void;
   /** Start a fresh (unsaved) chat with the given expert. */
   onNewChat: (agentId: string) => void;
+  onNewCloudTask?: (agentId: string) => void;
   onDeleteActive: (id: string) => Promise<boolean>;
   onRenameActive: (id: string, name: string) => void;
   onPinActive: (id: string, pinned: boolean) => void;
@@ -272,6 +273,7 @@ export default function MinimalAgentSessionNav({
   onSelect,
   onAgentSelect,
   onNewChat,
+  onNewCloudTask,
   onDeleteActive,
   onRenameActive,
   onPinActive,
@@ -569,16 +571,14 @@ export default function MinimalAgentSessionNav({
                 </span>
                 <AgentUnreadBadge count={agent.unread_count ?? 0} />
               </button>
-              <button
-                type="button"
+              <NewTaskButton
                 className={styles.minimalAgentNewChatBtn}
                 disabled={agent.history_only}
-                aria-label={t("chatWelcome.newChat")}
-                title={t("chatWelcome.newChat")}
-                onClick={() => onNewChat(agent.agent_id)}
-              >
-                <MessageSquarePlus size={14} strokeWidth={1.75} aria-hidden />
-              </button>
+                onNewChat={() => onNewChat(agent.agent_id)}
+                onNewCloudTask={
+                  onNewCloudTask && (() => onNewCloudTask(agent.agent_id))
+                }
+              />
             </div>
 
             {expanded ? (

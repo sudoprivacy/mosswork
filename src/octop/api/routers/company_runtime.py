@@ -520,6 +520,7 @@ async def create_thread(body: CreateThread, svc: CompanyRuntimeService = Depends
         session_key=session_key,
         title=body.title or None,
         last_active=0,
+        execution_mode=body.execution_mode,
     )
     await offload(
         svc.services.session_repo.upsert,

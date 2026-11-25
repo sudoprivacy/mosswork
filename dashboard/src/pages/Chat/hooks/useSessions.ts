@@ -23,6 +23,7 @@ export interface Session {
   hasActivity?: boolean;
   hasMessages?: boolean;
   executionLocation?: "desktop" | "server";
+  cloudTask?: boolean;
   localDeviceId?: string | null;
   localTaskStatus?: string | null;
   pinned?: boolean;
@@ -49,6 +50,7 @@ export function toSession(row: {
   is_active?: boolean;
   has_messages?: boolean;
   execution_location?: "desktop" | "server";
+  cloud_task?: boolean;
   local_device_id?: string | null;
   local_task_status?: string | null;
   pinned?: boolean;
@@ -83,6 +85,7 @@ export function toSession(row: {
     hasActivity,
     hasMessages: row.has_messages,
     executionLocation: row.execution_location,
+    cloudTask: row.cloud_task,
     localDeviceId: row.local_device_id,
     localTaskStatus: row.local_task_status,
     pinned: Boolean(row.pinned),
@@ -536,56 +539,72 @@ export function useSessions(agentId: string | null) {
     });
   }, []);
 
-  const createSession = useCallback((): {
-    session: Session;
-    resolvedId: Promise<string>;
-  } => {
-    if (!agentId) {
-      const empty: Session = {
-        id: "",
+  const createSession = useCallback(
+    (
+      cloudTask = false,
+      targetAgentId = agentId,
+    ): {
+      session: Session;
+      resolvedId: Promise<string>;
+    } => {
+      if (!targetAgentId) {
+        const empty: Session = {
+          id: "",
+          name: "New Chat",
+          threadId: "",
+          updatedAt: null,
+          channelType: "dashboard",
+        };
+        return { session: empty, resolvedId: Promise.resolve("") };
+      }
+      const placeholder: Session = {
+        id: "__pending__",
         name: "New Chat",
         threadId: "",
-        updatedAt: null,
+        updatedAt: new Date().toISOString(),
         channelType: "dashboard",
       };
-      return { session: empty, resolvedId: Promise.resolve("") };
-    }
-    const placeholder: Session = {
-      id: "__pending__",
-      name: "New Chat",
-      threadId: "",
-      updatedAt: new Date().toISOString(),
-      channelType: "dashboard",
-    };
-    setModuleSessions((prev) => sortSessions([placeholder, ...prev]));
-    const resolvedId = mossworkThreadsApi
-      .create(agentId)
-      .then((created) => {
-        markPendingThread(created.thread_id);
-        const now = Math.floor(Date.now() / 1000);
-        const session = toSession({
-          thread_id: created.thread_id,
-          title: null,
-          // last_active stays 0 server-side until first turn; use created_at for sort.
-          last_active: 0,
-          created_at: now,
-          channel_type: "dashboard",
-          agent_id: agentId,
+      if (_storeAgentId === targetAgentId) {
+        setModuleSessions((prev) => sortSessions([placeholder, ...prev]));
+      }
+      const resolvedId = mossworkThreadsApi
+        .create(targetAgentId, cloudTask)
+        .then((created) => {
+          if (!cloudTask) markPendingThread(created.thread_id);
+          if (created.cloud_task) chatStore.setCloudTask(created.thread_id);
+          if (_storeAgentId !== targetAgentId) return created.thread_id;
+          const now = Math.floor(Date.now() / 1000);
+          const session = toSession({
+            thread_id: created.thread_id,
+            title: null,
+            // last_active stays 0 server-side until first turn; use created_at for sort.
+            last_active: 0,
+            created_at: now,
+            channel_type: "dashboard",
+            agent_id: targetAgentId,
+            execution_location: created.execution_location,
+            cloud_task: created.cloud_task,
+          });
+          setModuleSessions((prev) =>
+            sortSessions([
+              session,
+              ...prev.filter(
+                (s) => s.id !== "__pending__" && s.id !== created.thread_id,
+              ),
+            ]),
+          );
+          return created.thread_id;
+        })
+        .catch(() => {
+          if (_storeAgentId === targetAgentId) {
+            setModuleSessions((prev) => prev.filter((s) => s !== placeholder));
+          }
+          return "";
         });
-        setModuleSessions((prev) =>
-          sortSessions([
-            session,
-            ...prev.filter((s) => s.id !== "__pending__"),
-          ]),
-        );
-        return created.thread_id;
-      })
-      .catch(() => {
-        setModuleSessions((prev) => prev.filter((s) => s.id !== "__pending__"));
-        return "";
-      });
-    return { session: placeholder, resolvedId };
-  }, [agentId]);
+      return { session: placeholder, resolvedId };
+    },
+    [agentId],
+  );
 
   const deleteSession = useCallback(
     async (id: string) => {

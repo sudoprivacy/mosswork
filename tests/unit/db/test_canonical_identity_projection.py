@@ -71,7 +71,7 @@ def test_missing_projection_schema_is_repaired_at_current_product_version(
     run_migrations(product)
     assert CanonicalIdentityProjectionRepo(product).get(**_KEY) is None
     with product.connect() as conn:
-        assert conn.execute("SELECT version FROM _schema_version").fetchone()[0] == 32
+        assert conn.execute("SELECT version FROM _schema_version").fetchone()[0] == 33
 
 
 def test_postgresql_and_sqlite_use_same_idempotent_v30_binding_constraints() -> None:
@@ -108,7 +108,7 @@ def test_postgresql_and_sqlite_use_same_idempotent_v30_binding_constraints() -> 
         encoding="utf-8"
     )
     assert ddl in sqlite_sql
-    assert max(version for version, _ in migrate._discover("postgresql")) == 32
+    assert max(version for version, _ in migrate._discover("postgresql")) == 33
     assert len({version for version, _ in migrate._discover("postgresql")}) == len(
         migrate._discover("postgresql")
     )

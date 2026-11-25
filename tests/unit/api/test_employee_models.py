@@ -146,7 +146,12 @@ async def test_dashboard_turn_rejects_unassigned_models_before_composer_write(
     )
     resolve_thread = AsyncMock(return_value=("thread", "session"))
     monkeypatch.setattr("octop.api.routers.chat.turn.resolve_thread_id", resolve_thread)
-    threads = SimpleNamespace(update_composer=Mock())
+    threads = SimpleNamespace(
+        get_thread=Mock(
+            return_value=SimpleNamespace(execution_mode="server", execution_mode_locked=False)
+        ),
+        update_composer=Mock(),
+    )
     server = SimpleNamespace(
         paths=browser_paths,
         services=e.services,

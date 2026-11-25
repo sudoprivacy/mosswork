@@ -29,6 +29,7 @@ interface ChatSidebarPanelProps {
   onAgentSelect: (agentId: string) => void;
   /** Start a fresh chat from an expert row (classic + minimal). */
   onNewChatWithAgent: (agentId: string) => void;
+  onNewCloudTask?: (agentId: string) => void;
   onDeleteSession: (id: string) => Promise<boolean>;
   onRenameSession: (id: string, name: string) => void;
   onPinSession: (id: string, pinned: boolean) => void;
@@ -63,6 +64,7 @@ export default function ChatSidebarPanel({
   onSelectSession,
   onAgentSelect,
   onNewChatWithAgent,
+  onNewCloudTask,
   onDeleteSession,
   onRenameSession,
   onPinSession,
@@ -95,6 +97,7 @@ export default function ChatSidebarPanel({
       onSelect={onSelectSession}
       onAgentSelect={onAgentSelect}
       onNewChat={onNewChatWithAgent}
+      onNewCloudTask={onNewCloudTask}
       onDeleteActive={onDeleteSession}
       onRenameActive={onRenameSession}
       onPinActive={onPinSession}
@@ -115,6 +118,7 @@ export default function ChatSidebarPanel({
       onSelect={onSelectSession}
       onAgentSelect={onAgentSelect}
       onNewChat={onNewChatWithAgent}
+      onNewCloudTask={onNewCloudTask}
       onDelete={onDeleteSession}
       onRename={onRenameSession}
       onPin={onPinSession}

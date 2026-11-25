@@ -111,6 +111,7 @@ export interface ModelStatus {
 
 /** Per-session state held in the chat store's module-scoped Map. */
 export interface SessionStreamState {
+  cloudTask?: boolean;
   localPreparing?: boolean;
   localPreparingPhase?: string;
   messages: ChatMessage[];

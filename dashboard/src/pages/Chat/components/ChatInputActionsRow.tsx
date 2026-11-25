@@ -5,7 +5,6 @@ import { useNavigate } from "react-router-dom";
 import {
   Send,
   Square,
-  MessageSquarePlus,
   Paperclip,
   Zap,
   Link2,
@@ -28,6 +27,7 @@ import {
   Info,
 } from "lucide-react";
 import { Tooltip, Popover } from "antd";
+import NewTaskButton from "./NewTaskButton";
 import { message } from "@/utils/antdMessage";
 import type { ResolvedModel } from "../../../api/types";
 import type { KnowledgeBase } from "../../../api/modules/knowledgeBases";
@@ -150,6 +150,7 @@ interface ChatInputActionsRowProps {
   onSlashShortcutSelect: (command: string) => void;
   onFileSelect: () => void;
   onNewChat: () => void;
+  onNewCloudTask?: () => void;
   onPolish: () => void;
   onToggleVoice: () => void;
   onCancel: () => void;
@@ -205,6 +206,7 @@ export default function ChatInputActionsRow({
   onSlashShortcutSelect,
   onFileSelect,
   onNewChat,
+  onNewCloudTask,
   onPolish,
   onToggleVoice,
   onCancel,
@@ -987,28 +989,14 @@ export default function ChatInputActionsRow({
           selectedConnectors={selectedConnectors}
           isMobile={isMobile}
         />
-        {/* Desktop: dedicated newChatBtn; mobile: replace polish with new-chat */}
-        {useCompactControls ? (
-          <Tooltip title={t("chatWelcome.newChat")} mouseEnterDelay={0.4}>
-            <button
-              className={styles.newChatBtn}
-              onClick={onNewChat}
-              type="button"
-            >
-              <MessageSquarePlus size={16} strokeWidth={1.75} />
-            </button>
-          </Tooltip>
-        ) : (
+        <NewTaskButton
+          className={styles.newChatBtn}
+          size={16}
+          onNewChat={onNewChat}
+          onNewCloudTask={onNewCloudTask}
+        />
+        {!useCompactControls && (
           <>
-            <Tooltip title={t("chatWelcome.newChat")} mouseEnterDelay={0.4}>
-              <button
-                className={styles.newChatBtn}
-                onClick={onNewChat}
-                type="button"
-              >
-                <MessageSquarePlus size={16} strokeWidth={1.75} />
-              </button>
-            </Tooltip>
             <Tooltip title={t("chat.polish.tooltip")} mouseEnterDelay={0.4}>
               <button
                 className={styles.secondaryBtn}

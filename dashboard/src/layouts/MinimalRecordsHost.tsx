@@ -1,12 +1,13 @@
-import { useCallback, useMemo } from "react";
+import { useCallback, useMemo, useRef } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 import { message as antMessage } from "@/utils/antdMessage";
 import { useTranslation } from "react-i18next";
 import { useAgent, selectEnabledExperts } from "../context/AgentContext";
 import { mossworkThreadsApi } from "../api/modules/mossworkThreads";
+import { isCompanyDesktop } from "../api/desktopRuntime";
 import { apiErrorMessage } from "../utils/apiError";
 import MinimalAgentSessionNav from "../pages/Chat/components/MinimalAgentSessionNav";
-import { emitSessionEvent } from "../pages/Chat/hooks/chatStore";
+import { emitSessionEvent, setCloudTask } from "../pages/Chat/hooks/chatStore";
 import { formatThreadTitle } from "../pages/Chat/utils/threadTitle";
 
 function parseChatPath(pathname: string): {
@@ -67,6 +68,27 @@ export default function MinimalRecordsHost() {
       navigate(`/chat/${agentId}`, { state: { newChat: true } });
     },
     [navigate, setActiveAgent],
+  );
+
+  const creatingCloudTask = useRef(false);
+  const handleNewCloudTask = useCallback(
+    async (agentId: string) => {
+      if (creatingCloudTask.current) return;
+      creatingCloudTask.current = true;
+      try {
+        const { thread_id: threadId } = await mossworkThreadsApi.create(
+          agentId,
+          true,
+        );
+        setCloudTask(threadId);
+        handleSelect(threadId, agentId);
+      } catch {
+        antMessage.error(t("chat.createCloudTaskFailed"));
+      } finally {
+        creatingCloudTask.current = false;
+      }
+    },
+    [handleSelect, t],
   );
 
   const handleDeleteActive = useCallback(
@@ -135,6 +157,7 @@ export default function MinimalRecordsHost() {
       onSelect={handleSelect}
       onAgentSelect={handleAgentSelect}
       onNewChat={handleNewChat}
+      onNewCloudTask={isCompanyDesktop() ? handleNewCloudTask : undefined}
       onDeleteActive={handleDeleteActive}
       onRenameActive={handleRenameActive}
       onPinActive={handlePinActive}

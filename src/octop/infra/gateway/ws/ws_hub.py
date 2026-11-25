@@ -5,12 +5,22 @@ from __future__ import annotations
 import asyncio
 import json
 import logging
+from collections import deque
 from collections.abc import Awaitable, Callable
+from dataclasses import dataclass, field
 from typing import Any
 
 logger = logging.getLogger(__name__)
 
 SendFn = Callable[[dict[str, Any]], Awaitable[None]]
+
+
+@dataclass
+class CloudTurn:
+    id: str
+    state: str = "queued"
+    seq: int = 0
+    frames: deque[dict[str, Any]] = field(default_factory=lambda: deque(maxlen=256))
 
 
 def stamp_thread_id(frame: dict[str, Any], thread_id: str) -> dict[str, Any]:
@@ -39,6 +49,26 @@ class WebSocketHub:
         self._user_conns: dict[int, set[str]] = {}
         self._conn_user: dict[str, int] = {}
         self._active_turns: set[str] = set()
+        self._cloud_turns: dict[str, CloudTurn] = {}
+
+    def cloud_turn(self, thread_id: str) -> CloudTurn | None:
+        return self._cloud_turns.get(thread_id)
+
+    def begin_cloud_turn(self, thread_id: str, request_id: str) -> bool:
+        if thread_id in self._cloud_turns:
+            return False
+        self._cloud_turns[thread_id] = CloudTurn(request_id)
+        return True
+
+    def end_cloud_turn(self, thread_id: str) -> None:
+        self._cloud_turns.pop(thread_id, None)
+
+    def cancel_queued_cloud_turn(self, thread_id: str) -> bool:
+        turn = self._cloud_turns.get(thread_id)
+        if turn is None or turn.state == "running":
+            return False
+        turn.state = "cancel_requested"
+        return True
 
     def register(
         self,
@@ -104,6 +134,8 @@ class WebSocketHub:
         tid = thread_id.strip()
         if tid:
             self._active_turns.add(tid)
+            if turn := self._cloud_turns.get(tid):
+                turn.state = "running"
 
     def mark_turn_idle(self, thread_id: str) -> None:
         self._active_turns.discard(thread_id.strip())
@@ -128,11 +160,22 @@ class WebSocketHub:
 
     async def push_to_thread(self, thread_id: str, frame: dict[str, Any]) -> None:
         tid = thread_id.strip()
+        outbound = stamp_thread_id(frame, tid)
+        if turn := self._cloud_turns.get(tid):
+            turn.seq += 1
+            outbound = {
+                **outbound,
+                "execution_id": turn.id,
+                "event_seq": turn.seq,
+                "event_index": 0,
+            }
+            # Large results remain available from history when the turn settles.
+            if len(json.dumps(outbound, default=str, ensure_ascii=False)) <= 8192:
+                turn.frames.append(outbound)
         conns = self._thread_subscribers.get(tid)
         if not conns:
             logger.debug("ws hub: no subscriber for thread %s", thread_id)
             return
-        outbound = stamp_thread_id(frame, tid)
         targets = list(conns)
         if len(targets) == 1:
             await self.push(targets[0], outbound)

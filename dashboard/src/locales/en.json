@@ -1340,6 +1340,11 @@
     "path_outside_root": "The file path is outside this expert's storage root, so it cannot be read or written. Use a path under the storage root, or widen the storage root in expert settings (on Windows, set an explicit drive path such as D:/mosswork-data)."
   },
   "chat": {
+    "newCloudTask": "New cloud task",
+    "newLocalTask": "New local task",
+    "cloudExecution": "Cloud execution",
+    "cloudTaskSubmitted": "Cloud task submitted. It will keep running after you close the app.",
+    "createCloudTaskFailed": "Could not create a cloud task. Check that your company server is up to date and try again.",
     "localArtifacts": "Local task files",
     "localArtifactsWebHint": "Files are saved on the task computer and cannot be accessed from this browser.",
     "openFileLocation": "Show in folder",

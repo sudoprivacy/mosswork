@@ -314,9 +314,11 @@ async def test_built_desktop_chat_reconnect_and_cancel(
             await expect(editor).to_be_disabled()
             release_initial_metadata.set()
             await expect(editor).to_be_enabled()
-            await page.get_by_role("button", name=re.compile(r"^(New Chat|新建对话)$")).first.press(
-                "Enter"
-            )
+            new_task = page.get_by_role("button", name=re.compile(r"^(New Chat|新建对话)$"))
+            await new_task.and_(page.locator('[aria-haspopup="menu"]')).last.press("Enter")
+            await page.get_by_role(
+                "menuitem", name=re.compile(r"^(New local task|新建本机任务)$")
+            ).click()
             await expect(page).to_have_url(f"http://testserver/chat/{agent_id}")
             await editor.fill("Create the browser acceptance report")
             await editor.press("Enter")

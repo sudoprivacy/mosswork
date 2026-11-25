@@ -1,5 +1,5 @@
 import { placeLocalArtifactTurns } from "../utils/localArtifactTurns";
-import { isCompanyDesktop } from "@/api/desktopRuntime";
+import { seedExecutionCursor } from "../utils/executionCursor";
 import type { DeviceSelection } from "@/api/modules/devices";
 import {
   useState,
@@ -761,6 +761,7 @@ async function loadThreadHistory(
   nextOffset: number;
   nextCursor: string | null;
   turnActive: boolean;
+  activeExecution?: { id: string; state: string; event_seq: number } | null;
   artifacts: ThreadArtifact[];
   projectionLoading: boolean;
   retryAfterMs: number;
@@ -788,6 +789,7 @@ async function loadThreadHistory(
     history.artifact_refs,
   );
   if (offset === 0) {
+    if (history.cloud_task) chatStore.setCloudTask(threadId);
     syncSessionArtifacts(threadId, artifacts);
     syncSessionConversationMode(
       threadId,
@@ -832,6 +834,7 @@ async function loadThreadHistory(
     nextOffset: offset + limit,
     nextCursor: history.next_cursor ?? null,
     turnActive: Boolean(history.turn_active),
+    activeExecution: history.active_execution,
     artifacts,
     projectionLoading: Boolean(history.history_loading),
     retryAfterMs:
@@ -913,12 +916,76 @@ export function useChat(
   const refreshInFlightRef = useRef(false);
 
   const attachAfterHistory = useCallback(
-    (key: string, targetThreadId: string) => {
+    (
+      key: string,
+      targetThreadId: string,
+      activeExecution?: Awaited<
+        ReturnType<typeof loadThreadHistory>
+      >["activeExecution"],
+    ) => {
       if (!agentId || !targetThreadId) return;
-      // No post-stream refreshHistory here: full replace can wipe prepended
-      // older pages and fight “load earlier / jump to bottom” UX. Seal via
-      // stream chunks / done; user overscroll refresh remains available.
-      void chatStore.attachThread(key, agentId, targetThreadId);
+      if (!activeExecution || chatStore.usesLocalRuntime(key)) {
+        void chatStore.attachThread(key, agentId, targetThreadId);
+        return;
+      }
+      seedExecutionCursor(
+        targetThreadId,
+        activeExecution.id,
+        activeExecution.state === "awaiting_approval"
+          ? activeExecution.event_seq
+          : 0,
+      );
+      const revision = chatStore.getHistoryRevision(key);
+      const original = chatStore.getSnapshot(key);
+      const refreshCompletedTurn = async () => {
+        try {
+          const latest = await loadThreadHistory(agentId, targetThreadId);
+          if (
+            latest.projectionLoading ||
+            chatStore.getHistoryRevision(key) !== revision ||
+            chatStore.getSnapshot(key).isStreaming
+          )
+            return;
+          const current = chatStore.getSnapshot(key);
+          const first = original.messages[0]?.id;
+          const firstIndex = first
+            ? current.messages.findIndex((message) => message.id === first)
+            : -1;
+          const prefix =
+            firstIndex > 0 ? current.messages.slice(0, firstIndex) : [];
+          const known = new Set(latest.messages.map((message) => message.id));
+          const errors = current.messages.filter(
+            (message) =>
+              message.status === "error" &&
+              !original.messages.includes(message),
+          );
+          chatStore.setHistoryPage(
+            key,
+            [
+              ...prefix.filter((message) => !known.has(message.id)),
+              ...latest.messages,
+              ...errors,
+            ],
+            {
+              hasMore: prefix.length ? current.historyHasMore : latest.hasMore,
+              nextOffset: prefix.length
+                ? current.historyNextOffset
+                : latest.nextOffset,
+              nextCursor: prefix.length
+                ? current.historyNextCursor
+                : latest.nextCursor,
+            },
+          );
+        } catch {
+          // The streamed result remains visible if history is unavailable.
+        }
+      };
+      void chatStore.attachThread(
+        key,
+        agentId,
+        targetThreadId,
+        refreshCompletedTurn,
+      );
     },
     [agentId],
   );
@@ -1079,7 +1146,7 @@ export function useChat(
           },
         );
         setHistoryError(false);
-        attachAfterHistory(key, targetThreadId);
+        attachAfterHistory(key, targetThreadId, loaded.activeExecution);
       } catch {
         if (loadGenRef.current === gen) {
           failedHistoryOperation.current = "initial";
@@ -1239,7 +1306,7 @@ export function useChat(
       _sessionKey: string,
       agentId: string,
     ) => {
-      if (isCompanyDesktop()) {
+      if (chatStore.usesLocalRuntime(stableSessionId)) {
         try {
           await chatStore.editLocalMessage(
             stableSessionId,

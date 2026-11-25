@@ -9,7 +9,6 @@ import {
   Trash2,
   Pin,
   PinOff,
-  MessageSquarePlus,
   Search,
   GitFork,
   Eye,
@@ -25,6 +24,7 @@ import { showConfirmModal } from "../../../utils/confirmModal";
 import { ExpertIcon } from "../../Experts/components/iconForName";
 import { useHiddenSharedExperts } from "../hooks/useHiddenSharedExperts";
 import SessionChannelIcon from "./SessionChannelIcon";
+import NewTaskButton from "./NewTaskButton";
 import SessionWorkStatusIcon from "./SessionWorkStatusIcon";
 import SharedExpertHint from "./SharedExpertHint";
 import RemoteExpertHint from "./RemoteExpertHint";
@@ -241,6 +241,7 @@ interface AgentCardProps {
   onFetchAllSessions: () => void;
   onSelect: (sessionId: string, agentId: string) => void;
   onNewChat: (agentId: string) => void;
+  onNewCloudTask?: (agentId: string) => void;
   onDelete: (id: string) => void;
   onRename: (id: string, name: string) => void;
   onPin: (id: string, pinned: boolean) => void;
@@ -262,6 +263,7 @@ function ActiveAgentCard({
   onFetchAllSessions,
   onSelect,
   onNewChat,
+  onNewCloudTask,
   onDelete,
   onRename,
   onPin,
@@ -333,19 +335,14 @@ function ActiveAgentCard({
               <RemoteExpertHint agent={agent} />
             </div>
             <AgentUnreadBadge count={agent.unread_count ?? 0} />
-            <button
-              type="button"
+            <NewTaskButton
               className={styles.agentNewChatBtn}
               disabled={agent.history_only}
-              aria-label={t("chatWelcome.newChat")}
-              title={t("chatWelcome.newChat")}
-              onClick={(e) => {
-                e.stopPropagation();
-                onNewChat(agent.agent_id);
-              }}
-            >
-              <MessageSquarePlus size={14} strokeWidth={1.75} aria-hidden />
-            </button>
+              onNewChat={() => onNewChat(agent.agent_id)}
+              onNewCloudTask={
+                onNewCloudTask && (() => onNewCloudTask(agent.agent_id))
+              }
+            />
             {onHide ? (
               <button
                 type="button"
@@ -445,6 +442,7 @@ interface AgentRowProps {
   agent: MossworkAgent;
   onSelect: () => void;
   onNewChat?: () => void;
+  onNewCloudTask?: () => void;
   onHide?: () => void;
   onUnhide?: () => void;
 }
@@ -453,6 +451,7 @@ function InactiveAgentRow({
   agent,
   onSelect,
   onNewChat,
+  onNewCloudTask,
   onHide,
   onUnhide,
 }: AgentRowProps) {
@@ -498,19 +497,12 @@ function InactiveAgentRow({
             </div>
             <AgentUnreadBadge count={agent.unread_count ?? 0} />
             {onNewChat ? (
-              <button
-                type="button"
+              <NewTaskButton
                 className={styles.agentNewChatBtn}
                 disabled={agent.history_only}
-                aria-label={t("chatWelcome.newChat")}
-                title={t("chatWelcome.newChat")}
-                onClick={(e) => {
-                  e.stopPropagation();
-                  onNewChat();
-                }}
-              >
-                <MessageSquarePlus size={14} strokeWidth={1.75} aria-hidden />
-              </button>
+                onNewChat={onNewChat}
+                onNewCloudTask={onNewCloudTask}
+              />
             ) : null}
           </div>
           <div className={styles.agentRowDesc}>{agent.description || "—"}</div>
@@ -554,6 +546,7 @@ interface SessionListProps {
   onSelect: (sessionId: string, agentId: string) => void;
   onAgentSelect: (agentId: string) => void;
   onNewChat: (agentId: string) => void;
+  onNewCloudTask?: (agentId: string) => void;
   onDelete: (id: string) => void;
   onRename: (id: string, name: string) => void;
   onPin: (id: string, pinned: boolean) => void;
@@ -574,6 +567,7 @@ export default function SessionList({
   onSelect,
   onAgentSelect,
   onNewChat,
+  onNewCloudTask,
   onDelete,
   onRename,
   onPin,
@@ -680,6 +674,7 @@ export default function SessionList({
                       onFetchAllSessions={onFetchAllSessions}
                       onSelect={onSelect}
                       onNewChat={onNewChat}
+                      onNewCloudTask={onNewCloudTask}
                       onDelete={onDelete}
                       onRename={onRename}
                       onPin={onPin}
@@ -699,6 +694,9 @@ export default function SessionList({
                     agent={agent}
                     onSelect={() => onAgentSelect(agent.agent_id)}
                     onNewChat={() => onNewChat(agent.agent_id)}
+                    onNewCloudTask={
+                      onNewCloudTask && (() => onNewCloudTask(agent.agent_id))
+                    }
                     onHide={
                       canHide(agent) ? () => hide(agent.agent_id) : undefined
                     }

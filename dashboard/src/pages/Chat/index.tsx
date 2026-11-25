@@ -13,7 +13,7 @@ import {
   Terminal,
   Activity,
 } from "lucide-react";
-import { Alert, Button, Tooltip } from "antd";
+import { Alert, Button, Tag, Tooltip } from "antd";
 import { message as antMessage } from "@/utils/antdMessage";
 import { showConfirmModal } from "../../utils/confirmModal";
 import PlanReadyCard from "./components/PlanReadyCard";
@@ -552,6 +552,7 @@ function ChatPageInner() {
     Boolean(activeAgent?.history_only) ||
     (isCompanyDesktop() &&
       composerSession?.executionLocation === "server" &&
+      !composerSession.cloudTask &&
       Boolean(composerSession.hasMessages));
 
   const panelFilePaths = useMemo(() => {
@@ -945,6 +946,47 @@ function ChatPageInner() {
     startNewChat();
   }, [clearQueued, startNewChat]);
 
+  const creatingCloudTask = useRef(false);
+  const handleNewCloudTask = useCallback(
+    async (agentId: string) => {
+      if (creatingCloudTask.current) return;
+      creatingCloudTask.current = true;
+      try {
+        const threadId = await createSession(true, agentId).resolvedId;
+        if (!threadId) {
+          antMessage.error(t("chat.createCloudTaskFailed"));
+          return;
+        }
+        clearQueued();
+        setSelectedModel(null);
+        setHasBrowserTool(false);
+        if (agentId !== resolvedAgentId) {
+          resetNavForAgentSwitch();
+          setActiveAgent(agentId);
+        }
+        markInitialNavDone(agentId);
+        navigate(`/chat/${agentId}/${threadId}`);
+        if (isMobile) setSidebarOpen(false);
+      } finally {
+        creatingCloudTask.current = false;
+      }
+    },
+    [
+      clearQueued,
+      createSession,
+      isMobile,
+      markInitialNavDone,
+      navigate,
+      resetNavForAgentSwitch,
+      resolvedAgentId,
+      setActiveAgent,
+      setHasBrowserTool,
+      setSelectedModel,
+      setSidebarOpen,
+      t,
+    ],
+  );
+
   useEffect(() => {
     if (!pageVisible) return;
     return chatStore.onSlashAction((ev) => {
@@ -1306,9 +1348,10 @@ function ChatPageInner() {
   }, [showWelcome, agentChatReady, noAgents]);
 
   const activeSession = useMemo(() => {
-    if (!activeThreadId || showWelcome) return null;
+    if (!activeThreadId || (showWelcome && !composerSession?.cloudTask))
+      return null;
     return (
-      sessions.find((s) => s.id === activeThreadId) ?? {
+      composerSession ?? {
         id: activeThreadId,
         name: "New Chat",
         threadId: activeThreadId,
@@ -1319,7 +1362,7 @@ function ChatPageInner() {
         pinned: false,
       }
     );
-  }, [activeThreadId, sessions, showWelcome]);
+  }, [activeThreadId, composerSession, showWelcome]);
 
   const activeSessionTitle = useMemo(() => {
     if (!activeSession) return null;
@@ -1358,6 +1401,7 @@ function ChatPageInner() {
         clearQueued();
         handleNewChatWithAgent(agentId);
       }}
+      onNewCloudTask={isCompanyDesktop() ? handleNewCloudTask : undefined}
       onDeleteSession={handleDeleteSession}
       onRenameSession={renameSession}
       onPinSession={pinSession}
@@ -1430,6 +1474,9 @@ function ChatPageInner() {
                       {activeSessionTitle}
                     </span>
                     <TeamChatBadge show={isTeamChat} />
+                    {activeSession?.cloudTask && (
+                      <Tag>{t("chat.cloudExecution")}</Tag>
+                    )}
                   </div>
                 )}
                 {resolvedAgentId && !sharedExpertViewer && (
@@ -1860,6 +1907,14 @@ function ChatPageInner() {
               onSteerQueued={handleSteerQueued}
               onCancel={cancelStream}
               onNewChat={handleNewChat}
+              onNewCloudTask={
+                isCompanyDesktop() &&
+                resolvedAgentId &&
+                agentChatReady &&
+                !activeAgent?.history_only
+                  ? () => void handleNewCloudTask(resolvedAgentId)
+                  : undefined
+              }
               isStreaming={isStreaming}
               holdSend={membersStillTalking}
               isTeam={isTeamChat}

@@ -53,6 +53,7 @@ export interface MossworkThread {
   is_active?: boolean;
   has_messages?: boolean;
   execution_location?: "desktop" | "server";
+  cloud_task?: boolean;
   local_device_id?: string | null;
   local_task_status?: string | null;
   pinned?: boolean;
@@ -77,6 +78,8 @@ export interface MossworkThreadHistory {
   local_artifact_turns?: import("../desktopRuntime").LocalArtifactTurn[];
   local_artifacts?: import("../desktopRuntime").LocalArtifact[];
   execution_location?: "desktop" | "server";
+  cloud_task?: boolean;
+  active_execution?: { id: string; state: string; event_seq: number } | null;
   local_device_id?: string | null;
   local_task_status?: string | null;
   thread_id: string;
@@ -187,15 +190,27 @@ export const mossworkThreadsApi = {
       `/agents/${encodeURIComponent(agentId)}/threads?limit=${limit}`,
     ),
 
-  create: (agentId: string) => {
+  create: async (agentId: string, cloudTask = false) => {
     const runtime = window.__mossworkRuntime;
-    if (isCompanyDesktop() && runtime?.createThread) {
-      return runtime.createThread({ agent_id: agentId });
+    if (!cloudTask && isCompanyDesktop() && runtime?.createThread) {
+      return runtime.createThread({ agent_id: agentId }).then((result) => ({
+        ...result,
+        execution_location: "desktop" as const,
+        cloud_task: false,
+      }));
     }
-    return request<{ thread_id: string; session_key: string }>(
-      `/agents/${encodeURIComponent(agentId)}/threads`,
-      { method: "POST" },
-    );
+    const result = await request<{
+      thread_id: string;
+      session_key: string;
+      execution_location?: "server";
+      cloud_task?: boolean;
+    }>(`/agents/${encodeURIComponent(agentId)}/threads`, {
+      method: "POST",
+      ...(cloudTask && { body: JSON.stringify({ execution_mode: "server" }) }),
+    });
+    if (cloudTask && !result.cloud_task)
+      throw new Error("Cloud task unavailable");
+    return result;
   },
 
   cancel: (agentId: string, threadId: string, signal?: AbortSignal) =>

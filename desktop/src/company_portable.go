@@ -202,7 +202,7 @@ func (c *companyPortableCache) prepare(zipPath, home string, prepare func(string
 func ensureCompanyPortable() (string, error) {
 	zipPath, err := companyPortableArchive()
 	if err != nil {
-		return "", errors.New("此客户端未包含本地 Python、文档和 FFmpeg 工具包，请安装完整企业客户端；通讯录和员工聊天仍可使用")
+		return "", errors.New("company_tools_archive_unavailable")
 	}
 	return readyCompanyPortable.prepare(zipPath, mossworkHome(), prepareCompanyPortable)
 }

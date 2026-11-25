@@ -53,6 +53,24 @@ async def test_legacy_and_server_local_execution_never_mix(company):
     await client.close()
 
 
+async def test_new_cloud_thread_cannot_be_claimed_by_a_local_runtime(company):
+    server, client, _, owner = company
+    install_agent(server)
+    server.services.thread_repo.insert(
+        thread_id="cloud-thread",
+        agent_id="expert",
+        user_id=owner,
+        channel_type="dashboard",
+        session_key="cloud-thread",
+        last_active=0,
+        execution_mode="server",
+    )
+    with pytest.raises(CompanyServiceError, match="execution_mode_server"):
+        await acquire(client, "task-cloud", "cloud-thread")
+    assert server.services.company_runtime_repo.binding("cloud-thread") is None
+    await client.close()
+
+
 @pytest.mark.asyncio
 async def test_real_company_memory_is_idempotent_and_cross_session(company, tmp_path):
     from moss_memory import Memory

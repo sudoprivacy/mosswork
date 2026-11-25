@@ -1340,6 +1340,11 @@
     "path_outside_root": "文件路径超出当前专家的存储根目录，无法读写。请改用存储根目录内的路径，或在专家设置中扩大存储根目录（Windows 上请显式指定盘符路径，例如 D:/mosswork-data）。"
   },
   "chat": {
+    "newCloudTask": "新建云端任务",
+    "newLocalTask": "新建本机任务",
+    "cloudExecution": "云端执行",
+    "cloudTaskSubmitted": "云端任务已提交，退出客户端后服务端会继续执行。",
+    "createCloudTaskFailed": "无法创建云端任务。请检查公司服务是否已更新后重试。",
     "localArtifacts": "本地任务成果",
     "localArtifactsWebHint": "成果保存在任务电脑，当前网页不能直接访问",
     "openFileLocation": "打开文件位置",

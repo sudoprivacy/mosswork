@@ -121,6 +121,16 @@ class WebSocketChannel(BaseChannel):
             await self._hub.push(conn_id, {"type": "done"})
             return
 
+        cloud_turn = self._hub.cloud_turn(thread_id)
+        if cloud_turn and cloud_turn.state == "cancel_requested":
+            try:
+                await self._hub.push_to_thread(
+                    thread_id, {"type": "done", "execution_state": "cancelled"}
+                )
+            finally:
+                self._hub.end_cloud_turn(thread_id)
+            return
+
         self._track_subject(message)
         # Per-turn routing copy: do not write thread_id onto the shared
         # ChannelSubject (keyed by user), or concurrent threads 串流 via _send_*.
@@ -155,6 +165,7 @@ class WebSocketChannel(BaseChannel):
                 {"type": "error", "message": "processor does not support turn chunk streaming"},
             )
             await self._hub.push_to_thread(thread_id, {"type": "done"})
+            self._hub.end_cloud_turn(thread_id)
             return
 
         turn_id, started_seq, replaced = self._steer.begin_turn(thread_id)
@@ -344,6 +355,8 @@ class WebSocketChannel(BaseChannel):
                 )
             except Exception:
                 logger.exception("websocket failed to deliver turn.ended thread=%s", thread_id)
+            finally:
+                self._hub.end_cloud_turn(thread_id)
 
     async def _send_text(self, subject: ChannelSubject, text: str) -> None:
         if not text:

@@ -83,6 +83,7 @@ interface ChatInputProps {
   onSteerQueued?: (id: string) => void;
   onCancel: () => void;
   onNewChat: () => void;
+  onNewCloudTask?: () => void;
   onUserInput?: () => void;
   browserRecording?: boolean;
   browserReplayBusy?: boolean;
@@ -156,6 +157,7 @@ const ChatInput = forwardRef<ChatInputHandle, ChatInputProps>(
       onSteerQueued,
       onCancel,
       onNewChat,
+      onNewCloudTask,
       onUserInput,
       browserRecording,
       browserReplayBusy,
@@ -1035,6 +1037,7 @@ const ChatInput = forwardRef<ChatInputHandle, ChatInputProps>(
             onSlashShortcutSelect={handleSlashSelect}
             onFileSelect={handleFileSelect}
             onNewChat={onNewChat}
+            onNewCloudTask={onNewCloudTask}
             onPolish={() => void handlePolish()}
             onToggleVoice={() => toggleVoice()}
             onCancel={onCancel}

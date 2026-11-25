@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import uuid
 from pathlib import Path
 from typing import Any
 
@@ -11,9 +12,11 @@ from fastapi import APIRouter, Depends, Request
 
 from octop.api.common.agent import require_agent_row
 from octop.api.common.agent_workspace import resolve_agent_workspace_dir
+from octop.api.common.reads import management_read
 from octop.api.deps import current_user, get_server
 from octop.api.routers.chat.models import (
     CancelThreadResponse,
+    CreateServerThreadBody,
     ForkThreadBody,
     RebindSessionBody,
     RenameThreadBody,
@@ -31,6 +34,7 @@ from octop.infra.agents.threads.fork import fork_dashboard_thread
 from octop.infra.agents.workspace.dir import agent_facing_workspace_dir_from_config
 from octop.infra.browser.control import pause_user_browser
 from octop.infra.errors import ErrorCode, MossworkError
+from octop.infra.execution.service import ExecutionConflict
 from octop.infra.gateway.hitl.coordinator import pending_hitl_payload
 from octop.infra.gateway.threads import ThreadRegistry, thread_row_has_messages
 from octop.infra.history.service import HistoryArchive
@@ -234,6 +238,7 @@ async def start_history_migration(
 @router.post("/agents/{agent_id}/threads", status_code=201, summary="New thread")
 async def create_thread(
     agent_id: str,
+    body: CreateServerThreadBody | None = None,
     as_user: int | None = None,
     user: Any = Depends(current_user),
     server: Any = Depends(get_server),
@@ -247,7 +252,15 @@ async def create_thread(
         user_id=effective_uid,
         channel_type=ThreadRegistry.CHANNEL_DASHBOARD,
         channel_subject_id=str(effective_uid),
+        execution_mode=body.execution_mode if body else None,
     )
+    if body is not None:
+        return {
+            "thread_id": tid,
+            "session_key": sk,
+            "execution_location": "server",
+            "cloud_task": True,
+        }
     return {"thread_id": tid, "session_key": sk}
 
 
@@ -265,7 +278,33 @@ async def cancel_thread(
     user: Any = Depends(current_user),
     server: Any = Depends(get_server),
 ) -> CancelThreadResponse:
-    _require_thread(server, agent_id, thread_id, user, as_user=None)
+    row = _require_thread(server, agent_id, thread_id, user, as_user=None)
+    execution = getattr(server, "execution", None)
+    if execution is not None and row.execution_mode_locked and row.execution_mode == "server":
+        run = await management_read(server, execution.repo.active, thread_id)
+        if run is not None:
+            requested = run["state"] in {
+                "queued",
+                "running",
+                "awaiting_approval",
+                "cancel_requested",
+            }
+            if requested:
+                try:
+                    await management_read(
+                        server,
+                        execution.repo.command,
+                        run["run_id"],
+                        user=user.id,
+                        key=uuid.uuid4().hex,
+                        kind="cancel",
+                        payload={},
+                    )
+                except ExecutionConflict as exc:
+                    if str(exc) != "execution_not_active":
+                        raise
+                    requested = False
+            return CancelThreadResponse(thread_id=thread_id, requested=requested)
     local_repo = getattr(server.services, "company_runtime_repo", None)
     if local_repo is not None:
         state = await asyncio.get_running_loop().run_in_executor(
@@ -278,7 +317,11 @@ async def cancel_thread(
             await pause_user_browser(user.id, server.paths.root)
             return CancelThreadResponse(thread_id=thread_id, requested=True)
     registry = server.app_runtime.agent_registry
-    active = server.app_runtime.gateway.ws_hub.is_turn_active(thread_id)
+    hub = server.app_runtime.gateway.ws_hub
+    if execution is None and row.execution_mode_locked and hub.cancel_queued_cloud_turn(thread_id):
+        await pause_user_browser(user.id, server.paths.root)
+        return CancelThreadResponse(thread_id=thread_id, requested=True)
+    active = hub.is_turn_active(thread_id)
     if active:
         registry.get_agent(agent_id)
         await server.app_runtime.gateway.cancel_dashboard_turn(agent_id, thread_id)
@@ -354,6 +397,25 @@ async def get_thread_history(
     WebSocket instead of inferring liveness from the message list.
     """
     row = _require_thread(server, agent_id, thread_id, user, as_user)
+    execution = getattr(server, "execution", None)
+    hub = server.app_runtime.gateway.ws_hub
+    run = (
+        await management_read(server, execution.repo.active, thread_id)
+        if execution is not None
+        else None
+    )
+    cloud_turn = (
+        hub.cloud_turn(thread_id)
+        if execution is None and row.execution_mode_locked and row.execution_mode == "server"
+        else None
+    )
+    active_execution = (
+        {"id": run["run_id"], "state": run["state"], "event_seq": run["event_seq"]}
+        if run
+        else {"id": cloud_turn.id, "state": cloud_turn.state, "event_seq": cloud_turn.seq}
+        if cloud_turn
+        else None
+    )
     page_limit = _clamp_history_limit(limit)
     page_offset = max(0, offset)
     from langchain_core.messages import messages_from_dict  # noqa: PLC0415
@@ -459,7 +521,12 @@ async def get_thread_history(
         "history_loading": history_loading,
         "history_status": projection_status,
         "history_retry_after_ms": 1500 if history_loading else 0,
-        "turn_active": server.app_runtime.gateway.ws_hub.is_turn_active(thread_id),
+        "turn_active": hub.is_turn_active(thread_id)
+        or bool(
+            active_execution
+            and active_execution["state"] in {"queued", "running", "cancel_requested"}
+        ),
+        "active_execution": active_execution,
         "hitl_pending": hitl_pending,
         **thread_artifacts_payload(
             row.artifacts,

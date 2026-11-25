@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { Dropdown, Switch } from "antd";
+import { Dropdown, Switch, Tag } from "antd";
 import type { MenuProps } from "antd";
 import { useTranslation } from "react-i18next";
 import {
@@ -201,6 +201,7 @@ export default function ChatTitleBar({
               {title}
             </h1>
             <TeamChatBadge show={isTeam} />
+            {session.cloudTask && <Tag>{t("chat.cloudExecution")}</Tag>}
             {session.pinned ? (
               <Pin
                 size={13}

@@ -27,6 +27,8 @@ import {
 
 import { getApiUrl } from "../../../api/config";
 import { getAuthToken } from "../../../api/request";
+import i18n from "../../../i18n";
+import { message } from "../../../utils/antdMessage";
 import { mossworkThreadsApi } from "../../../api/modules/mossworkThreads";
 import { isPendingThread } from "./useSessions";
 import { PENDING_THREAD_ID } from "../constants";
@@ -682,6 +684,14 @@ export function hasLiveSocket(sessionId: string): boolean {
   return isLiveSocketOpen(sessionId);
 }
 
+export function setCloudTask(sessionId: string) {
+  getOrCreate(sessionId).cloudTask = true;
+}
+
+export function usesLocalRuntime(sessionId: string): boolean {
+  return isCompanyDesktop() && !sessionStates.get(sessionId)?.cloudTask;
+}
+
 function clearStreamWatchdog(sessionId: string): void {
   const timer = streamWatchdogs.get(sessionId);
   if (timer !== undefined) {
@@ -1108,7 +1118,7 @@ function closeLiveSocket(
 
 /** Request cancellation without closing the stream or claiming completion. */
 export async function cancelStream(sessionId: string, agentId: string) {
-  if (isCompanyDesktop()) {
+  if (usesLocalRuntime(sessionId)) {
     const importing = localAttachmentImports.get(sessionId);
     if (
       importing &&
@@ -2778,7 +2788,7 @@ export async function attachThread(
   if (!agentId || !threadId || threadId === "__empty__") return;
   // Local tasks own their native stream. Opening history must never subscribe
   // to the server execution loop or replay a task after a WebView restart.
-  if (isCompanyDesktop()) {
+  if (usesLocalRuntime(sessionId)) {
     await attachLocalRuntime(sessionId, threadId, onStreamEnd);
     return;
   }
@@ -2883,6 +2893,7 @@ export async function attachThread(
           JSON.stringify({
             type: "subscribe",
             thread_id: threadId,
+            ...(state.cloudTask ? { replay_cloud: true } : {}),
             ...executionCursor(threadId),
           }),
         );
@@ -2929,6 +2940,9 @@ export async function attachThread(
             if (!hasStreamingMessages(state)) {
               finish();
             }
+          } else if (onStreamEnd) {
+            // The turn may have completed between history and subscription.
+            finish();
           } else if (state.abortController === controller) {
             state.abortController = previousController;
           }
@@ -3182,6 +3196,15 @@ async function sendTurnWebSocket(
           )
         )
           return;
+        const frame = data as unknown as Record<string, unknown>;
+        if (
+          frame.type === "execution.state" &&
+          frame.state === "queued" &&
+          state.cloudTask &&
+          isCompanyDesktop()
+        ) {
+          message.success(i18n.t("chat.cloudTaskSubmitted"));
+        }
         if (
           applySteerProtocolFrame(
             state,
@@ -3389,7 +3412,8 @@ export async function sendTurn(
   state.streamId = "";
   state.streamBlockType = "";
   beginStream(state, sessionId);
-  state.localPreparing = isCompanyDesktop();
+  const local = usesLocalRuntime(sessionId);
+  state.localPreparing = local;
   state.runUsage = null;
   usageSamplesByState.delete(state);
   notify(state);
@@ -3423,7 +3447,7 @@ export async function sendTurn(
     onStreamEnd?.();
   };
 
-  if (isCompanyDesktop()) {
+  if (local) {
     const localThreadId = (threadId || sessionId).trim();
     localStreams.add(sessionId);
     const beforeEdit = editMessageId ? state.messages : undefined;
@@ -3728,7 +3752,7 @@ export async function resumeHitl(
   pendingId?: string,
 ): Promise<void> {
   const state = getOrCreate(sessionId);
-  if (isCompanyDesktop()) {
+  if (usesLocalRuntime(sessionId)) {
     const runtime = window.__mossworkRuntime;
     if (pendingId?.startsWith("local-") && runtime?.resumeHitl) {
       try {
@@ -4347,7 +4371,7 @@ export function sendSteerWhileBusy(
       : undefined;
   if (!trimmed && !attachments) return "empty";
   const state = getOrCreate(sessionId);
-  const company = isCompanyDesktop();
+  const company = usesLocalRuntime(sessionId);
   const runtime = company ? window.__mossworkRuntime : undefined;
   const live = liveSockets.get(sessionId);
   if (company) {
@@ -4441,7 +4465,7 @@ export function withdrawCommittedSteer(
   if (!state.activeTurnId || pending.pendingId === pending.clientPendingId) {
     return "pending_ack";
   }
-  if (isCompanyDesktop()) {
+  if (usesLocalRuntime(sessionId)) {
     const runtime = window.__mossworkRuntime;
     if (!runtime?.removeSteer) return "pending_ack";
     state.pendingSteers = state.pendingSteers.map((item) =>

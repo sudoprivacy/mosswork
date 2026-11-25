@@ -308,6 +308,7 @@ class ThreadRegistry:
         channel_chat_type: str = "dm",
         channel_metadata: dict[str, Any] | None = None,
         channel_id: str | None = None,
+        execution_mode: str | None = None,
     ) -> str:
         session_key = self.make_key(
             agent_id=agent_id,
@@ -329,6 +330,7 @@ class ThreadRegistry:
                 channel_type=channel_type,
                 session_key=session_key,
                 last_active=0,
+                execution_mode=execution_mode,
             )
             self._sessions.upsert(
                 session_key=session_key,

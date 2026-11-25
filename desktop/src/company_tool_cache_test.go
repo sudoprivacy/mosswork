@@ -256,6 +256,19 @@ func TestCompanyToolManualCheckFindsDamageOutsideStartupFiles(t *testing.T) {
 	}
 }
 
+func TestCompanyToolManualCheckReportsMissingArchive(t *testing.T) {
+	a := startupTestApp(t)
+	t.Setenv("MOSSWORK_DESKTOP_PORTABLE_ZIP", filepath.Join(t.TempDir(), "missing.zip"))
+	_, err := a.performRuntimeAction("nonce", a.companyURL, "status", json.RawMessage(`{"verify_tools":true}`))
+	if err == nil {
+		t.Fatal("manual tool check succeeded without an archive")
+	}
+	code := runtimeErrorCode(err.Error())
+	if code != "company_tools_archive_unavailable" || !strings.Contains(runtimeErrorText(code), "完整企业客户端") {
+		t.Fatalf("expected a missing-package diagnostic, got %s: %s", code, runtimeErrorText(code))
+	}
+}
+
 func BenchmarkCompanyToolCheckRestart(b *testing.B) {
 	archive := os.Getenv("MOSSWORK_BENCH_TOOL_ARCHIVE")
 	if archive == "" {

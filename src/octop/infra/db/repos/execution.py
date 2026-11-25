@@ -666,7 +666,7 @@ class ExecutionRepo:
             raise ValueError("invalid_execution_identity")
         encoded = wire(request)
         with self._transaction() as (conn, now):
-            self._thread(conn, user, agent, thread)
+            thread_row = self._thread(conn, user, agent, thread)
             old = conn.execute(
                 "SELECT * FROM execution_runs WHERE user_id=? AND operation=? AND request_key=?",
                 (user, operation, key),
@@ -697,6 +697,13 @@ class ExecutionRepo:
                 (thread,),
             ).fetchone():
                 raise ExecutionConflict("thread_already_running")
+            if (
+                thread_row["execution_mode"] == "local"
+                or conn.execute(
+                    "SELECT 1 FROM company_runtime_threads WHERE thread_id=?", (thread,)
+                ).fetchone()
+            ):
+                raise ExecutionConflict("company_local_thread_read_only_on_server")
             limits = conn.execute("SELECT * FROM execution_control WHERE id=1").fetchone()
             queued = conn.execute(
                 "SELECT COUNT(*) FROM execution_runs WHERE state IN ('queued','awaiting_approval')"

@@ -25,7 +25,7 @@ from octop.api.routers.chat.turn import (
     turn_has_content,
 )
 from octop.infra.bridge.ids import parse_bridge_agent_id
-from octop.infra.errors import MossworkError
+from octop.infra.errors import ErrorCode, MossworkError
 from octop.infra.execution.service import ExecutionConflict, public_frames
 from octop.infra.gateway.steer import SteerAdmitOk, SteerAdmitReject, SteerCoordinator
 from octop.infra.gateway.steer.types import preview_text
@@ -73,13 +73,12 @@ async def dashboard_chat_ws(
     try:
         assert_agent_access(server, agent_id, user)
     except MossworkError as exc:
-        from octop.infra.errors import ErrorCode  # noqa: PLC0415
-
         code = 4003 if exc.code == ErrorCode.FORBIDDEN else 4404
         await websocket.close(code=code, reason=str(exc.code.value))
         return
 
     connection_id = uuid.uuid4().hex
+    send_lock = asyncio.Lock()
     await websocket.accept()
 
     async def send_frame(frame: dict[str, Any]) -> None:
@@ -89,7 +88,11 @@ async def dashboard_chat_ws(
             json.dumps(frame, ensure_ascii=False, default=json_chunk_default),
         )
 
-    hub.register(connection_id, send_frame)
+    async def send_live_frame(frame: dict[str, Any]) -> None:
+        async with send_lock:
+            await send_frame(frame)
+
+    hub.register(connection_id, send_live_frame)
     replay_task: asyncio.Task[None] | None = None
 
     async def replay_execution(run: dict[str, Any], after: int, index: int) -> None:
@@ -136,14 +139,22 @@ async def dashboard_chat_ws(
                         {"type": "error", "message": f"thread {thread_id!r} not found"},
                     )
                     continue
-                if payload.get("execution_id") and getattr(server, "execution", None) is not None:
+                execution_id = payload.get("execution_id")
+                service = getattr(server, "execution", None)
+                if service is not None and (execution_id or payload.get("replay_cloud")):
                     service = server.execution
-                    run = await service.io.run(
-                        service.repo.get, str(payload["execution_id"]), user=user.id
+                    run = (
+                        await service.io.run(service.repo.get, str(execution_id), user=user.id)
+                        if execution_id
+                        else await service.io.run(service.repo.active, thread_id)
                     )
+                else:
+                    run = None
+                if service is not None and (run is not None or execution_id):
                     after, index = payload.get("event_seq", 0), payload.get("event_index", -1)
                     if (
                         not run
+                        or run["user_id"] != user.id
                         or run["thread_id"] != thread_id
                         or run["agent_id"] != agent_id
                         or type(after) is not int
@@ -163,14 +174,23 @@ async def dashboard_chat_ws(
                     )
                     replay_task = asyncio.create_task(replay_execution(run, after, index))
                     continue
-                hub.subscribe(thread_id, connection_id)
-                await send_frame(
-                    {
-                        "type": "turn_status",
-                        "thread_id": thread_id,
-                        "active": hub.is_turn_active(thread_id),
-                    },
-                )
+                async with send_lock:
+                    hub.subscribe(thread_id, connection_id)
+                    cloud = hub.cloud_turn(thread_id)
+                    await send_frame(
+                        {
+                            "type": "turn_status",
+                            "thread_id": thread_id,
+                            "active": cloud is not None or hub.is_turn_active(thread_id),
+                        },
+                    )
+                    if cloud and payload.get("replay_cloud"):
+                        after = payload.get("event_seq", 0)
+                        if payload.get("execution_id") != cloud.id or type(after) is not int:
+                            after = 0
+                        for frame in list(cloud.frames):
+                            if frame["event_seq"] > after:
+                                await send_frame(frame)
                 expired = gateway.steer.sweep_expired(thread_id)
                 if expired is not None:
                     await send_frame(
@@ -287,6 +307,25 @@ async def dashboard_chat_ws(
                             event, run=run["run_id"], thread=prepared_early.thread_id
                         ):
                             await send_frame(accepted)
+            elif prepared_early.cloud_task:
+                if not hub.begin_cloud_turn(
+                    prepared_early.thread_id, turn.client_request_id or uuid.uuid4().hex
+                ):
+                    error = MossworkError.localized(ErrorCode.AGENT_BUSY, user.locale)
+                    await send_frame({"type": "error", "message": error.message})
+                    await send_frame({"type": "done"})
+                    continue
+                hub.subscribe(prepared_early.thread_id, connection_id)
+                if not channel_manager.try_enqueue(WS_CHANNEL_ID, inbound):
+                    hub.end_cloud_turn(prepared_early.thread_id)
+                    error = MossworkError.localized(ErrorCode.AGENT_BUSY, user.locale)
+                    await send_frame({"type": "error", "message": error.message})
+                    await send_frame({"type": "done"})
+                    continue
+                await hub.push_to_thread(
+                    prepared_early.thread_id, {"type": "execution.state", "state": "queued"}
+                )
+                continue
             hub.subscribe(prepared_early.thread_id, connection_id)
             channel_manager.enqueue(WS_CHANNEL_ID, inbound)
 

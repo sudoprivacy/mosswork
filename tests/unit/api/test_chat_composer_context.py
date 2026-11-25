@@ -87,12 +87,14 @@ async def test_plain_worker_turn_can_queue_without_a_sandbox(monkeypatch, select
         AsyncMock(return_value=("thread", "session")),
     )
     registry = SimpleNamespace(start=AsyncMock(side_effect=AssertionError("no sandbox available")))
+    thread = SimpleNamespace(execution_mode="server", execution_mode_locked=False)
     server = SimpleNamespace(
         role="worker",
         paths=browser_paths,
         services=SimpleNamespace(),
         app_runtime=SimpleNamespace(
-            agent_registry=registry, gateway=SimpleNamespace(thread_registry=object())
+            agent_registry=registry,
+            gateway=SimpleNamespace(thread_registry=SimpleNamespace(get_thread=lambda _: thread)),
         ),
     )
     prepared = await prepare_dashboard_turn(

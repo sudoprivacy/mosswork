@@ -5,6 +5,19 @@ export function executionCursor(threadId: string): Partial<Cursor> {
   return cursors.get(threadId) ?? {};
 }
 
+export function seedExecutionCursor(
+  threadId: string,
+  executionId: string,
+  seq = 0,
+) {
+  if (cursors.get(threadId)?.execution_id === executionId) return;
+  acceptExecutionFrame(threadId, {
+    execution_id: executionId,
+    event_seq: seq,
+    event_index: seq ? Number.MAX_SAFE_INTEGER : -1,
+  });
+}
+
 export function acceptExecutionFrame(
   threadId: string,
   frame: Record<string, unknown>,

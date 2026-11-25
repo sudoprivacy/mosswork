@@ -478,6 +478,7 @@ func (a *App) watchRuntimeIdentity(nonce, base string, epoch uint64, credential 
 }
 
 var runtimeErrorMessages = map[string]string{
+	"company_tools_archive_unavailable":      "客户端缺少或无法读取本机工具包。请安装包含 Python、文档工具和 FFmpeg 的完整企业客户端。",
 	"runtime_launch_failed":                  "本地运行时启动失败。请在「本地工作目录」中检查工具，确认客户端工具包完整。",
 	"runtime_process_disconnected":           "本地运行时连接已中断，请核对任务状态后重试。",
 	"execution_mode_server":                  "此会话已在网页端使用，请新建会话进行本机执行",

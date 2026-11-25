@@ -48,6 +48,8 @@ class ThreadRow:
     conversation_mode: str | None = None
     pending_plan_path: str | None = None
     hitl_policy: str | None = None
+    execution_mode: str = "server"
+    execution_mode_locked: bool = False
 
     @classmethod
     def from_row(cls, r: DbRow) -> ThreadRow:
@@ -85,6 +87,8 @@ class ThreadRow:
             conversation_mode=str(conversation_mode) if conversation_mode else None,
             pending_plan_path=str(pending_plan_path) if pending_plan_path else None,
             hitl_policy=str(hitl_policy) if hitl_policy else None,
+            execution_mode=r["execution_mode"],
+            execution_mode_locked=bool(r["execution_mode_locked"]),
         )
 
 
@@ -162,13 +166,14 @@ class ThreadRepo:
         session_key: str,
         title: str | None = None,
         last_active: int | None = None,
+        execution_mode: str | None = None,
     ) -> None:
         ts = now_ts()
         with self._db.transaction() as conn:
             conn.execute(
                 "INSERT INTO threads(thread_id, agent_id, user_id, channel_type, "
-                "session_key, title, last_active, created_at) "
-                "VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+                "session_key, title, last_active, created_at, execution_mode, execution_mode_locked) "
+                "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
                 (
                     thread_id,
                     agent_id,
@@ -178,6 +183,8 @@ class ThreadRepo:
                     clip_thread_title(title) if title else None,
                     ts if last_active is None else last_active,
                     ts,
+                    execution_mode or "server",
+                    int(execution_mode is not None),
                 ),
             )
             conn.execute(
@@ -342,7 +349,9 @@ class ThreadRepo:
                 "UPDATE threads SET last_active=last_active WHERE thread_id=?", (thread_id,)
             )
             local = conn.execute(
-                "SELECT 1 FROM company_runtime_threads WHERE thread_id=?", (thread_id,)
+                "SELECT 1 FROM threads t LEFT JOIN company_runtime_threads d ON d.thread_id=t.thread_id "
+                "WHERE t.thread_id=? AND (t.execution_mode='local' OR d.thread_id IS NOT NULL)",
+                (thread_id,),
             ).fetchone()
             if local:
                 raise ValueError("company_local_thread_read_only_on_server")

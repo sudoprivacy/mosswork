@@ -268,7 +268,12 @@ class ChannelManager:
             except asyncio.QueueFull:
                 logger.error("Queue full for channel %s, dropping payload", channel_id)
 
-    def _put_to_queue(self, queue: asyncio.Queue, channel_id: str, payload: Any) -> None:  # type: ignore[type-arg]
+    def try_enqueue(self, channel_id: str, payload: Any) -> bool:
+        """Return whether the running event loop accepted the payload."""
+        queue = self._queues.get(channel_id)
+        return queue is not None and self._put_to_queue(queue, channel_id, payload)
+
+    def _put_to_queue(self, queue: asyncio.Queue, channel_id: str, payload: Any) -> bool:  # type: ignore[type-arg]
         """Thread-safe helper: put payload into queue from the event loop thread."""
         queued_payload = payload
         channel = self._channels.get(channel_id)
@@ -285,13 +290,15 @@ class ChannelManager:
                 )
                 self._interrupt_tasks.add(task)
                 task.add_done_callback(self._interrupt_tasks.discard)
-                return
+                return True
             if message is not None:
                 queued_payload = message
         try:
             queue.put_nowait(queued_payload)
         except asyncio.QueueFull:
             logger.error("Queue full for channel %s, dropping payload", channel_id)
+            return False
+        return True
 
     async def _run_interrupt(
         self,

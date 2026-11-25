@@ -3,6 +3,9 @@
 from __future__ import annotations
 
 import asyncio
+import json
+import os
+import re
 from collections.abc import AsyncIterator
 from pathlib import Path
 from typing import Any
@@ -22,7 +25,7 @@ from tests.support.auth import (
     seed_openai_provider,
 )
 from tests.support.fakes import FakeHarnessAgent
-from tests.support.http import chat_ws_path, ws_connect
+from tests.support.http import chat_ws_path, serve_http, ws_connect, ws_token
 
 
 def _chat_ws(c: httpx.AsyncClient, aid: str, auth: dict[str, str]) -> Any:
@@ -738,6 +741,160 @@ async def test_thread_history_reports_active_turn(env: Any) -> None:
     srv.app_runtime.gateway.ws_hub.mark_turn_active(tid)
     active = await c.get(f"/api/agents/{aid}/threads/{tid}/history", headers=alice_auth)
     assert active.json()["turn_active"] is True
+
+
+async def test_cloud_thread_continues_after_desktop_disconnect(env: Any) -> None:
+    c, srv, _, auth, other_auth, aid = env
+    base = f"/api/agents/{aid}/threads"
+    created = await c.post(base, headers=auth, json={"execution_mode": "server"})
+    assert created.status_code == 201 and created.json()["cloud_task"]
+    tid = created.json()["thread_id"]
+    schema = (await c.get("/api/openapi.json", headers=auth)).json()
+    assert (
+        schema["components"]["schemas"]["CreateServerThreadBody"]["properties"]["execution_mode"][
+            "const"
+        ]
+        == "server"
+    )
+    agent = srv.app_runtime.agent_registry.get_agent(aid)
+    gate = asyncio.Event()
+
+    async def slow_stream(request: dict[str, Any]) -> AsyncIterator[dict[str, Any]]:
+        yield {"type": "token", "node": "agent", "content": "first"}
+        await gate.wait()
+        yield {"type": "token", "node": "agent", "content": "second"}
+
+    agent.stream = slow_stream
+    try:
+        async with _chat_ws(c, aid, auth) as desktop:
+            await desktop.send_json({"type": "user_turn", "thread_id": tid, "text": "Start"})
+            receipt = await desktop.receive_json()
+            assert receipt["state"] == "queued"
+            while (frame := await desktop.receive_json())["type"] != "token":
+                pass
+            assert frame["content"] == "first"
+
+        listed = await c.get(base, headers=auth)
+        assert any(row["thread_id"] == tid and row["cloud_task"] for row in listed.json())
+        history = await c.get(f"{base}/{tid}/history", headers=auth)
+        assert history.json()["active_execution"]["id"] == receipt["execution_id"]
+        assert (await c.get(f"{base}/{tid}/history", headers=other_auth)).status_code in {403, 404}
+
+        async with _chat_ws(c, aid, auth) as browser:
+            await browser.send_json({"type": "subscribe", "thread_id": tid, "replay_cloud": True})
+            assert (await browser.receive_json())["active"] is True
+            while (frame := await browser.receive_json())["type"] != "token":
+                pass
+            assert frame["content"] == "first"
+            gate.set()
+            frames = await browser.drain_turn()
+            assert [frame["content"] for frame in frames if frame["type"] == "token"] == ["second"]
+            while frames[-1]["type"] != "turn.ended":
+                frames.append(await browser.receive_json())
+            await browser.send_json({"type": "user_turn", "thread_id": tid, "text": "Continue"})
+            followup = await browser.drain_turn()
+            assert any(frame.get("state") == "queued" for frame in followup)
+            assert all(frame.get("thread_id") == tid for frame in followup)
+    finally:
+        gate.set()
+
+
+@pytest.mark.slow
+@pytest.mark.skipif(
+    os.environ.get("MOSSWORK_RUN_BROWSER_ACCEPTANCE") != "1",
+    reason="Explicit built-dashboard browser acceptance",
+)
+async def test_built_cloud_task_reopens_in_a_fresh_browser(env: Any) -> None:
+    from langchain_core.messages import AIMessage, HumanMessage
+    from playwright.async_api import async_playwright, expect
+
+    c, srv, _, auth, _, aid = env
+    agent = srv.app_runtime.agent_registry.get_agent(aid)
+    release = asyncio.Event()
+    requests = []
+
+    async def stream(request: dict[str, Any]) -> AsyncIterator[dict[str, Any]]:
+        thread = request["thread_id"]
+        requests.append(thread)
+        previous = []
+        if len(requests) == 1:
+            question, prefix = "Start the cloud report", "Cloud report started. "
+            answer = prefix + "Cloud report finished."
+            yield {"type": "token", "node": "agent", "content": prefix}
+            await release.wait()
+            content = "Cloud report finished."
+        else:
+            question = "Continue the cloud report"
+            content = answer = "Cloud report continued."
+            previous = [
+                HumanMessage(content="Start the cloud report", id="question-1"),
+                AIMessage(content="Cloud report started. Cloud report finished.", id="answer-1"),
+            ]
+        index = len(requests)
+        agent.seed_thread_messages(
+            thread,
+            [
+                *previous,
+                HumanMessage(content=question, id=f"question-{index}"),
+                AIMessage(content=answer, id=f"answer-{index}"),
+            ],
+        )
+        yield {"type": "token", "node": "agent", "content": content}
+
+    agent.stream = stream
+    login = f"localStorage.setItem('auth_token', {json.dumps(ws_token(auth))});"
+    login += "localStorage.setItem('mosswork:locale', 'en');"
+    try:
+        async with serve_http(c._mosswork_app) as origin, async_playwright() as playwright:
+            browser = await playwright.chromium.launch()
+            desktop = await browser.new_context(locale="en-US")
+            await desktop.add_init_script(login + "window.mossworkDesktopWorkspace = {};")
+            page = await desktop.new_page()
+            await page.goto(f"{origin}/chat/{aid}")
+            new_task = page.get_by_role("button", name=re.compile(r"^(New Chat|新建对话)$", re.I))
+            task_buttons = new_task.and_(page.locator('[aria-haspopup="menu"]'))
+            await expect(task_buttons).to_have_count(2, timeout=12000)
+            await task_buttons.first.click()
+            await page.get_by_role(
+                "menuitem", name=re.compile(r"^(New cloud task|新建云端任务)$")
+            ).click(timeout=8000)
+            await expect(
+                page.get_by_text(re.compile(r"^(Cloud execution|云端执行)$"))
+            ).to_be_visible()
+            thread = page.url.rsplit("/", 1)[-1]
+            assert srv.services.thread_repo.get(thread).execution_mode == "server"
+            editor = page.locator("textarea").first
+            await editor.fill("Start the cloud report")
+            await editor.press("Enter")
+            await expect(page.get_by_text("Cloud report started.", exact=True)).to_be_visible()
+            await desktop.close()
+
+            web = await browser.new_context(locale="en-US")
+            await web.add_init_script(login)
+            page = await web.new_page()
+            await page.goto(f"{origin}/chat/{aid}/{thread}")
+            await expect(page.get_by_text("Cloud report started.", exact=True)).to_be_visible()
+            release.set()
+            await expect(
+                page.get_by_text("Cloud report started. Cloud report finished.", exact=True)
+            ).to_have_count(1)
+            await web.close()
+
+            completed = await browser.new_context(locale="en-US")
+            await completed.add_init_script(login)
+            page = await completed.new_page()
+            await page.goto(f"{origin}/chat/{aid}/{thread}")
+            await expect(
+                page.get_by_text("Cloud report started. Cloud report finished.", exact=True)
+            ).to_have_count(1)
+            editor = page.locator("textarea").first
+            await editor.fill("Continue the cloud report")
+            await editor.press("Enter")
+            await expect(page.get_by_text("Cloud report continued.", exact=True)).to_be_visible()
+            assert requests == [thread, thread]
+            await browser.close()
+    finally:
+        release.set()
 
 
 async def test_create_thread(env: Any) -> None:

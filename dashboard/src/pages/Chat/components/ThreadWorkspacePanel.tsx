@@ -2,7 +2,6 @@ import { useCallback, useEffect, useRef, useState, type Key } from "react";
 import { Button, Spin, Tree, type TreeDataNode } from "antd";
 import { FolderOpen, RefreshCw } from "lucide-react";
 import { useTranslation } from "react-i18next";
-import { isCompanyDesktop } from "../../../api/desktopRuntime";
 import {
   mossworkThreadsApi,
   type ThreadArtifact,
@@ -65,7 +64,6 @@ function WorkspaceTree({
   );
   const [error, setError] = useState("");
   const desktopRequired = t("chat.threadDirectory.desktopRequired");
-  const pending = t("chat.threadDirectory.pending");
   const readFailed = t("workspace.readFailed");
 
   const nativeDirectory = useCallback(
@@ -92,8 +90,6 @@ function WorkspaceTree({
         const local = await nativeDirectory("");
         if (!local) throw new Error(readFailed);
         if (current) setWorkspace({ ...root, entries: local.entries });
-      } else if (!root.has_messages && isCompanyDesktop()) {
-        throw new Error(pending);
       } else {
         setWorkspace(root);
       }
@@ -104,7 +100,7 @@ function WorkspaceTree({
     return () => {
       current = false;
     };
-  }, [agentId, threadId, nativeDirectory, readFailed, pending]);
+  }, [agentId, threadId, nativeDirectory, readFailed]);
 
   function reveal(path: string) {
     void nativeDirectory(path, true).catch((err: Error) =>
