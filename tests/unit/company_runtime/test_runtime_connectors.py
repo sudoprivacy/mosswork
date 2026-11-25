@@ -1,6 +1,7 @@
 import logging
 from datetime import UTC
 from datetime import datetime as RealDateTime
+from types import SimpleNamespace
 from typing import Any
 from unittest.mock import AsyncMock
 
@@ -135,7 +136,11 @@ async def test_receipt_middleware_keeps_connector_tool_for_model():
         return "x"
 
     async def handler(request):
-        return request
+        # moss-harness 0.0.8 middleware contract: the wrapped handler returns a
+        # response object exposing ``.result`` (the emitted messages), not the
+        # request itself. No AIMessage tool calls here, so the middleware takes
+        # the passthrough branch and returns the response unchanged.
+        return SimpleNamespace(tools=list(request.tools), result=[])
 
     request = ModelRequest(
         model=None,
