@@ -146,6 +146,7 @@ def test_export_preserves_project_ci_and_archives_unknown_workflows(tmp_path: Pa
         "mosswork-desktop-update.yml",
         "mosswork-cos-publish.yml",
         "mosswork-browser-ci.yml",
+        "mosswork-stack-input.yml",
         "auto-tag.yml",
     ):
         (workflows / name).write_text(f"name: {name}\n")
@@ -159,6 +160,7 @@ def test_export_preserves_project_ci_and_archives_unknown_workflows(tmp_path: Pa
         "mosswork-desktop-update.yml",
         "mosswork-browser-ci.yml",
         "mosswork-cos-publish.yml",
+        "mosswork-stack-input.yml",
     ):
         assert (target / ".github/workflows" / name).is_file()
     assert (target / ".github/workflows/mosswork-cos-publish.yml").is_file()

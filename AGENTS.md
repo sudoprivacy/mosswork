@@ -386,6 +386,7 @@ Boundary rules are in [§5](#5-module-boundaries). Additionally:
 | Human-readable API reference | `docs/api.md` |
 | SharedServices / RepoBundle | `infra/db/services.py` |
 | Branching & release | [§10](#10-change-workflow) Branching & release; `CONTRIBUTING.md`; `.cursor/skills/publish` |
+| Stack bootstrap input of the signed Mac client | `desktop/stack-input.json` (reviewed pin; agents open a PR, never merge it); guide: `docs/stack-input-update.md` |
 
 ## 10. Change workflow
 
