@@ -9,6 +9,7 @@ from typing import Any
 from octop.infra.connectors.gateway.cli_dirs import resolve_cli_config_key
 from octop.infra.connectors.gateway.cli_runner import resolve_binary, run_cli
 from octop.infra.connectors.gateway.feishu_creds import prepare_feishu_cli_env
+from octop.infra.connectors.gateway.feishu_user_auth import read_auth_status
 from octop.infra.utils.paths import PathLayout
 
 _KIND = "feishu-cli"
@@ -134,10 +135,15 @@ def call_tool(creds: dict[str, Any], name: str, args: dict[str, Any]) -> str:
         if not tokens:
             raise ValueError("method is required")
         identity = _resolve_identity(domain, tokens[0], creds)
-        if (domain, tokens[0]) in _USER_ONLY_SHORTCUTS and str(
-            creds.get("default_as") or ""
-        ).strip().lower() != "user":
-            # mosswork has not recorded a completed user OAuth yet.
+        # mosswork has not recorded a completed user OAuth — but the user token
+        # may exist on disk (device code consumed by an earlier complete call
+        # that failed after token exchange). Live-check the identity before
+        # telling the user to authorize again.
+        if (
+            (domain, tokens[0]) in _USER_ONLY_SHORTCUTS
+            and str(creds.get("default_as") or "").strip().lower() != "user"
+            and not _user_identity_available(binary, creds, prefer_identity=identity)
+        ):
             raise ValueError(_USER_AUTH_REQUIRED_MSG)
         env = _prepare_env(creds, prefer_identity=identity)
         if (domain, tokens[0]) in _USER_ONLY_SHORTCUTS and not _has_user_scope(
@@ -158,6 +164,27 @@ def _has_user_scope(binary: str, env: dict[str, str], scope: str) -> bool:
         return True
     except ValueError:
         return False
+
+
+def _user_identity_available(
+    binary: str,
+    creds: dict[str, Any],
+    *,
+    prefer_identity: str | None = None,
+) -> bool:
+    """Live-check the user identity instead of trusting the stored flag.
+
+    Any CLI/parse failure means "not available" — the stored-flag error
+    message is reported instead of leaking CLI errors.
+    """
+    try:
+        env = _prepare_env(creds, prefer_identity=prefer_identity)
+        status = read_auth_status(binary=binary, env=env)
+    except ValueError:
+        return False
+    identities = status.get("identities") if isinstance(status, dict) else None
+    user = identities.get("user") if isinstance(identities, dict) else None
+    return isinstance(user, dict) and bool(user.get("available"))
 
 
 def _resolve_identity(domain: str, shortcut: str, creds: dict[str, Any]) -> str | None:

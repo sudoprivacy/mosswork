@@ -1078,7 +1078,7 @@ export function useChat(
         return;
       }
 
-      // Already have local history: only re-probe when we still expect a stream.
+      // Already have hydrated local history: only re-probe when we still expect a stream.
       // A server push (cron, IM) marks history stale and forces a refetch.
       // An empty cached page is never trusted: a background turn (cron, IM,
       // another tab) may have written the first messages since we hydrated,

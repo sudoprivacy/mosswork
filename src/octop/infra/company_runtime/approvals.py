@@ -23,13 +23,13 @@ class CompanyApprovals:
         self.policies[thread] = parse_hitl_session_policy(policy)
 
     def prepare(
-        self, thread: str, request: dict[str, Any]
+        self, thread: str, request: dict[str, Any], *, force_manual: bool = False
     ) -> tuple[dict[str, Any], asyncio.Future[list[dict[str, Any]]] | list[dict[str, Any]]]:
         actions = request.get("action_requests")
         if not isinstance(actions, list) or not actions:
             raise ValueError("invalid_local_approval")
         policy = self.policies.get(thread) or parse_hitl_session_policy(None)
-        if all(policy.allows(action.get("name", "")) for action in actions):
+        if not force_manual and all(policy.allows(action.get("name", "")) for action in actions):
             return request, [{"type": "approve"} for _ in actions]
         pending = {**request, "pending_id": "local-" + secrets.token_hex(16)}
         future: asyncio.Future[list[dict[str, Any]]] = asyncio.get_running_loop().create_future()
@@ -69,11 +69,18 @@ class CompanyApprovals:
         self.policies.pop(thread, None)
         self.locks.pop(thread, None)
 
-    async def decide(self, thread: str, request: dict[str, Any], emit: Any) -> list[dict[str, Any]]:
+    async def decide(
+        self,
+        thread: str,
+        request: dict[str, Any],
+        emit: Any,
+        *,
+        force_manual: bool = False,
+    ) -> list[dict[str, Any]]:
         # Parallel tool calls each keep their own decision. A scalar LangGraph
         # resume can otherwise approve several independent interrupts at once.
         async with self.locks.setdefault(thread, asyncio.Lock()):
-            pending, future = self.prepare(thread, request)
+            pending, future = self.prepare(thread, request, force_manual=force_manual)
             if isinstance(future, list):
                 return future
             emit(

@@ -100,6 +100,7 @@ interface ChatInputProps {
   /** Team room: the host turn itself can still be interrupted while it is the only speaker. */
   isTeam?: boolean;
   disabled?: boolean;
+  localRuntime?: boolean;
   /** Pre-fill the input with this text on mount (e.g. navigated from another page). */
   initialText?: string;
   /** Called when the composer is cleared after a successful send/queue. */
@@ -169,6 +170,7 @@ const ChatInput = forwardRef<ChatInputHandle, ChatInputProps>(
       holdSend = false,
       isTeam = false,
       disabled,
+      localRuntime = false,
       initialText = "",
       onComposerCleared,
       availableModels,
@@ -990,6 +992,7 @@ const ChatInput = forwardRef<ChatInputHandle, ChatInputProps>(
             isStreaming={isStreaming || holdSend}
             isTeam={isTeam}
             disabled={disabled}
+            localRuntime={localRuntime}
             canSend={canSend}
             text={text}
             polishing={polishing}

@@ -333,6 +333,11 @@ def test_docs_search_requires_user_auth_without_shell_hint(
         "octop.infra.connectors.gateway.feishu_creds.ensure_feishu_cli_config",
         lambda *a, **k: None,
     )
+    # Live identity probe: no user identity on disk.
+    monkeypatch.setattr(
+        "octop.infra.connectors.gateway.feishu_user_auth.run_cli",
+        lambda *a, **k: json.dumps({"identities": {"bot": {"available": True}}}),
+    )
     called = False
 
     def _fake_run(*_a: Any, **_k: Any) -> str:
@@ -353,6 +358,93 @@ def test_docs_search_requires_user_auth_without_shell_hint(
     msg = str(ei.value)
     assert "lark-cli" not in msg
     assert called is False
+
+
+def test_docs_search_live_user_token_allows_missing_default_as(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    captured: dict[str, Any] = {}
+    monkeypatch.setenv("MOSSWORK_HOME", str(tmp_path))
+    monkeypatch.setattr(
+        "octop.infra.connectors.gateway.adapters.feishu_cli.resolve_binary",
+        lambda _name: fake_bin_path("lark-cli"),
+    )
+    monkeypatch.setattr(
+        "octop.infra.connectors.gateway.feishu_creds.resolve_binary",
+        lambda _name: fake_bin_path("lark-cli"),
+    )
+    monkeypatch.setattr(
+        "octop.infra.connectors.gateway.feishu_creds.ensure_feishu_cli_config",
+        lambda *a, **k: None,
+    )
+    # Stored default_as is missing, but the live user identity is available.
+    monkeypatch.setattr(
+        "octop.infra.connectors.gateway.feishu_user_auth.run_cli",
+        lambda *a, **k: json.dumps(
+            {"identities": {"bot": {"available": True}, "user": {"available": True}}}
+        ),
+    )
+
+    def _fake_run(
+        argv: list[str],
+        *,
+        env: dict[str, str] | None = None,
+        timeout_s: float = 30.0,
+        cwd: str | None = None,
+        stdin_text: str | None = None,
+    ) -> str:
+        del timeout_s, cwd, stdin_text, env
+        captured.setdefault("calls", []).append(list(argv))
+        if argv[1:3] == ["auth", "check"]:
+            return '{"ok":true}'
+        captured["argv"] = argv
+        return '{"ok":true}'
+
+    monkeypatch.setattr(
+        "octop.infra.connectors.gateway.adapters.feishu_cli.run_cli",
+        _fake_run,
+    )
+    feishu_cli.call_tool(
+        {"app_id": "a1", "app_secret": "s1", "instance_id": "i1"},
+        "doc",
+        {"method": "+search", "args": {"query": "计划"}},
+    )
+    assert captured["argv"][:3] == [fake_bin_path("lark-cli"), "docs", "+search"]
+    assert "--as" in captured["argv"]
+    assert captured["argv"][captured["argv"].index("--as") + 1] == "user"
+
+
+def test_docs_search_live_check_failure_keeps_auth_message(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    monkeypatch.setenv("MOSSWORK_HOME", str(tmp_path))
+    monkeypatch.setattr(
+        "octop.infra.connectors.gateway.adapters.feishu_cli.resolve_binary",
+        lambda _name: fake_bin_path("lark-cli"),
+    )
+    monkeypatch.setattr(
+        "octop.infra.connectors.gateway.feishu_creds.resolve_binary",
+        lambda _name: fake_bin_path("lark-cli"),
+    )
+    monkeypatch.setattr(
+        "octop.infra.connectors.gateway.feishu_creds.ensure_feishu_cli_config",
+        lambda *a, **k: None,
+    )
+
+    def _raise(*_a: Any, **_k: Any) -> str:
+        raise ValueError("[lark-cli] device-flow: token response received")
+
+    monkeypatch.setattr(
+        "octop.infra.connectors.gateway.feishu_user_auth.run_cli",
+        _raise,
+    )
+    with pytest.raises(ValueError, match="文档搜索需要先完成飞书账号授权") as ei:
+        feishu_cli.call_tool(
+            {"app_id": "a1", "app_secret": "s1", "instance_id": "i1"},
+            "doc",
+            {"method": "+search", "args": {"query": "q"}},
+        )
+    assert "lark-cli" not in str(ei.value)
 
 
 def test_docs_search_uses_as_user(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:

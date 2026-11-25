@@ -179,7 +179,7 @@ def _connection_spec_loadable(spec: Any) -> bool:
     return bool(spec.get("transport"))
 
 
-async def aload_mcp_tools(configs: dict[str, Any]) -> list[BaseTool]:
+async def aload_mcp_tools(configs: dict[str, Any], *, errors: dict[str, str] | None = None) -> list[BaseTool]:  # noqa: PLR0912
     """Load LangChain tools from MCP server connection specs.
 
     Loads each configured server independently so one unreachable or
@@ -230,12 +230,16 @@ async def aload_mcp_tools(configs: dict[str, Any]) -> list[BaseTool]:
             )
             tools.extend(server_tools)
         except DEFENSIVE_OP_ERRORS:
+            if errors is not None:
+                errors[name] = "mcp_tool_load_failed"
             logger.warning(
                 "Failed to load MCP tools from server %r",
                 name,
                 exc_info=True,
             )
         except BaseExceptionGroup:
+            if errors is not None:
+                errors[name] = "mcp_tool_load_failed"
             # MCP SSE clients (anyio TaskGroup) wrap httpx errors in ExceptionGroup.
             logger.warning(
                 "Failed to load MCP tools from server %r",

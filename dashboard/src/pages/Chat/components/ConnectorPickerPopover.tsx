@@ -21,6 +21,7 @@ interface ConnectorPickerPopoverProps {
   selectedConnectors: string[];
   onConnectorsChange: (names: string[]) => void;
   onNavigateAway?: () => void;
+  localRuntime?: boolean;
 }
 
 export default function ConnectorPickerPopover({
@@ -28,6 +29,7 @@ export default function ConnectorPickerPopover({
   selectedConnectors,
   onConnectorsChange,
   onNavigateAway,
+  localRuntime = false,
 }: ConnectorPickerPopoverProps) {
   const { t } = useTranslation();
   const navigate = useNavigate();
@@ -53,6 +55,13 @@ export default function ConnectorPickerPopover({
         onNavigateAway?.();
         navigate("/connectors");
       }}
+      beforeFooter={
+        localRuntime ? (
+          <div className={pickerStyles.empty}>
+            {t("connectors.localRuntimeExternalHint")}
+          </div>
+        ) : null
+      }
       renderItem={(connector) => {
         const active = selectedConnectors.includes(connector.mcp_server_name);
         return (

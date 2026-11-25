@@ -98,6 +98,7 @@ interface ChatInputActionsRowProps {
   /** Team host room — stop control uses clearer wording. */
   isTeam?: boolean;
   disabled?: boolean;
+  localRuntime?: boolean;
   canSend: boolean;
   text: string;
   polishing: boolean;
@@ -162,6 +163,7 @@ export default function ChatInputActionsRow({
   isStreaming,
   isTeam = false,
   disabled,
+  localRuntime = false,
   canSend,
   text,
   polishing,
@@ -804,6 +806,7 @@ export default function ChatInputActionsRow({
             selectedConnectors={selectedConnectors}
             onConnectorsChange={onConnectorsChange!}
             onNavigateAway={closePlusMenu}
+            localRuntime={localRuntime}
           />
         );
       case "knowledge":

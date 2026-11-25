@@ -22,12 +22,16 @@ class CompanyCapabilitiesMiddleware(AgentMiddleware):
     async def awrap_model_call(self, request: Any, handler: Any) -> Any:
         tools = [item[4] for item in CAPABILITIES.values() if self.capabilities.get(item[0], False)]
         instruction = (
-            " Company service tools assigned to this employee: "
-            + (", ".join(tools) or "none")
+            " Optional company service capabilities assigned to this employee "
+            "(web search, speech-to-text, text-to-speech, image and video generation): "
+            + (", ".join(tools) or "none of these service capabilities")
             + ". Provider credentials stay on the company server, not this computer. "
-            "Use an assigned tool and report its actual result; do not infer unavailability "
-            "from missing local credentials. For an unassigned capability, ask the company "
-            "administrator to grant it. Historical tool availability is not current authorization."
+            "Use an assigned service tool and report its actual result; do not infer "
+            "unavailability from missing local credentials. For an unassigned service "
+            "capability, ask the company administrator to grant it. This list covers "
+            "service capabilities only; connector tools granted to this task, if any, "
+            "are described separately in these instructions and are not affected by "
+            "this list. Historical tool availability is not current authorization."
         )
         message = request.system_message
         content = message.content

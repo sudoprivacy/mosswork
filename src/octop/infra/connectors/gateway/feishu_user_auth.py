@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import contextlib
 import json
 from pathlib import Path
 from typing import Any
@@ -78,11 +79,16 @@ def complete_user_device_login(
     if not code:
         raise ValueError("device_code is required")
     binary, env = _prepare(config_dir, app_id=app_id, app_secret=app_secret, default_as="bot")
-    run_cli(
-        [binary, "auth", "login", "--device-code", code, "--json"],
-        env=env,
-        timeout_s=120.0,
-    )
+    # The device code may already be consumed by an earlier complete call
+    # while the user token is on disk; the live status check below decides.
+    # Note: "config default-as user" still runs on this path even when the
+    # check later fails — later calls rewrite it from the stored preference.
+    with contextlib.suppress(ValueError):
+        run_cli(
+            [binary, "auth", "login", "--device-code", code, "--json"],
+            env=env,
+            timeout_s=120.0,
+        )
     run_cli([binary, "config", "default-as", "user"], env=env, timeout_s=30.0)
     status = read_auth_status(binary=binary, env=env)
     user = (

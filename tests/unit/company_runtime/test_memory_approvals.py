@@ -298,6 +298,24 @@ async def test_parallel_tool_calls_require_independent_decisions():
     approvals.end("thread")
 
 
+async def test_forced_connector_approval_ignores_allow_all_policy():
+    approvals = CompanyApprovals()
+    approvals.begin("thread", {"mode": "allow_all"})
+    request = {"action_requests": [{"name": "connector:qq-mail__one:send_email"}]}
+    pending, future = approvals.prepare("thread", request, force_manual=True)
+    assert not isinstance(future, list)
+    assert pending["pending_id"].startswith("local-")
+    approvals.resolve(
+        {
+            "thread_id": "thread",
+            "pending_id": pending["pending_id"],
+            "decisions": [{"type": "approve"}],
+        }
+    )
+    assert await future == [{"type": "approve"}]
+    approvals.end("thread")
+
+
 async def test_managed_memory_reads_only_its_owned_predecessor_on_worker(company, tmp_path):
     from types import SimpleNamespace
 
