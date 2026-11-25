@@ -1002,7 +1002,11 @@ def main() -> int:
         else:
             changed = complete
             baseline, reason = frontend_base, frontend_reason
-            snapshot = worktree_inputs(root)
+            try:
+                snapshot = worktree_inputs(root)
+            except ValueError as error:
+                selected = "full"
+                reason = str(error) + "; retain full application checks"
     if args.worktree:
         if baseline is None or not changed:
             selected = "full"

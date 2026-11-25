@@ -107,6 +107,33 @@ describe("useSessions agent switch", () => {
     resetSessionStoreForTests();
   });
 
+  it("keeps a local thread writable while a legacy server binds its first turn", async () => {
+    const row = { ...threadRow("thr_new", { title: "hi" }), last_active: 0 };
+    listMock.mockResolvedValueOnce([{ ...row, execution_location: "desktop" }]);
+    const { result } = renderHook(() => useSessions("agent-a"));
+    await waitFor(() => expect(result.current.loading).toBe(false));
+    const preparing = { ...row, execution_location: "server" };
+    listMock.mockResolvedValueOnce([
+      preparing,
+      { ...preparing, thread_id: "other" },
+    ]);
+    await act(async () => {
+      await result.current.fetchSessions();
+    });
+    expect(
+      result.current.sessions.find((s) => s.id === "thr_new")
+        ?.executionLocation,
+    ).toBe("desktop");
+    expect(
+      result.current.sessions.find((s) => s.id === "other")?.executionLocation,
+    ).toBe("server");
+    listMock.mockResolvedValueOnce([{ ...preparing, last_active: 1 }]);
+    await act(async () => {
+      await result.current.fetchSessions();
+    });
+    expect(result.current.sessions[0].executionLocation).toBe("server");
+  });
+
   it("keeps retained history visible and shows the deletion refusal", async () => {
     listMock.mockResolvedValue([threadRow("thr_retained")]);
     deleteMock.mockRejectedValue(

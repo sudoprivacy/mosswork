@@ -335,8 +335,26 @@ async function fetchSessionsPage(
 ): Promise<{ sessions: Session[]; hasMore: boolean }> {
   const rows = await mossworkThreadsApi.list(agentId, limit + 1);
   const hasMore = rows.length > limit;
+  const knownDesktop = new Set(
+    (_storeAgentId === agentId ? _sessions : [])
+      .filter((s) => s.executionLocation === "desktop")
+      .map((s) => s.id),
+  );
   const sessions = sortSessions(
-    rows.slice(0, limit).map((row) => toSession({ ...row, agent_id: agentId })),
+    rows.slice(0, limit).map((row) => {
+      const session = toSession({ ...row, agent_id: agentId });
+      // Before first execution, older servers label locally created threads
+      // as server-side. An automatic title alone can also set has_messages.
+      if (
+        knownDesktop.has(row.thread_id) &&
+        row.execution_location === "server" &&
+        row.cloud_task === undefined &&
+        row.last_active === 0
+      ) {
+        session.executionLocation = "desktop";
+      }
+      return session;
+    }),
   );
   return { sessions, hasMore };
 }

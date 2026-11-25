@@ -1458,6 +1458,24 @@ def test_worktree_plan_ignores_stat_only_changes_without_refreshing_index(repo: 
     assert (repo / ".git/index").read_bytes() == before
 
 
+def test_staged_frontend_with_unavailable_snapshot_delegates_full_checks(
+    repo: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    base = seed_tool_worktree(repo)
+    path = "dashboard/src/App.tsx"
+    stage(repo, path, "export default function App() {}\n")
+
+    def unavailable_snapshot(_root: Path) -> None:
+        raise ValueError("Source links require the full original test command")
+
+    monkeypatch.chdir(repo)
+    monkeypatch.setattr(sys, "argv", ["precommit.py", "--plan"])
+    monkeypatch.setattr(gate, "worktree_paths", lambda _: ([path], base, "Frontend changes"))
+    monkeypatch.setattr(gate, "worktree_inputs", unavailable_snapshot)
+    assert gate.main() == 0
+    assert json.loads(capsys.readouterr().out)["profile"] == "full"
+
+
 def test_worktree_scope_includes_pending_commits_and_all_current_sources(repo: Path) -> None:
     base = seed_tool_worktree(repo)
     stage(repo, "tools/ci_identity_reuse.py", "# Pending committed tool change\n")
