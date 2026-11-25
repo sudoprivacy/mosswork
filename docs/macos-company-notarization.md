@@ -6,10 +6,9 @@ The macOS job in `mosswork-release.yml` consumes an ARM64 Stack bootstrap
 package. The archive holds the bundle with `native-bundle.json` and
 `SHA256SUMS` at its root. It is stored on a draft release of this repository
 and pinned by [`desktop/stack-input.json`](../desktop/stack-input.json). The
-`stack-input` job reads and verifies the pinned asset and hands it to the Mac
-job, so a release needs no download URL or per-run configuration. Changing the
-pin requires a reviewed pull request; see
-[Updating the Stack input](stack-input-update.md).
+signed Mac job reads it directly from the draft release using its GitHub job
+token and keeps the raw archive on the runner. Changing the pin requires a
+reviewed pull request. See [Updating the Stack input](stack-input-update.md).
 
 The Mac verifies the archive and its manifest before using the pinned Stack
 signer on a fresh staging copy. It embeds the final signed bytes in the company

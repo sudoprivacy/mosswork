@@ -15,12 +15,11 @@ draft release tag, asset ID, name, size, SHA-256, the SHA-256 of the package's
 `native-bundle.json`, and the qualification and source commits recorded in that
 manifest. The pin is the only place these values are configured.
 
-When `mosswork-release.yml` builds a signed Mac client, the `stack-input` job
-reads the pinned asset with a write-scoped job token (GitHub only serves draft
-assets to writers), checks it against the pin and passes it to the Mac job as a
-one-day workflow artifact. The Mac job keeps read-only access. It checks the
-SHA-256 again, verifies the manifest against the pin and verifies every bundled
-file before signing. No download URL, secret or per-run setup is involved.
+The signed Mac job in `mosswork-release.yml` uses its job token to read the
+pinned draft asset. GitHub requires contents write permission to read a draft
+release. The job verifies the asset and every file in the bundle before
+signing. The raw archive stays on the Mac runner. The publish job downloads
+the workflow artifacts listed in its release download filter.
 
 ## When a new package is needed
 

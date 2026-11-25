@@ -158,46 +158,12 @@ jobs:
           if-no-files-found: error
           retention-days: 7
 
-  stack-input:
-    name: Fetch the pinned Stack input
-    needs: source
-    runs-on: ubuntu-24.04
-    # Draft release assets are readable only with write access. This job runs no
-    # build code: it reads the asset named by the reviewed desktop/stack-input.json,
-    # verifies it and hands it to the Mac job. Its steps are no-ops for unsigned
-    # runs so dependent jobs never inherit a skipped status.
-    permissions:
-      contents: write
-    steps:
-      - uses: actions/checkout@v4
-        if: needs.source.outputs.signed_mac == 'true'
-        with:
-          persist-credentials: false
-          sparse-checkout: |
-            desktop/stack-input.json
-            desktop/stack_input.py
-          sparse-checkout-cone-mode: false
-      - name: Download and verify the pinned asset
-        if: needs.source.outputs.signed_mac == 'true'
-        env:
-          GH_TOKEN: ${{ github.token }}
-        run: |
-          set -euo pipefail
-          asset_id="$(python3 -I desktop/stack_input.py field asset_id)"
-          gh api "repos/$GITHUB_REPOSITORY/releases/assets/$asset_id" > "$RUNNER_TEMP/asset.json"
-          gh api -H 'Accept: application/octet-stream' "repos/$GITHUB_REPOSITORY/releases/assets/$asset_id" > "$RUNNER_TEMP/stack.tar.gz"
-          python3 -I desktop/stack_input.py verify "$RUNNER_TEMP/stack.tar.gz" --metadata "$RUNNER_TEMP/asset.json"
-      - uses: actions/upload-artifact@v4
-        if: needs.source.outputs.signed_mac == 'true'
-        with:
-          name: stack-input-macos-arm64
-          path: ${{ runner.temp }}/stack.tar.gz
-          if-no-files-found: error
-          retention-days: 1
-
   client:
     name: Client (${{ matrix.platform }})
-    needs: [source, stack-input]
+    needs: source
+    # GitHub requires contents write access to read draft release assets.
+    permissions:
+      contents: write
     runs-on: ${{ matrix.os }}
     environment:
       name: ${{ matrix.target == 'darwin' && needs.source.outputs.signed_mac == 'true' && 'mosswork-macos-release' || 'client-build' }}
@@ -258,19 +224,19 @@ jobs:
           # package resolves from the exported source tree on every runner.
           npm ci --no-audit --replace-registry-host=never
           npm run build
-      - name: Download the verified Stack input
+      - name: Download and verify the pinned Stack input
         if: runner.os == 'macOS' && needs.source.outputs.signed_mac == 'true'
-        uses: actions/download-artifact@v4
-        with:
-          name: stack-input-macos-arm64
-          path: ${{ runner.temp }}/stack-download
-      - name: Unpack the pinned Stack bootstrap bundle
-        if: runner.os == 'macOS' && needs.source.outputs.signed_mac == 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
         run: |
           set -euo pipefail
+          asset_id="$(uv run --no-project --python 3.12 python -I desktop/stack_input.py field asset_id)"
+          gh api "repos/$GITHUB_REPOSITORY/releases/assets/$asset_id" > "$RUNNER_TEMP/asset.json"
+          gh api -H 'Accept: application/octet-stream' "repos/$GITHUB_REPOSITORY/releases/assets/$asset_id" > "$RUNNER_TEMP/stack.tar.gz"
+          uv run --no-project --python 3.12 python -I desktop/stack_input.py verify "$RUNNER_TEMP/stack.tar.gz" --metadata "$RUNNER_TEMP/asset.json"
           stack_sha256="$(uv run --no-project --python 3.12 python -I desktop/stack_input.py field sha256)"
-          uv run --no-project --python 3.12 python desktop/extract_bootstrap_release.py "$RUNNER_TEMP/stack-download/stack.tar.gz" "$stack_sha256" "$RUNNER_TEMP/stack-input"
-          uv run --no-project --python 3.12 python -I desktop/stack_input.py verify "$RUNNER_TEMP/stack-download/stack.tar.gz" --bundle "$RUNNER_TEMP/stack-input"
+          uv run --no-project --python 3.12 python desktop/extract_bootstrap_release.py "$RUNNER_TEMP/stack.tar.gz" "$stack_sha256" "$RUNNER_TEMP/stack-input"
+          uv run --no-project --python 3.12 python -I desktop/stack_input.py verify "$RUNNER_TEMP/stack.tar.gz" --bundle "$RUNNER_TEMP/stack-input"
           python3 - <<'PY'
           from pathlib import Path
           import os
@@ -567,6 +533,7 @@ jobs:
       - uses: actions/download-artifact@v4
         with:
           path: release
+          pattern: '{public-source,client-darwin-arm64,client-windows-amd64,server-linux-amd64,sudograph-worker}'
           merge-multiple: true
       - name: Check assets and create checksums
         working-directory: release
