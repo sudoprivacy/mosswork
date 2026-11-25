@@ -19,6 +19,7 @@ PROJECT_WORKFLOWS = {
     ".github/workflows/mosswork-release.yml",
     ".github/workflows/mosswork-desktop-update.yml",
     ".github/workflows/mosswork-cos-publish.yml",
+    ".github/workflows/mosswork-stack-input.yml",
 }
 PUBLIC_ENV_TEMPLATES = {"docker/deploy/.env"}
 

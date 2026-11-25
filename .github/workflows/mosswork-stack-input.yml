@@ -1,0 +1,60 @@
+name: mosswork stack input
+
+# Checks a proposed change to the reviewed Stack input pin before a human approves
+# it. The release workflow only reads the pin; see docs/stack-input-update.md.
+on:
+  pull_request:
+    paths:
+      - desktop/stack-input.json
+      - desktop/stack_input.py
+      - desktop/extract_bootstrap_release.py
+      - desktop/private_payload.py
+      - .github/workflows/mosswork-stack-input.yml
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  verify:
+    name: Verify the pinned Stack input
+    # Fork pull requests never receive a write token, so run only for branches of
+    # this repository.
+    if: github.event_name == 'workflow_dispatch' || github.event.pull_request.head.repo.full_name == github.repository
+    runs-on: ubuntu-24.04
+    # Draft release assets are readable only with write access.
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Download, verify and unpack the pinned asset
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          asset_id="$(python3 -I desktop/stack_input.py field asset_id)"
+          gh api "repos/$GITHUB_REPOSITORY/releases/assets/$asset_id" > "$RUNNER_TEMP/asset.json"
+          gh api -H 'Accept: application/octet-stream' "repos/$GITHUB_REPOSITORY/releases/assets/$asset_id" > "$RUNNER_TEMP/stack.tar.gz"
+          python3 -I desktop/stack_input.py verify "$RUNNER_TEMP/stack.tar.gz" --metadata "$RUNNER_TEMP/asset.json"
+          python3 -I desktop/extract_bootstrap_release.py "$RUNNER_TEMP/stack.tar.gz" "$(python3 -I desktop/stack_input.py field sha256)" "$RUNNER_TEMP/stack-input"
+          python3 -I desktop/stack_input.py verify "$RUNNER_TEMP/stack.tar.gz" --bundle "$RUNNER_TEMP/stack-input"
+          python3 - <<'PY'
+          from pathlib import Path
+          import os
+          from desktop.private_payload import copy_private_bundle
+          root = Path(os.environ['RUNNER_TEMP'])
+          copy_private_bundle(root / 'stack-input', root / 'stack-bootstrap', 'arm64')
+          print('Stack bundle contains the maintained bootstrap entry and matches its checksums')
+          PY
+      - name: Summarize the pin change for the reviewer
+        env:
+          GH_TOKEN: ${{ github.token }}
+          BASE_SHA: ${{ github.event.pull_request.base.sha || github.sha }}
+        run: |
+          set -euo pipefail
+          gh api -H 'Accept: application/vnd.github.raw' \
+            "repos/$GITHUB_REPOSITORY/contents/desktop/stack-input.json?ref=$BASE_SHA" \
+            > "$RUNNER_TEMP/base-pin.json" 2>/dev/null || rm -f "$RUNNER_TEMP/base-pin.json"
+          python3 -I desktop/stack_input.py summary --base "$RUNNER_TEMP/base-pin.json" --bundle "$RUNNER_TEMP/stack-input" >> "$GITHUB_STEP_SUMMARY"
