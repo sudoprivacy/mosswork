@@ -15,6 +15,7 @@ import subprocess
 import tempfile
 from contextlib import contextmanager
 from pathlib import Path
+from time import monotonic, sleep
 from uuid import UUID
 
 
@@ -69,26 +70,31 @@ def notarize(artifact, profile, receipt, *, runner=run):
         ) from None
     record.update(id=submission_id, status="submitted")
     write_receipt(receipt, record)
-    try:
-        outcome = json.loads(
-            runner(
-                "xcrun",
-                "notarytool",
-                "wait",
-                submission_id,
-                "--keychain-profile",
-                profile,
-                "--timeout",
-                "120m",
-                "--output-format",
-                "json",
-                timeout=7260,
+    deadline = monotonic() + 7200
+    while (remaining := deadline - monotonic()) > 0:
+        try:
+            outcome = json.loads(
+                runner(
+                    "xcrun",
+                    "notarytool",
+                    "info",
+                    submission_id,
+                    "--keychain-profile",
+                    profile,
+                    "--output-format",
+                    "json",
+                    timeout=min(30, remaining),
+                )
             )
-        )
-    except (subprocess.SubprocessError, ValueError):
-        raise RuntimeError(
-            f"Notarization is unconfirmed; inspect submission {submission_id}"
-        ) from None
+        except (subprocess.SubprocessError, ValueError):
+            # A short status request can fail while Apple's review continues.
+            pass
+        else:
+            if outcome.get("id") != submission_id or outcome.get("status") != "In Progress":
+                break
+        sleep(min(45, max(0, deadline - monotonic())))
+    else:
+        raise RuntimeError(f"Notarization is unconfirmed; inspect submission {submission_id}")
     record["status"] = (
         outcome.get("status", "unknown") if outcome.get("id") == submission_id else "unconfirmed"
     )

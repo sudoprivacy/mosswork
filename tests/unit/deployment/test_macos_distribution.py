@@ -85,16 +85,27 @@ def test_missing_ticket_or_gatekeeper_denial_never_qualifies(tmp_path, failed_to
 
 
 @pytest.mark.parametrize("outcome", ["Invalid", "In Progress", "timeout", "wrong-id"])
-def test_rejected_or_uncertain_submission_retains_id_and_cannot_resubmit(tmp_path, outcome):
+def test_rejected_or_uncertain_submission_retains_id_and_cannot_resubmit(
+    tmp_path, monkeypatch, outcome
+):
     artifact = tmp_path / "application.zip"
     artifact.write_bytes(b"signed application")
     receipt = tmp_path / "notary.json"
     calls = []
+    elapsed = 0
+
+    def sleep(seconds):
+        nonlocal elapsed
+        elapsed += seconds
+
+    monkeypatch.setattr(macos, "monotonic", lambda: elapsed)
+    monkeypatch.setattr(macos, "sleep", sleep)
 
     def runner(*args, **kwargs):
         calls.append(args)
         if args[2] == "submit":
             return json.dumps({"id": SUBMISSION})
+        assert args[:4] == ("xcrun", "notarytool", "info", SUBMISSION)
         assert json.loads(receipt.read_text())["id"] == SUBMISSION
         if outcome == "timeout":
             raise subprocess.TimeoutExpired(args, 1)
@@ -113,6 +124,29 @@ def test_rejected_or_uncertain_submission_retains_id_and_cannot_resubmit(tmp_pat
     with pytest.raises(ValueError, match="already exists"):
         macos.notarize(artifact, "existing-profile", receipt, runner=runner)
     assert sum(args[2] == "submit" for args in calls) == 1
+
+
+def test_transient_notary_status_failure_keeps_polling_original_id(tmp_path, monkeypatch):
+    artifact = tmp_path / "client.dmg"
+    artifact.write_bytes(b"signed image")
+    receipt = tmp_path / "notary.json"
+    responses = iter(["In Progress", subprocess.TimeoutExpired("notarytool", 30), "Accepted"])
+    commands = []
+    monkeypatch.setattr(macos, "sleep", lambda _seconds: None)
+
+    def runner(*args, **kwargs):
+        commands.append(args[2])
+        if args[2] == "submit":
+            return json.dumps({"id": SUBMISSION})
+        assert args[:4] == ("xcrun", "notarytool", "info", SUBMISSION)
+        assert json.loads(receipt.read_text())["id"] == SUBMISSION
+        response = next(responses)
+        if isinstance(response, Exception):
+            raise response
+        return json.dumps({"id": SUBMISSION, "status": response})
+
+    assert macos.notarize(artifact, "profile", receipt, runner=runner)["status"] == "Accepted"
+    assert commands == ["submit", "info", "info", "info"]
 
 
 @pytest.mark.parametrize("failure", ["timeout", "malformed", "missing-id"])
@@ -155,10 +189,10 @@ def test_app_is_stapled_and_assessed_only_after_acceptance(tmp_path):
     macos.notarize_app(
         app, tmp_path, "profile", TEAM, IDENTIFIER, ["arm64"], "0.0.7", runner=runner
     )
-    wait = next(i for i, args in enumerate(calls) if args[:3] == ("xcrun", "notarytool", "wait"))
+    check = next(i for i, args in enumerate(calls) if args[:3] == ("xcrun", "notarytool", "info"))
     staple = next(i for i, args in enumerate(calls) if args[:3] == ("xcrun", "stapler", "staple"))
     assess = next(i for i, args in enumerate(calls) if args[0] == "spctl")
-    assert wait < staple < assess
+    assert check < staple < assess
 
 
 @pytest.mark.parametrize("replace_runtime", [False, True])
