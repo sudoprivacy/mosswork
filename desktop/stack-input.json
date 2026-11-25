@@ -1,0 +1,17 @@
+{
+  "platform": "macos-arm64",
+  "release_tag": "bootstrap-input-macos-arm64-20261118",
+  "asset_id": 762922956,
+  "asset_name": "stack-bootstrap-macos-arm64-input.tar.gz",
+  "size": 57596192,
+  "sha256": "95f67e9947ce7d921e7f99fcc72e0d6f1316ff1438d59d18642ccd42b86bafcf",
+  "manifest_sha256": "e9feb71feb95e0602b6e3248b392c04428c282726b37f8a52c306146fde81038",
+  "qualification": "engineering-candidate",
+  "sources": {
+    "profile": "0b72f058f505e092517612a0981893575a47791c",
+    "stack": "0f135e0c2276b91f6299f8cf69dc0f61ae2e4bd9",
+    "scode": "a74d8a6ed67ec24afe0945f8eb9b65e61324cec8",
+    "nexus": "49be2e0f04bcf44db709979ef5aa159feb241af1",
+    "publisher": "49cb22e22d723441b1125c3243209246bd369f62"
+  }
+}
