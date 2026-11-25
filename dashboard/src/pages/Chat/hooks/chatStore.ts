@@ -3572,6 +3572,7 @@ export async function sendTurn(
           ...(reasoningEffort ? { reasoning_effort: reasoningEffort } : {}),
           ...(conversationMode ? { conversation_mode: conversationMode } : {}),
           ...(hitlPolicy ? { hitl_policy: hitlPolicy } : {}),
+          ...(mcpServers ? { mcp_servers: mcpServers } : {}),
         },
         (event) => {
           if (state.abortController !== controller) return;

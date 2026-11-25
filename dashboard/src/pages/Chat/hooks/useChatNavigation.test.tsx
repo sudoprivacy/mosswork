@@ -35,11 +35,20 @@ type StoreSessionEvent = { kind: string; sessionId: string; agentId?: string };
 const sessionListenerRef: {
   current: ((event: StoreSessionEvent) => void) | null;
 } = { current: null };
+type StoreStreamEvent = { kind: string; sessionId: string };
+const streamListenerRef: {
+  current: ((event: StoreStreamEvent) => void) | null;
+} = { current: null };
 const invalidateHistoryMock = vi.fn();
 
 vi.mock("./chatStore", () => ({
   getSnapshot: () => ({ messages: [], isStreaming: false }),
-  onStreamEvent: () => () => undefined,
+  onStreamEvent: (listener: (event: StoreStreamEvent) => void) => {
+    streamListenerRef.current = listener;
+    return () => {
+      streamListenerRef.current = null;
+    };
+  },
   onSessionEvent: (listener: (event: StoreSessionEvent) => void) => {
     sessionListenerRef.current = listener;
     return () => {
@@ -68,6 +77,7 @@ describe("useChatNavigation hidden tab", () => {
   beforeEach(() => {
     navigateMock.mockReset();
     rebindMock.mockReset().mockResolvedValue({});
+    streamListenerRef.current = null;
   });
 
   function navigationParams() {
@@ -285,6 +295,7 @@ describe("useChatNavigation proactive session events", () => {
     rebindMock.mockReset().mockResolvedValue({});
     invalidateHistoryMock.mockReset();
     sessionListenerRef.current = null;
+    streamListenerRef.current = null;
   });
 
   afterEach(() => {
@@ -382,5 +393,22 @@ describe("useChatNavigation proactive session events", () => {
     expect(fetchSessions).not.toHaveBeenCalled();
     expect(invalidateHistoryMock).not.toHaveBeenCalled();
     expect(loadHistory).not.toHaveBeenCalled();
+  });
+
+  it("reloads history when the active stream ends", async () => {
+    const loadHistory = vi.fn().mockResolvedValue(undefined);
+    const fetchSessions = vi.fn().mockResolvedValue([session("thr_open")]);
+    renderWithMocks(loadHistory, fetchSessions);
+
+    await waitFor(() => expect(streamListenerRef.current).toBeTruthy());
+    loadHistory.mockClear();
+    fetchSessions.mockClear();
+
+    streamListenerRef.current?.({ kind: "streamEnd", sessionId: "thr_open" });
+
+    await waitFor(() => {
+      expect(fetchSessions).toHaveBeenCalledWith("thr_open");
+      expect(loadHistory).toHaveBeenCalledWith("thr_open");
+    });
   });
 });

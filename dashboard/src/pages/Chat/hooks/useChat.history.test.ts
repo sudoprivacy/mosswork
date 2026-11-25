@@ -1,4 +1,4 @@
-import { act, renderHook } from "@testing-library/react";
+import { act, renderHook, waitFor } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { mossworkThreadsApi } from "../../../api/modules/mossworkThreads";
 import * as chatStore from "./chatStore";
@@ -143,6 +143,66 @@ describe("history failures", () => {
       "first",
       "reply",
     ]);
+  });
+
+  it("hydrates a thread with optimistic messages after the stream ends", async () => {
+    chatStore.appendUserMessage(thread, {
+      id: "optimistic-user",
+      role: "user",
+      content: "继续做",
+      timestamp: Date.now(),
+    });
+    const history = vi.spyOn(mossworkThreadsApi, "history").mockResolvedValue({
+      thread_id: thread,
+      messages: [{ id: "answer", role: "assistant", content: "完成" }],
+      has_more: false,
+    });
+    const { result } = renderHook(() => useChat(thread, "agent"));
+
+    await act(async () => {
+      await result.current.loadHistory(thread);
+    });
+
+    expect(history).toHaveBeenCalledTimes(1);
+    expect(chatStore.getSnapshot(thread).historyHydrated).toBe(true);
+  });
+
+  it("keeps concurrent history loads race-safe when optimistic messages exist", async () => {
+    chatStore.appendUserMessage(thread, {
+      id: "optimistic-user",
+      role: "user",
+      content: "继续做",
+      timestamp: Date.now(),
+    });
+    let resolveHistory!: (
+      value: Awaited<ReturnType<typeof mossworkThreadsApi.history>>,
+    ) => void;
+    const gate = new Promise<
+      Awaited<ReturnType<typeof mossworkThreadsApi.history>>
+    >((resolve) => {
+      resolveHistory = resolve;
+    });
+    const history = vi
+      .spyOn(mossworkThreadsApi, "history")
+      .mockImplementation(() => gate);
+    const { result } = renderHook(() => useChat(thread, "agent"));
+    const first = result.current.loadHistory(thread);
+    const second = result.current.loadHistory(thread);
+
+    await waitFor(() => expect(history).toHaveBeenCalledTimes(2));
+    resolveHistory({
+      thread_id: thread,
+      messages: [{ id: "answer", role: "assistant", content: "完成" }],
+      has_more: false,
+    });
+    await act(async () => {
+      await Promise.all([first, second]);
+    });
+
+    expect(chatStore.getSnapshot(thread).historyHydrated).toBe(true);
+    expect(
+      chatStore.getSnapshot(thread).messages.map((message) => message.id),
+    ).toEqual(["answer", "optimistic-user"]);
   });
 
   it("passes the pinned cursor when loading older messages", async () => {

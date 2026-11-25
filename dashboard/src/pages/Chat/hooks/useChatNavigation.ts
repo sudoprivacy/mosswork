@@ -111,9 +111,10 @@ export function useChatNavigation({
         event.sessionId === (activeThreadId ?? "")
       ) {
         void fetchSessions(activeThreadId ?? undefined);
+        if (activeThreadId) void loadHistory(activeThreadId);
       }
     });
-  }, [activeThreadId, fetchSessions]);
+  }, [activeThreadId, fetchSessions, loadHistory]);
 
   // A proactive run (cron) created or wrote to a thread outside the chat socket:
   // refresh the list — and the open thread's history — without a page reload.

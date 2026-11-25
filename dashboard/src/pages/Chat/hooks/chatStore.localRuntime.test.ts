@@ -30,6 +30,25 @@ afterEach(() => {
   vi.restoreAllMocks();
 });
 
+it("passes selected connectors to a local runtime task", async () => {
+  const pending = store.sendTurn(
+    "local-thread",
+    "search documents",
+    "expert",
+    "key",
+    undefined,
+    undefined,
+    undefined,
+    "local-thread",
+    ["tencent-docs__instance"],
+  );
+  expect(bridge.start).toHaveBeenCalledWith(
+    expect.objectContaining({ mcp_servers: ["tencent-docs__instance"] }),
+  );
+  listener?.({ event: "done", thread_id: "local-thread", status: "completed" });
+  await pending;
+});
+
 it("routes live process output by tool call and replaces the preview with the final result", async () => {
   const pending = store.sendTurn(
     "local-thread",

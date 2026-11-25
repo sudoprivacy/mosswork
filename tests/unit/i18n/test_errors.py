@@ -76,6 +76,20 @@ def test_dashboard_api_errors_use_i18next_placeholders():
             )
 
 
+def test_connector_broker_zh_messages_are_translated():
+    repo = Path(__file__).resolve().parents[3]
+    zh = json.loads((repo / "dashboard/src/locales/zh.json").read_text(encoding="utf-8"))
+    codes = (
+        "CONNECTOR_BROKER_NOT_SELECTED",
+        "CONNECTOR_BROKER_TOOL_UNAVAILABLE",
+        "CONNECTOR_BROKER_CONFIRMATION_REQUIRED",
+        "CONNECTOR_BROKER_IDEMPOTENCY",
+        "CONNECTOR_BROKER_CREDENTIAL_CHANGE",
+    )
+    for code in codes:
+        assert "?" not in zh["apiErrors"][code]
+
+
 def test_login_locked_interpolates_minutes():
     assert "15" in error_message("LOGIN_LOCKED", "zh", minutes=15)
     assert "minutes" not in error_message("LOGIN_LOCKED", "zh", minutes=15).lower()

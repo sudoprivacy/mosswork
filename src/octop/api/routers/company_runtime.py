@@ -8,18 +8,20 @@ import logging
 from collections.abc import AsyncIterator
 from typing import Any, Literal
 
-from fastapi import APIRouter, Depends, Request
+from fastapi import APIRouter, Depends, Query, Request
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, ConfigDict, Field
 
 from octop.api.deps import get_server
 from octop.infra.company_runtime import PROTOCOL_VERSION
+from octop.infra.company_runtime.connector_broker import ConnectorBroker
 from octop.infra.company_runtime.service import (
     CompanyRuntimeService,
     authenticate_company_device,
     denied,
     model_failure,
 )
+from octop.infra.connectors.service import ConnectorService
 from octop.infra.db.repos.company_runtime import RuntimeConflict
 from octop.infra.utils.asyncio import offload
 
@@ -92,6 +94,7 @@ class StartTask(Document):
     knowledge_base_ids: list[str] = Field(default_factory=list, max_length=100)
     installation_token: str = Field(min_length=32, max_length=256)
     recovery_token: str = Field(min_length=32, max_length=256)
+    mcp_servers: list[str] = Field(default_factory=list, max_length=100)
 
 
 class TaskStarted(Document):
@@ -108,6 +111,75 @@ class TaskStarted(Document):
 )
 async def start(body: StartTask, svc: CompanyRuntimeService = Depends(service)) -> Any:
     return await svc.start(body.model_dump())
+
+
+def _connector_broker(svc: CompanyRuntimeService) -> ConnectorBroker:
+    cache = getattr(svc.server, "_company_connector_broker_cache", None)
+    if cache is None:
+        cache = {}
+        svc.server._company_connector_broker_cache = cache
+    return ConnectorBroker(
+        service=ConnectorService(
+            repo=svc.services.repos.connector_repo,
+            secret_repo=svc.services.secret_repo,
+            settings_repo=svc.services.settings_repo,
+            config=svc.services.config,
+        ),
+        audit_repo=svc.services.audit_repo,
+        owner=svc.owner,
+        actor=str(svc.identity.get("owner_username") or svc.owner),
+        cache=cache,
+    )
+
+
+class ConnectorCall(Document):
+    server_name: str = Field(min_length=1, max_length=256)
+    tool_name: str = Field(min_length=1, max_length=256)
+    arguments: dict[str, Any] = Field(default_factory=dict)
+    tool_call_id: str = Field(min_length=1, max_length=256)
+    idempotency_key: str = Field(min_length=1, max_length=512)
+    confirmed: bool = False
+
+
+@router.get(
+    "/tasks/{task_id}/connectors/tools",
+    response_model=list[dict[str, Any]],
+    summary="List the selected desktop task connector tools",
+    description="Returns tool schemas and availability reasons without returning connector credentials.",
+)
+async def connector_tools(
+    task_id: str,
+    servers: str | None = Query(default=None, description="Comma-separated MCP server names."),
+    svc: CompanyRuntimeService = Depends(service),
+) -> Any:
+    task = await svc.task(task_id)
+    names = (
+        None if servers is None else [item.strip() for item in servers.split(",") if item.strip()]
+    )
+    return await _connector_broker(svc).list_task_tools(task, names)
+
+
+@router.post(
+    "/tasks/{task_id}/connectors/call",
+    response_model=dict[str, Any],
+    summary="Call one selected desktop task connector tool",
+    description="Executes a connector tool under task ownership, side-effect policy, idempotency and audit checks.",
+)
+async def connector_call(
+    task_id: str,
+    body: ConnectorCall,
+    svc: CompanyRuntimeService = Depends(service),
+) -> Any:
+    task = await svc.task(task_id, active=True)
+    return await _connector_broker(svc).call_tool(
+        task,
+        server_name=body.server_name,
+        tool_name=body.tool_name,
+        arguments=body.arguments,
+        tool_call_id=body.tool_call_id,
+        idempotency_key=body.idempotency_key,
+        confirmed=body.confirmed,
+    )
 
 
 class TaskStatus(Document):
@@ -144,6 +216,7 @@ async def transition(
         await offload(svc.repo.transition, task_id, body.status)
     except RuntimeConflict as exc:
         raise denied(str(exc)) from exc
+    _connector_broker(svc).clear_task(task_id)
     return body
 
 
