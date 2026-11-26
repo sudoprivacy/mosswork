@@ -13,6 +13,11 @@ on:
       - 'tests/unit/deployment/test_release_cos.py'
       - '.github/workflows/mosswork-desktop-update.yml'
   workflow_dispatch:
+    inputs:
+      release_tag:
+        description: Published desktop release to install and launch on native runners
+        type: string
+        required: false
 
 permissions:
   contents: read
@@ -23,6 +28,7 @@ concurrency:
 
 jobs:
   native-update:
+    if: github.event_name != 'workflow_dispatch' || inputs.release_tag == ''
     name: Native update and restart (${{ matrix.os }})
     strategy:
       fail-fast: false
@@ -59,3 +65,53 @@ jobs:
         if: runner.os != 'Linux'
         working-directory: desktop/src
         run: go test -tags company . -count=1 -v
+
+  installed-client:
+    if: github.event_name == 'workflow_dispatch' && inputs.release_tag != ''
+    name: Published desktop first launch (${{ matrix.os }})
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: windows-2022
+            platform: windows-amd64
+            extension: exe
+          - os: macos-15
+            platform: macos-arm64
+            extension: dmg
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 25
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v6
+        with:
+          python-version: '3.12'
+      - name: Download the exact published installer and checksums
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_TAG: ${{ inputs.release_tag }}
+          PLATFORM: ${{ matrix.platform }}
+          EXTENSION: ${{ matrix.extension }}
+        run: |
+          [[ "$RELEASE_TAG" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]]
+          version="${RELEASE_TAG#v}"
+          gh release download "$RELEASE_TAG" --repo "$GITHUB_REPOSITORY" \
+            --dir "$RUNNER_TEMP/mosswork-release" \
+            --pattern SHA256SUMS.txt \
+            --pattern "mosswork-company-$PLATFORM-$version.$EXTENSION"
+      - name: Install and launch the client with a fresh profile
+        env:
+          RELEASE_TAG: ${{ inputs.release_tag }}
+        run: |
+          uv run --no-project python -m desktop.tests.accept_installed_client \
+            --version "${RELEASE_TAG#v}" --release-dir "$RUNNER_TEMP/mosswork-release" \
+            --output "$RUNNER_TEMP/mosswork-installed-client"
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: installed-client-${{ matrix.platform }}
+          path: ${{ runner.temp }}/mosswork-installed-client/evidence/
+          if-no-files-found: error

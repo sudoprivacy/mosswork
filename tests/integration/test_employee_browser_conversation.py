@@ -9,14 +9,13 @@ import asyncio
 import json
 import os
 import re
-import socket
 import uuid
+from contextlib import AsyncExitStack
 from pathlib import Path
 from types import SimpleNamespace
 from urllib.parse import urlsplit, urlunsplit
 
 import pytest
-import uvicorn
 from moss_harness.acp.models import ACPConfig, ACPRunnerConfig
 from moss_harness.acp.service import ACPService
 
@@ -27,6 +26,7 @@ from octop.infra.execution.gateway import GatewayExecution
 from octop.infra.execution.service import ExecutionService
 from octop.infra.identity.composition import build_canonical_business
 from octop.infra.native_host.context import HostSelection
+from tests.support.http import serve_http
 from tests.unit.identity.test_human_sessions import _NUMBER
 from tests.unit.test_canonical_business_product_composition import (
     application as application,
@@ -129,8 +129,8 @@ async def test_employee_opens_and_continues_retained_sudocode(application, envir
         observed_sessions.append(session.acp_session_id)
         return reply["event"]["text"]
 
-    host = web = web_task = queue = None
-    try:
+    async with AsyncExitStack() as runtimes:
+        runtimes.push_async_callback(engine.close_all_sessions)
         assert project_name in await ask(
             f"Our demo project is named {project_name}. Suggest a meeting title that includes "
             "the full project name.",
@@ -200,24 +200,23 @@ async def test_employee_opens_and_continues_retained_sudocode(application, envir
         )
         server.execution = queue
         processor.execution = registry.execution = GatewayExecution(server, queue)
+        runtimes.push_async_callback(queue.close)
         await queue.start()
-        with socket.socket() as sock:
-            sock.bind(("127.0.0.1", 0))
-            web = uvicorn.Server(
-                uvicorn.Config(application, access_log=False, log_level="error", lifespan="off")
-            )
-            web_task = asyncio.create_task(web.serve(sockets=[sock]))
-            async with asyncio.timeout(15):
-                while not web.started:
-                    await asyncio.sleep(0.05)
+        async with serve_http(application) as origin, AsyncExitStack() as proxy_cleanup:
             host = await asyncio.create_subprocess_exec(
                 str(proxy),
-                f"http://127.0.0.1:{sock.getsockname()[1]}",
+                origin,
                 str(dashboard),
                 str(tmp_path / "desktop"),
                 stdin=-1,
                 stdout=-1,
             )
+
+            async def stop_proxy():
+                host.stdin.close()
+                await asyncio.wait_for(host.wait(), 10)
+
+            proxy_cleanup.push_async_callback(stop_proxy)
             parts = urlsplit((await host.stdout.readline()).decode().strip())
             assert parts.hostname == "127.0.0.1"
             entry = urlunsplit(parts._replace(query="ui_locale=zh"))
@@ -286,14 +285,3 @@ async def test_employee_opens_and_continues_retained_sudocode(application, envir
                     assert observed_sessions == [observed_sessions[0]] * 3
                 finally:
                     await browser.close()
-    finally:
-        if host:
-            host.stdin.close()
-            await asyncio.wait_for(host.wait(), 10)
-        if web:
-            web.should_exit = True
-        if web_task:
-            await asyncio.wait_for(web_task, 10)
-        if queue:
-            await queue.close()
-        await engine.close_all_sessions()
