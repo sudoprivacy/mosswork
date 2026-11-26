@@ -38,6 +38,8 @@ function mountConnectionPanel(config) {
   function timeoutError(method) {
     const error = new Error("本地运行时响应超时；请核对任务状态后重试");
     if (method === "start") error.errorCode = "task_result_unknown";
+    if (method === "hitl_resume") error.errorCode = "approval_result_unknown";
+    if (method === "create_thread") error.errorCode = "thread_create_unconfirmed";
     return error;
   }
   const extendRuntimeTimeouts = () => {

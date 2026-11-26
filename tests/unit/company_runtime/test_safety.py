@@ -7,6 +7,7 @@ import sys
 from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import AsyncMock
+from uuid import uuid4
 
 import pytest
 
@@ -14,6 +15,20 @@ from octop.infra.company_runtime.client import CompanyServiceError
 from octop.infra.company_runtime.local import ProjectBackend
 
 from .test_runtime import acquire, install_agent
+
+
+async def test_retry_thread_creation_reuses_only_original_conversation(company):
+    server, client, _, owner = company
+    path = f"threads?request_id={uuid4()}"
+    body = {"agent_id": "expert", "title": "Original"}
+    first, replay = await asyncio.gather(client.request(path, body), client.request(path, body))
+    second = await client.request(f"threads?request_id={uuid4()}", body)
+    assert first == replay and first["thread_id"] != second["thread_id"]
+    assert await client.request(path, body) == first
+    assert server.services.session_repo.get(first["session_key"]).thread_id == second["thread_id"]
+    server.services.agent_repo.create(agent_id="other-expert", user_id=owner, name="Other")
+    other = await client.request(path, {"agent_id": "other-expert"})
+    assert other["thread_id"] != first["thread_id"]
 
 
 @pytest.mark.asyncio

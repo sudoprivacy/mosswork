@@ -29,7 +29,10 @@ import {
 import { getApiUrl } from "../../../api/config";
 import { getAuthToken } from "../../../api/request";
 import i18n from "../../../i18n";
-import { withReadyDesktopDevice } from "../../../api/desktopDeviceReady";
+import {
+  withReadyDesktopDevice,
+  type DesktopDeviceWait,
+} from "../../../api/desktopDeviceReady";
 import { message } from "../../../utils/antdMessage";
 import { mossworkThreadsApi } from "../../../api/modules/mossworkThreads";
 import { isPendingThread } from "./useSessions";
@@ -667,25 +670,26 @@ const liveSockets = new Map<string, LiveSocket>();
 const localStreams = new Set<string>();
 const pendingLocalDispatch = new Map<string, AbortController>();
 
-export function prepareLocalThread() {
-  const state = getOrCreate(PENDING_THREAD_ID);
+export function prepareLocalThread(sessionId = PENDING_THREAD_ID) {
+  const state = getOrCreate(sessionId);
   const controller = new AbortController();
-  pendingLocalDispatch.set(PENDING_THREAD_ID, controller);
+  pendingLocalDispatch.set(sessionId, controller);
   state.abortController = controller;
-  beginStream(state, PENDING_THREAD_ID);
+  beginStream(state, sessionId);
   state.localPreparing = true;
   return {
+    isCurrent: () => pendingLocalDispatch.get(sessionId) === controller,
     signal: controller.signal,
     onWait: (phase: "device" | "network") => {
       state.localPreparingPhase = phase;
       notify(state);
     },
     finish: () => {
-      if (pendingLocalDispatch.get(PENDING_THREAD_ID) !== controller) return;
-      pendingLocalDispatch.delete(PENDING_THREAD_ID);
+      if (pendingLocalDispatch.get(sessionId) !== controller) return;
+      pendingLocalDispatch.delete(sessionId);
       state.abortController = null;
       clearStreamingFlags(state);
-      clearStreamActivity(PENDING_THREAD_ID);
+      clearStreamActivity(sessionId);
       notify(state);
     },
   };
@@ -964,9 +968,12 @@ export function truncateAndReplaceUserMessage(
 }
 
 /** Finish the old native turn before replacing its server checkpoint. */
-export async function ensureLocalRetryReady(threadId: string): Promise<void> {
+export async function ensureLocalRetryReady(
+  threadId: string,
+  wait?: DesktopDeviceWait,
+): Promise<void> {
   const runtime = requireDesktopRuntime();
-  const status = await runtime.status();
+  const status = await withReadyDesktopDevice(() => runtime.status(), wait);
   const task = status.active_tasks.find((item) => item.thread_id === threadId);
   if (!task) return;
   if (["running", "cancel_requested"].includes(task.status ?? "")) {
@@ -991,20 +998,19 @@ export async function editLocalMessage(
   editingLocalSessions.set(sessionId, editToken);
   historyRevisions.set(state, getHistoryRevision(sessionId) + 1);
   const wasStreaming = state.isStreaming;
-  if (!wasStreaming) {
-    beginStream(state, sessionId);
-    state.localPreparing = true;
-    notify(state);
-  }
+  const wait = !wasStreaming ? prepareLocalThread(sessionId) : undefined;
   try {
     const runtime = requireDesktopRuntime();
-    const status = await runtime.status();
+    const status = await withReadyDesktopDevice(() => runtime.status(), wait);
+    if (wait?.signal.aborted) return;
     if (!status.capabilities?.includes("edit_message")) {
       throw new Error("请安装新版企业客户端后使用编辑重发，原消息已保留。");
     }
     const task = status.active_tasks.find(
       (item) => item.thread_id === sessionId,
     );
+    if (task?.status === "unknown")
+      throw new Error(i18n.t("devices.runtimeTaskUnknown"));
     if (task && ["running", "cancel_requested"].includes(task.status ?? "")) {
       await new Promise<void>((resolve, reject) => {
         const finish = (error?: Error) => {
@@ -1044,6 +1050,8 @@ export async function editLocalMessage(
       // Let the previous subscription finalize before the next one is opened.
       await Promise.resolve();
     }
+    if (wait?.signal.aborted) return;
+    wait?.finish();
     await sendTurn(
       sessionId,
       text,
@@ -1063,7 +1071,10 @@ export async function editLocalMessage(
       undefined,
       messageId,
     );
+  } catch (error) {
+    if (!wait?.signal.aborted) throw error;
   } finally {
+    wait?.finish();
     if (editingLocalSessions.get(sessionId) === editToken) {
       editingLocalSessions.delete(sessionId);
     }
@@ -3860,12 +3871,34 @@ export async function resumeHitl(
   if (usesLocalRuntime(sessionId)) {
     const runtime = window.__mossworkRuntime;
     if (pendingId?.startsWith("local-") && runtime?.resumeHitl) {
+      const resume = runtime.resumeHitl;
       try {
-        await runtime.resumeHitl({
+        const params = {
           thread_id: threadId,
           pending_id: pendingId,
           decisions,
           ...(hitlPolicy ? { hitl_policy: hitlPolicy } : {}),
+        };
+        await withReadyDesktopDevice(async () => {
+          try {
+            await resume(params);
+          } catch (error) {
+            if (
+              (error as { errorCode?: string })?.errorCode !==
+              "approval_result_unknown"
+            )
+              throw error;
+            const status = await withReadyDesktopDevice(() => runtime.status());
+            const task = status.active_tasks.find(
+              (item) => item.thread_id === threadId,
+            );
+            if (
+              task?.last_approval?.pending_id !== pendingId ||
+              task.last_approval.rejected !==
+                decisions.some((decision) => decision.type === "reject")
+            )
+              throw error;
+          }
         });
         resolveHitlPending(
           state,

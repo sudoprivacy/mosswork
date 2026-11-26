@@ -73,13 +73,13 @@ func TestCompanyCreateThreadPostsLocalRequest(t *testing.T) {
 		if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
 			t.Fatal(err)
 		}
-		if body["agent_id"] != "expert" || body["execution_mode"] != "local" {
+		if r.URL.Query().Get("request_id") != "creation-1" || body["agent_id"] != "expert" || body["execution_mode"] != "local" {
 			t.Fatalf("request body = %#v", body)
 		}
 		w.Header().Set("Content-Type", "application/json")
 		_, _ = w.Write([]byte(`{"thread_id":"thr_test","session_key":"dashboard:expert:7","execution_mode":"local"}`))
 	})
-	result, err := a.companyCreateThread("nonce", a.companyURL, json.RawMessage(`{"agent_id":"expert"}`))
+	result, err := a.companyCreateThread("nonce", a.companyURL, json.RawMessage(`{"agent_id":"expert","request_id":"creation-1"}`))
 	if err != nil {
 		t.Fatal(err)
 	}

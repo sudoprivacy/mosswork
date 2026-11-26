@@ -18,8 +18,10 @@ class CompanyApprovals:
         self.pending: dict[str, tuple[dict[str, Any], asyncio.Future[list[dict[str, Any]]]]] = {}
         self.policies: dict[str, Any] = {}
         self.locks: dict[str, asyncio.Lock] = {}
+        self.last_resolved: dict[str, dict[str, Any]] = {}
 
     def begin(self, thread: str, policy: Any) -> None:
+        self.last_resolved.pop(thread, None)
         self.policies[thread] = parse_hitl_session_policy(policy)
 
     def prepare(
@@ -60,6 +62,10 @@ class CompanyApprovals:
         if "hitl_policy" in params and all(d["type"] == "approve" for d in decisions):
             self.policies[thread] = parse_hitl_session_policy(params["hitl_policy"])
         entry[1].set_result(decisions)
+        self.last_resolved[thread] = {
+            "pending_id": params["pending_id"],
+            "rejected": any(decision["type"] == "reject" for decision in decisions),
+        }
         return {"status": "resuming"}
 
     def end(self, thread: str) -> None:

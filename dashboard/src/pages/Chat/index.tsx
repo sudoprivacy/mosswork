@@ -1166,21 +1166,35 @@ function ChatPageInner() {
         }
       }
       if (!userMsg) return;
-      if (isCompanyDesktop()) {
+      if (
+        isCompanyDesktop() &&
+        (!activeThreadId || companyHistoryReadOnly || !historyHydrated)
+      )
+        return;
+      if (
+        activeThreadId &&
+        !composerSession?.cloudTask &&
+        chatStore.usesLocalRuntime(activeThreadId)
+      ) {
         if (isStreaming || localRetryInFlightRef.current) {
           antMessage.warning("当前本地任务仍在处理中，请等待完成后再重试。");
           return;
         }
         localRetryInFlightRef.current = true;
+        const wait = chatStore.prepareLocalThread(activeThreadId);
         void (async () => {
           try {
-            await chatStore.ensureLocalRetryReady(activeThreadId ?? "");
+            await chatStore.ensureLocalRetryReady(activeThreadId, wait);
+            if (wait.signal.aborted) return;
+            wait.finish();
             wrappedHandleSend(userMsg.content, userMsg.attachments);
           } catch (error) {
+            if (wait.signal.aborted) return;
             antMessage.warning(
               error instanceof Error ? error.message : t("chat.sendFailed"),
             );
           } finally {
+            wait.finish();
             localRetryInFlightRef.current = false;
           }
         })();
@@ -1190,6 +1204,9 @@ function ChatPageInner() {
     },
     [
       activeThreadId,
+      composerSession?.cloudTask,
+      companyHistoryReadOnly,
+      historyHydrated,
       isStreaming,
       messages,
       wrappedHandleSend,

@@ -563,6 +563,7 @@ export function useSessions(agentId: string | null) {
       cloudTask = false,
       targetAgentId = agentId,
       wait?: DesktopDeviceWait,
+      retryIntent?: string,
     ): {
       session: Session;
       resolvedId: Promise<string>;
@@ -588,7 +589,7 @@ export function useSessions(agentId: string | null) {
         setModuleSessions((prev) => sortSessions([placeholder, ...prev]));
       }
       const resolvedId = mossworkThreadsApi
-        .create(targetAgentId, cloudTask, wait)
+        .create(targetAgentId, cloudTask, wait, retryIntent)
         .then((created) => {
           if (!cloudTask) markPendingThread(created.thread_id);
           if (created.cloud_task) chatStore.setCloudTask(created.thread_id);

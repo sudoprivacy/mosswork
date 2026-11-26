@@ -80,13 +80,14 @@ export interface DesktopRuntimeBridge {
       recovery_state?: string;
       sync_state?: "pending" | "synced";
       pending_approval?: HitlPendingPayload | null;
+      last_approval?: { pending_id: string; rejected: boolean } | null;
     }[];
     capabilities?: string[];
     tools?: Record<string, string>;
     execute_authorized?: boolean;
   }>;
   start(params: RuntimeStart): Promise<{ task_id: string }>;
-  createThread?(params: { agent_id: string }): Promise<{
+  createThread?(params: { agent_id: string; request_id?: string }): Promise<{
     thread_id: string;
     session_key: string;
     execution_mode: "local";

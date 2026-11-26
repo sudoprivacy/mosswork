@@ -250,7 +250,10 @@ async def test_built_desktop_chat_reconnect_and_cancel(
             if method == "status":
                 return runtime.status()
             if method == "create_thread":
-                return await company.request("threads", {**params, "execution_mode": "local"})
+                return await company.request(
+                    f"threads?request_id={params['request_id']}",
+                    {"agent_id": params["agent_id"], "execution_mode": "local"},
+                )
             if method == "start":
                 return await runtime.start(params)
             if method == "cancel":
@@ -283,10 +286,25 @@ async def test_built_desktop_chat_reconnect_and_cancel(
           window.__mossworkRuntime = {
             version: 1,
             status: () => window.acceptanceRuntimeCall('status'),
-            createThread: params => window.acceptanceRuntimeCall('create_thread', params),
+            createThread: async params => {
+              const result = await window.acceptanceRuntimeCall('create_thread', params);
+              if (window.dropCreateReply) {
+                window.dropCreateReply = false;
+                window.lostThread = result.thread_id;
+                throw Object.assign(new Error('lost reply'), {errorCode:'thread_create_unconfirmed'});
+              }
+              return result;
+            },
             start: params => window.acceptanceRuntimeCall('start', params),
             cancel: params => window.acceptanceRuntimeCall('cancel', params),
-            resumeHitl: params => window.acceptanceRuntimeCall('hitl_resume', params),
+            resumeHitl: async params => {
+              const result = await window.acceptanceRuntimeCall('hitl_resume', params);
+              if (window.dropApprovalReply) {
+                window.dropApprovalReply = false;
+                throw Object.assign(new Error('lost reply'), {errorCode:'approval_result_unknown'});
+              }
+              return result;
+            },
             subscribe: fn => { listeners.add(fn); return () => listeners.delete(fn); },
             reveal: async () => {},
           };
@@ -442,7 +460,16 @@ async def test_built_desktop_chat_reconnect_and_cancel(
                 assert runtime.steering.approvals.snapshot(thread_id)["pending_id"] == pending_id
                 assert calls.count("start") == 4, "Approval reload must not restart execution"
                 await page.screenshot(path=str(evidence / "restored-approval.png"))
+                await page.evaluate(
+                    "window.deviceAsleep = true; window.dropApprovalReply = true; window.observedDeviceSleep = false"
+                )
+                before_approval = calls.count("hitl_resume")
                 await approve.click()
+                await page.wait_for_function("window.observedDeviceSleep === true")
+                assert calls.count("hitl_resume") == before_approval and disposable.exists()
+                await page.evaluate(
+                    "window.deviceAsleep = false; window.dispatchEvent(new Event('online'))"
+                )
                 await expect(
                     page.get_by_text("Approval complete.", exact=False).first
                 ).to_be_visible(timeout=30000)
@@ -450,6 +477,8 @@ async def test_built_desktop_chat_reconnect_and_cancel(
                     while runtime.work:
                         await asyncio.sleep(0.02)
                 assert not disposable.exists(), "Approved real tool must execute"
+                assert calls.count("hitl_resume") == before_approval + 1
+                assert not await page.get_by_text("lost reply", exact=True).count()
 
             history_turns = 16
             starts_before_history = calls.count("start")
@@ -618,6 +647,83 @@ async def test_built_desktop_chat_reconnect_and_cancel(
                 f"{initial_geometry} -> {final_geometry}"
             )
             assert not page_errors, page_errors
+            retry = page.get_by_title(re.compile(r"^(Regenerate|重新生成)$")).last
+            phase["mode"] = "history-retry"
+            turns_before = calls.count("start")
+            await page.evaluate("window.deviceAsleep = true; window.observedDeviceSleep = false")
+            await retry.click(force=True)
+            await page.wait_for_function("window.observedDeviceSleep === true")
+            assert calls.count("start") == turns_before
+            await page.evaluate(
+                "window.deviceAsleep = false; window.dispatchEvent(new Event('online'))"
+            )
+            await expect(
+                page.get_by_text("Archived reading fixture history-retry.", exact=True)
+            ).to_be_visible(timeout=30000)
+            assert calls.count("start") == turns_before + 1
+            await expect(stop).to_have_count(0)
+            phase["mode"] = "history-edit"
+            await page.get_by_role("button", name=re.compile(r"^(Edit|编辑)$")).last.click(
+                force=True
+            )
+            await page.locator('textarea[rows="4"]').fill("Edited after sleep")
+            await page.evaluate("window.deviceAsleep = true; window.observedDeviceSleep = false")
+            await page.get_by_role("button", name=re.compile(r"^(Save|保存)$")).last.click()
+            await page.wait_for_function("window.observedDeviceSleep === true")
+            assert calls.count("start") == turns_before + 1
+            await page.evaluate(
+                "window.deviceAsleep = false; window.dispatchEvent(new Event('online'))"
+            )
+            await expect(
+                page.get_by_text("Archived reading fixture history-edit.", exact=True)
+            ).to_be_visible(timeout=30000)
+            assert calls.count("start") == turns_before + 2
+            await expect(stop).to_have_count(0)
+            await new_task.and_(page.locator('[aria-haspopup="menu"]')).last.press("Enter")
+            await page.get_by_role(
+                "menuitem", name=re.compile(r"^(New local task|新建本机任务)$")
+            ).click()
+            await expect(page).to_have_url(f"http://testserver/chat/{agent_id}")
+            await page.evaluate("window.deviceAsleep = true; window.observedDeviceSleep = false")
+            phase["mode"] = "history-background"
+            await editor.fill("Finish in original conversation")
+            await editor.press("Enter")
+            await page.wait_for_function("window.observedDeviceSleep === true")
+            other_url = f"http://testserver/chat/{agent_id}/{thread_id}"
+            await page.evaluate(
+                "url => {history.pushState(null, '', url); dispatchEvent(new PopStateEvent('popstate'));}",
+                other_url,
+            )
+            await expect(
+                page.get_by_text("Archived reading fixture history-edit.", exact=True)
+            ).to_be_visible()
+            await page.evaluate(
+                "window.deviceAsleep = false; window.dispatchEvent(new Event('online'))"
+            )
+            async with asyncio.timeout(30):
+                while calls.count("start") < turns_before + 3 or runtime.work:
+                    await asyncio.sleep(0.05)
+            await expect(page).to_have_url(other_url)
+            assert len(runtime.tasks) >= 2
+            await new_task.and_(page.locator('[aria-haspopup="menu"]')).last.press("Enter")
+            await page.get_by_role(
+                "menuitem", name=re.compile(r"^(New local task|新建本机任务)$")
+            ).click()
+            await expect(page).to_have_url(f"http://testserver/chat/{agent_id}")
+            phase["mode"] = "history-lost-create"
+            await page.evaluate("window.dropCreateReply = true")
+            await editor.fill("Retry the first message")
+            await editor.press("Enter")
+            await page.wait_for_function("Boolean(window.lostThread)")
+            await expect(page).to_have_url(f"http://testserver/chat/{agent_id}")
+            saved_id = await page.evaluate("window.lostThread")
+            await editor.fill("Retry the first message")
+            await editor.press("Enter")
+            await expect(
+                page.get_by_text("Archived reading fixture history-lost-create.", exact=True)
+            ).to_be_visible(timeout=30000)
+            await expect(page).to_have_url(f"http://testserver/chat/{agent_id}/{saved_id}")
+            assert calls.count("start") == turns_before + 4
             await page.screenshot(path=str(evidence / "cancelled.png"))
             (evidence / "receipt.json").write_text(
                 json.dumps(

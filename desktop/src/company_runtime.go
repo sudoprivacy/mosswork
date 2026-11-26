@@ -236,6 +236,9 @@ func (a *App) performRuntimeAction(nonce, base, method string, params json.RawMe
 	if method == "start" && err != nil && (errors.Is(ctx.Err(), context.DeadlineExceeded) || errors.Is(err, companyruntime.ErrDisconnected)) {
 		return nil, errors.New("task_result_unknown")
 	}
+	if method == "hitl_resume" && err != nil && (errors.Is(ctx.Err(), context.DeadlineExceeded) || errors.Is(err, companyruntime.ErrDisconnected)) {
+		return nil, errors.New("approval_result_unknown")
+	}
 	return result, err
 }
 
@@ -321,7 +324,7 @@ func (a *App) ensureRuntimeProcess(nonce, base, method string, prepare func() (s
 	// holding companyMu, so status polling and account changes remain responsive.
 	identity, _, err := client.RuntimeIdentity()
 	if err != nil {
-		if method == "start" {
+		if method == "start" || method == "status" || method == "hitl_resume" {
 			return nil, &devicePreparationError{err}
 		}
 		return nil, err
@@ -522,6 +525,8 @@ func (a *App) watchRuntimeIdentity(nonce, base string, epoch uint64, credential 
 }
 
 var runtimeErrorMessages = map[string]string{
+	"approval_result_unknown":                "审批结果尚未确认，请检查原任务的审批状态。",
+	"thread_create_unconfirmed":              "创建对话的结果尚未确认，请重试。",
 	"runtime_scope_changed":                  "工作目录或账号已切换，本地任务已停止；请核对已生成文件。",
 	"device_lease_interrupted":               "连接中断，本地任务结果尚未确认。请核对任务记录和已生成文件。",
 	"company_tools_archive_unavailable":      "客户端缺少或无法读取本机工具包。请安装包含 Python、文档工具和 FFmpeg 的完整企业客户端。",
