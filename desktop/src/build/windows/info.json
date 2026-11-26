@@ -1,10 +1,10 @@
 {
   "fixed": {
-    "file_version": "0.0.10.0"
+    "file_version": "0.0.11.0"
   },
   "info": {
     "0000": {
-      "ProductVersion": "0.0.10",
+      "ProductVersion": "0.0.11",
       "CompanyName": "mosswork contributors",
       "FileDescription": "mosswork desktop",
       "LegalCopyright": "Copyright © 2026",

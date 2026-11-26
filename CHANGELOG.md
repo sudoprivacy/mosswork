@@ -6,6 +6,13 @@
 
 ## [Unreleased]
 
+## [0.0.11] - 2026-11-26
+
+### Fixed
+
+- Recover the desktop device connection before starting a local chat turn.
+- Open automation examples as editable scheduled task drafts.
+
 ## [0.0.10] - 2026-11-26
 
 ### Fixed

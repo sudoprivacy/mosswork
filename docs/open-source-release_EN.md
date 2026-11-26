@@ -2,7 +2,7 @@
 
 [中文](open-source-release.md)
 
-This document is for maintainers and describes source export, verification and release requirements for [mosswork](https://github.com/sudoprivacy/mosswork). The current source version is `0.0.10`; the main project and own communication module use MIT.
+This document is for maintainers and describes source export, verification and release requirements for [mosswork](https://github.com/sudoprivacy/mosswork). The current source version is `0.0.11`; the main project and own communication module use MIT.
 
 This repository provides source code; server images and Windows/macOS enterprise clients are generated according to the corresponding build documents. Release material is distributed through [this repository's Releases](https://github.com/sudoprivacy/mosswork/releases); binary installers require separate target-platform verification and records of signing and notarization status.
 
@@ -19,7 +19,7 @@ This repository provides source code; server images and Windows/macOS enterprise
 
 ## Tag releases
 
-Push a tag exactly matching `v<pyproject.toml version>` after exporting, checking and committing the complete public source. The current version corresponds to `v0.0.10`. The workflow never bumps versions or creates tags; manual runs must select an existing version tag.
+Push a tag exactly matching `v<pyproject.toml version>` after exporting, checking and committing the complete public source. The current version corresponds to `v0.0.11`. The workflow never bumps versions or creates tags; manual runs must select an existing version tag.
 
 For native package qualification before merging or tagging, dispatch the workflow with `qualify_clients_only` enabled. It accepts a current branch, builds both native clients from the complete exported source and invokes the actual executable's full-runtime verification. This mode skips server images and GitHub/COS publication and never creates or changes tags. Normal publication still requires the matching release tag.
 

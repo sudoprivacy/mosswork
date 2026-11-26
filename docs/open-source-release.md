@@ -2,7 +2,7 @@
 
 [English](open-source-release_EN.md)
 
-本文面向维护者，说明 [mosswork](https://github.com/sudoprivacy/mosswork) 的源码导出、校验和发行要求。当前源码版本为 `0.0.10`，主项目、自有引擎及通信模块采用 MIT。
+本文面向维护者，说明 [mosswork](https://github.com/sudoprivacy/mosswork) 的源码导出、校验和发行要求。当前源码版本为 `0.0.11`，主项目、自有引擎及通信模块采用 MIT。
 
 本仓库提供源码，服务端镜像与 Windows/macOS 企业客户端按对应构建文档生成。发行材料通过[本仓库 Releases](https://github.com/sudoprivacy/mosswork/releases)分发；二进制安装包需单独完成目标平台验证，并记录签名与公证状态。
 
@@ -20,7 +20,7 @@
 
 ## Tag 自动发布
 
-推送与 `pyproject.toml` 版本完全一致的 `v<version>` tag 后，`mosswork-release.yml` 自动构建。当前版本对应 `v0.0.10`；工作流不自动修改版本、提交代码或创建 tag。手工重跑须选择同一个 tag，选择分支会被拒绝。
+推送与 `pyproject.toml` 版本完全一致的 `v<version>` tag 后，`mosswork-release.yml` 自动构建。当前版本对应 `v0.0.11`；工作流不自动修改版本、提交代码或创建 tag。手工重跑须选择同一个 tag，选择分支会被拒绝。
 
 需要在合并或创建发行 tag 前验证原生安装包时，可在手工运行中启用 `qualify_clients_only`。此模式允许选择当前分支，从完整导出源码构建两个原生客户端并执行实际程序的完整运行时检查；不构建服务器镜像、不发布 GitHub/COS、不创建或修改 tag。关闭该选项时，原有发行 tag 检查仍强制执行。
 
@@ -34,7 +34,7 @@
 | 本地组件 | moss-harness、moss-memory、moss-browser、moss-gateway 四个 wheel，源码位于 `packages/` |
 | 下载附件 | 公开源码、部署包、`install-moss-server.sh`、构建记录、镜像 ID 与 SHA-256 |
 
-CI 不发布 macOS Intel、Windows ARM、Linux 客户端、PyPI 包或独立 portable 下载包。两个客户端和 amd64 服务端镜像都成功后才发布 GitHub Release，任一失败不会发布部分版本。预发布 tag（如 `v0.0.10b1`）标记为 prerelease，不更新正式版 `latest`。已公开的 Release 不允许覆盖。
+CI 不发布 macOS Intel、Windows ARM、Linux 客户端、PyPI 包或独立 portable 下载包。两个客户端和 amd64 服务端镜像都成功后才发布 GitHub Release，任一失败不会发布部分版本。预发布 tag（如 `v0.0.11b1`）标记为 prerelease，不更新正式版 `latest`。已公开的 Release 不允许覆盖。
 
 原生自动更新还需要同次构建生成的完整 Mac 应用 ZIP 和内嵌完整运行时的 Windows 程序，文件名以 `-update.zip` / `-update.exe` 结尾。不得把 NSIS 安装器当作待替换的程序文件。`tools/desktop_update_manifest.py` 从实际文件生成 `desktop-update.json`，客户端和发布器共用 `desktop/src/internal/desktopupdate/targets.json` 的目标清单。生成清单后再写入 `SHA256SUMS.txt`。预发布版本不生成稳定更新清单。
 
