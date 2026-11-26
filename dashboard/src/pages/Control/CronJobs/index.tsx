@@ -12,8 +12,6 @@ import {
 import { LayoutGrid, List, RefreshCw } from "lucide-react";
 import type { CronJobSpecOutput } from "../../../api/types";
 import { useTranslation } from "react-i18next";
-import { useNavigate } from "react-router-dom";
-import { setPendingPrefillText } from "../../Chat/hooks/chatStore";
 import {
   createColumns,
   CronJobCard,
@@ -92,7 +90,6 @@ function CronJobsPage() {
   const { t } = useTranslation();
   const { isMobile, viewMode, setViewMode, showCardView } =
     useCardTableView("table");
-  const navigate = useNavigate();
   const { activeAgentId, activeAgent } = useAgent();
   const canManageJobs = activeAgent?.is_owner === true;
   const taskExamples = useTaskExamples(activeAgentId);
@@ -111,6 +108,7 @@ function CronJobsPage() {
     refetchJobs,
   } = useCronJobs();
   const [drawerOpen, setDrawerOpen] = useState(false);
+  const [example, setExample] = useState("");
   const [editingJob, setEditingJob] = useState<CronJobFormValues | null>(null);
   const [form] = Form.useForm<CronJobFormValues>();
   const [refreshing, setRefreshing] = useState(false);
@@ -151,14 +149,16 @@ function CronJobsPage() {
   }, [jobs, detailDrawerOpen, detailJob]);
 
   const handleCreate = () => {
+    setExample("");
     setEditingJob(null);
     form.resetFields();
     setDrawerOpen(true);
   };
 
   const handleSuggestionClick = (text: string) => {
-    setPendingPrefillText(text);
-    navigate("/chat", { state: { prefillInput: text } });
+    setEditingJob(null);
+    setExample(text);
+    setDrawerOpen(true);
   };
 
   const handleEdit = (job: CronJob) => {
@@ -393,6 +393,7 @@ function CronJobsPage() {
 
       <JobDrawer
         open={drawerOpen}
+        example={example}
         editingJob={editingJob}
         activeAgentId={activeAgentId}
         cronTimezone={cronTimezone}

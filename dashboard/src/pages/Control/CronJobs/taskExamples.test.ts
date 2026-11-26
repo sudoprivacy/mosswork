@@ -1,12 +1,54 @@
 import { describe, expect, it } from "vitest";
+import { createInstance } from "i18next";
+import en from "../../../locales/en.json";
+import zh from "../../../locales/zh.json";
+import manifest from "../../../../../src/octop/infra/agents/experts/library/general-assistant/manifest.json";
+import { presetToCron } from "./components/constants";
 
 import {
+  exampleFormValues,
   normalizeTaskExampleCount,
   resolveTaskExamples,
   taskExampleColumns,
 } from "./taskExamples";
 
 const defaults = ["default-a", "default-b"];
+
+describe("exampleFormValues", () => {
+  const translations = createInstance();
+  void translations.init({
+    lng: "en",
+    resources: { en: { translation: en }, zh: { translation: zh } },
+  });
+
+  it.each(["zh", "en"] as const)(
+    "opens each %s general-assistant card with its schedule",
+    (locale) => {
+      const expected = ["0 9 * * 1-5", "0 20 * * 0", "0 22 * * *"];
+      manifest.task_examples[locale].forEach((text, index) => {
+        const draft = exampleFormValues(text, translations.t);
+        expect(presetToCron(draft._preset!)).toBe(expected[index]);
+        expect(draft).toMatchObject({
+          enabled: true,
+          task_type: index === 2 ? "text" : "agent",
+        });
+        expect(draft.prompt).toBeTruthy();
+        expect(draft.prompt).not.toBe(text);
+        expect(draft.name).toBeTruthy();
+      });
+    },
+  );
+
+  it("leaves the schedule unset for a custom expert example", () => {
+    const text = "Review today's unresolved tickets";
+    expect(exampleFormValues(text, translations.t)).toMatchObject({
+      name: text,
+      prompt: text,
+      _preset: undefined,
+      task_type: "agent",
+    });
+  });
+});
 
 describe("taskExampleColumns", () => {
   it("uses one column unless there are six cards", () => {

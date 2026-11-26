@@ -1,5 +1,39 @@
 import type { CronTaskExamples } from "../../../api/modules/cronjob";
 import type { UiLocale } from "../../../utils/locale";
+import type { TFunction } from "i18next";
+import { CRON_NAME_MAX_LEN } from "./constants";
+import type { CronJobFormValues } from "./useCronJobs";
+
+const templates = [
+  { id: 1, preset: "weekday_9am", type: "agent" },
+  { id: 2, preset: "weekly_sun_8pm", type: "agent" },
+  { id: 3, preset: "daily_10pm", type: "text" },
+] as const;
+
+export function exampleFormValues(
+  text: string,
+  t: TFunction,
+): Partial<CronJobFormValues> {
+  for (const lng of ["zh", "en"]) {
+    for (const { id, preset, type } of templates) {
+      if (text === t(`cronJobs.noJobsSuggestion${id}`, { lng })) {
+        return {
+          name: t(`cronJobs.exampleName${id}`, { lng }),
+          prompt: t(`cronJobs.examplePrompt${id}`, { lng }),
+          enabled: true,
+          _preset: preset,
+          task_type: type,
+        };
+      }
+    }
+  }
+  return {
+    name: text.slice(0, CRON_NAME_MAX_LEN),
+    prompt: text,
+    _preset: undefined,
+    task_type: "agent",
+  };
+}
 
 /** Two columns only when there is a full six-card set (desktop). */
 export function taskExampleColumns(count: number): 1 | 2 {

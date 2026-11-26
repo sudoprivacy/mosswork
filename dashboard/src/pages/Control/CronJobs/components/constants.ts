@@ -110,6 +110,16 @@ export const SCHEDULE_PRESETS: SchedulePreset[] = [
     labelKey: "cronJobs.preset.daily8pm",
   },
   {
+    value: "weekly_sun_8pm",
+    cron: "0 20 * * 0",
+    labelKey: "cronJobs.preset.weeklySun8pm",
+  },
+  {
+    value: "daily_10pm",
+    cron: "0 22 * * *",
+    labelKey: "cronJobs.preset.daily10pm",
+  },
+  {
     value: "weekday_9am",
     cron: "0 9 * * 1-5",
     labelKey: "cronJobs.preset.weekday9am",
