@@ -440,6 +440,7 @@ function ChatPageInner() {
   const workspaceExpanded = dockOpen && activeTabId === "workspace";
 
   const chromeCheckInFlightRef = useRef(false);
+  const localRetryInFlightRef = useRef(false);
   const bridgeConnectionId =
     activeAgent?.bridge && activeAgent.bridge_connection_id
       ? activeAgent.bridge_connection_id
@@ -1165,9 +1166,36 @@ function ChatPageInner() {
         }
       }
       if (!userMsg) return;
+      if (isCompanyDesktop()) {
+        if (isStreaming || localRetryInFlightRef.current) {
+          antMessage.warning("当前本地任务仍在处理中，请等待完成后再重试。");
+          return;
+        }
+        localRetryInFlightRef.current = true;
+        void (async () => {
+          try {
+            await chatStore.ensureLocalRetryReady(activeThreadId ?? "");
+            wrappedHandleSend(userMsg.content, userMsg.attachments);
+          } catch (error) {
+            antMessage.warning(
+              error instanceof Error ? error.message : t("chat.sendFailed"),
+            );
+          } finally {
+            localRetryInFlightRef.current = false;
+          }
+        })();
+        return;
+      }
       wrappedHandleSend(userMsg.content, userMsg.attachments);
     },
-    [messages, wrappedHandleSend, hasPendingHitlPause, t],
+    [
+      activeThreadId,
+      isStreaming,
+      messages,
+      wrappedHandleSend,
+      hasPendingHitlPause,
+      t,
+    ],
   );
 
   const handleDisableStreamUsage = useCallback(async () => {

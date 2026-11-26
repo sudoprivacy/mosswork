@@ -964,6 +964,19 @@ export function truncateAndReplaceUserMessage(
 }
 
 /** Finish the old native turn before replacing its server checkpoint. */
+export async function ensureLocalRetryReady(threadId: string): Promise<void> {
+  const runtime = requireDesktopRuntime();
+  const status = await runtime.status();
+  const task = status.active_tasks.find((item) => item.thread_id === threadId);
+  if (!task) return;
+  if (["running", "cancel_requested"].includes(task.status ?? "")) {
+    throw new Error("上一项本地任务仍在结束，请等待完成后再重试。");
+  }
+  if (task.status === "unknown") {
+    throw new Error("上一项本地任务结果待核对，请先检查任务状态，勿重复提交。");
+  }
+}
+
 export async function editLocalMessage(
   sessionId: string,
   messageId: string,

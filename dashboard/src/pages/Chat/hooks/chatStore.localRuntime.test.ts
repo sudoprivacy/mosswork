@@ -713,6 +713,51 @@ it("takes over a cold-start attachment so tokens are consumed only once", async 
   expect(listeners.size).toBe(0);
 });
 
+it.each(["running", "cancel_requested"])(
+  "does not retry while a local task is %s",
+  async (status) => {
+    bridge.status = vi.fn().mockResolvedValue({
+      active_tasks: [
+        { task_id: "old-task", thread_id: "local-thread", status },
+      ],
+    });
+
+    await expect(store.ensureLocalRetryReady("local-thread")).rejects.toThrow(
+      "上一项本地任务仍在结束",
+    );
+    expect(bridge.start).not.toHaveBeenCalled();
+  },
+);
+
+it("does not retry while a local task needs reconciliation", async () => {
+  bridge.status = vi.fn().mockResolvedValue({
+    active_tasks: [
+      { task_id: "old-task", thread_id: "local-thread", status: "unknown" },
+    ],
+  });
+
+  await expect(store.ensureLocalRetryReady("local-thread")).rejects.toThrow(
+    "结果待核对",
+  );
+  expect(bridge.start).not.toHaveBeenCalled();
+});
+
+it("allows a retry after the prior local task has settled", async () => {
+  bridge.status = vi.fn().mockResolvedValue({
+    active_tasks: [
+      { task_id: "old-task", thread_id: "local-thread", status: "completed" },
+    ],
+  });
+
+  await expect(
+    store.ensureLocalRetryReady("local-thread"),
+  ).resolves.toBeUndefined();
+  const pending = store.sendTurn("local-thread", "retry", "expert", "key");
+  expect(bridge.start).toHaveBeenCalledOnce();
+  listener?.({ event: "done", thread_id: "local-thread", status: "completed" });
+  await pending;
+});
+
 it("sends an edit identity and keeps late events from the old task out", async () => {
   bridge.status = vi
     .fn()
