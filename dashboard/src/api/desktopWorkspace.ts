@@ -8,6 +8,7 @@ export interface DesktopWorkspaceState {
   grant: DirectoryGrant | null;
   error?: string;
   renew_at?: number;
+  expires_at?: number;
   pair_blocked?: boolean;
 }
 

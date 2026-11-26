@@ -949,6 +949,22 @@ it("reattaches to a native task after a page reload without replaying start", as
   expect(websocket).not.toHaveBeenCalled();
 });
 
+it("accepts a completed receipt after a reattached worker loses its lease", async () => {
+  const task = { task_id: "task", thread_id: "local-thread" };
+  vi.mocked(bridge.status)
+    .mockResolvedValueOnce({ active_tasks: [{ ...task, status: "running" }] })
+    .mockResolvedValueOnce({
+      active_tasks: [{ ...task, status: "completed" }],
+    });
+  await store.attachThread("local-thread", "expert", "local-thread");
+  listener?.({ event: "runtime_exit", error_code: "device_lease_interrupted" });
+  await vi.waitFor(() =>
+    expect(store.getSnapshot("local-thread").isStreaming).toBe(false),
+  );
+  expect(store.getSnapshot("local-thread").messages).toHaveLength(0);
+  expect(bridge.start).not.toHaveBeenCalled();
+});
+
 it("applies model status events on the native reattach path", async () => {
   vi.mocked(bridge.status).mockResolvedValue({
     active_tasks: [

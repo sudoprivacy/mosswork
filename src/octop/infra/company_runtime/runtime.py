@@ -416,6 +416,13 @@ class EnterpriseRuntime:
         try:
             acquired = await self.client.request("tasks", request)
         except CompanyServiceError as exc:
+            if exc.status == 401 and str(exc) == "device_session_expired":
+                await offload((task_dir / "task.json").unlink)
+                if previous is None:
+                    del self.tasks[thread]
+                else:
+                    self.tasks[thread] = previous
+                raise RuntimeError("device_rejected_before_task") from exc
             if 400 <= exc.status < 500 and exc.status not in {408, 429}:
                 # A definite rejection created no lease for this request.
                 task.update(status="failed", reported_status="failed", sync_state="synced")

@@ -116,3 +116,18 @@ func TestCompanyCreateThreadTimeout(t *testing.T) {
 		t.Fatalf("error = %v", err)
 	}
 }
+
+func TestCompanyCreateThreadWaitsOnDeviceAuthenticationRejection(t *testing.T) {
+	a, _ := companyThreadTestApp(t, func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(http.StatusUnauthorized)
+		_, _ = w.Write([]byte(`{"error":{"details":{"reason":"device_session_expired"}}}`))
+	})
+	_, err := a.companyCreateThread("nonce", a.companyURL, json.RawMessage(`{"agent_id":"expert"}`))
+	if err == nil {
+		t.Fatal("expected authentication rejection")
+	}
+	code, stage, retryable, _ := runtimeErrorMetadata(err)
+	if code != "device_session_expired" || stage != "device_preparing" || !retryable {
+		t.Fatalf("unexpected error classification: %s %s %t", code, stage, retryable)
+	}
+}

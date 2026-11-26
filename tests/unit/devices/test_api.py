@@ -72,6 +72,22 @@ def test_expired_device_needs_both_same_login_ticket_and_native_proof(client, st
     assert server.services.device_repo.authenticate(candidate, int(time.time())) is None
 
 
+def test_revocation_blocks_same_login_cold_pairing_and_outstanding_code(client, stack):
+    auth_headers = headers(stack)
+    code = client.post("/api/devices/pairing", headers=auth_headers).json()["code"]
+    with client.websocket_connect("/api/devices/ws") as ws:
+        ws.send_json(pair_frame(code, protocol_version=2))
+        device_id = ws.receive_json()["device_id"]
+    pending = client.post("/api/devices/pairing", headers=auth_headers).json()["code"]
+    assert client.delete(f"/api/devices/{device_id}", headers=auth_headers).status_code == 204
+    assert client.post("/api/devices/pairing", headers=auth_headers).status_code == 403
+    with client.websocket_connect("/api/devices/ws") as ws:
+        ws.send_json(pair_frame(pending, protocol_version=2))
+        with pytest.raises(WebSocketDisconnect):
+            ws.receive_json()
+    assert client.get("/api/devices", headers=auth_headers).status_code == 200
+
+
 def test_http_auth_disabled_and_schema(client, stack):
     assert client.get("/api/devices").status_code == 401
     assert (

@@ -13,14 +13,21 @@ class DeviceRepo:
 
     def issue_code(
         self, digest: str, owner: int, session: str, expires: int, credential_expires: int
-    ) -> None:
+    ) -> bool:
         with self._db.transaction() as conn:
+            if conn.execute(
+                "SELECT 1 FROM desktop_devices WHERE owner_user_id=? AND session_id=? "
+                "AND pairing_blocked=1",
+                (owner, session),
+            ).fetchone():
+                return False
             # One pending code per employee. Issuing another invalidates the previous one.
             conn.execute("DELETE FROM desktop_pairing_codes WHERE owner_user_id=?", (owner,))
             conn.execute(
                 "INSERT INTO desktop_pairing_codes VALUES(?,?,?,?,?)",
                 (digest, owner, session, expires, credential_expires),
             )
+            return True
 
     def pair(
         self,
@@ -46,8 +53,15 @@ class DeviceRepo:
             active = conn.execute(
                 "SELECT 1 FROM users u WHERE u.id=? AND u.disabled=0 AND NOT EXISTS("
                 "SELECT 1 FROM communication_revoked_sessions s WHERE s.session_id=? "
-                "AND s.expires_at>?)",
-                (code["owner_user_id"], code["session_id"], now),
+                "AND s.expires_at>?) AND NOT EXISTS(SELECT 1 FROM desktop_devices "
+                "WHERE owner_user_id=? AND session_id=? AND pairing_blocked=1)",
+                (
+                    code["owner_user_id"],
+                    code["session_id"],
+                    now,
+                    code["owner_user_id"],
+                    code["session_id"],
+                ),
             ).fetchone()
             if active is None:
                 return None
@@ -191,12 +205,15 @@ class DeviceRepo:
                 (now, device_id),
             )
 
-    def revoke(self, device_id: str, owner: int, now: int) -> bool:
+    def revoke(self, device_id: str, owner: int, now: int, block_pairing: bool = False) -> bool:
         with self._db.transaction() as conn:
+            if self._db.dialect == "postgresql":
+                conn.execute("SELECT id FROM users WHERE id=? FOR UPDATE", (owner,)).fetchone()
             row = conn.execute(
-                "UPDATE desktop_devices SET revoked_at=COALESCE(revoked_at,?) "
+                "UPDATE desktop_devices SET revoked_at=COALESCE(revoked_at,?), "
+                "pairing_blocked=CASE WHEN ?=1 THEN 1 ELSE pairing_blocked END "
                 "WHERE device_id=? AND owner_user_id=? RETURNING device_id",
-                (now, device_id, owner),
+                (now, int(block_pairing), device_id, owner),
             ).fetchone()
         return row is not None
 

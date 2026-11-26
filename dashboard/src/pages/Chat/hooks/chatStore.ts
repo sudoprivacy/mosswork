@@ -7,6 +7,7 @@ import {
   createRuntimeTaskId,
   requireDesktopRuntime,
   matchesRuntimeTask,
+  readLocalTaskReceipt,
   runLocalTurn,
   type LocalArtifact,
   type RuntimeEvent,
@@ -28,6 +29,7 @@ import {
 import { getApiUrl } from "../../../api/config";
 import { getAuthToken } from "../../../api/request";
 import i18n from "../../../i18n";
+import { withReadyDesktopDevice } from "../../../api/desktopDeviceReady";
 import { message } from "../../../utils/antdMessage";
 import { mossworkThreadsApi } from "../../../api/modules/mossworkThreads";
 import { isPendingThread } from "./useSessions";
@@ -663,7 +665,31 @@ function stopSocketPing(live: LiveSocket): void {
 
 const liveSockets = new Map<string, LiveSocket>();
 const localStreams = new Set<string>();
-const localAttachmentImports = new Map<string, AbortController>();
+const pendingLocalDispatch = new Map<string, AbortController>();
+
+export function prepareLocalThread() {
+  const state = getOrCreate(PENDING_THREAD_ID);
+  const controller = new AbortController();
+  pendingLocalDispatch.set(PENDING_THREAD_ID, controller);
+  state.abortController = controller;
+  beginStream(state, PENDING_THREAD_ID);
+  state.localPreparing = true;
+  return {
+    signal: controller.signal,
+    onWait: (phase: "device" | "network") => {
+      state.localPreparingPhase = phase;
+      notify(state);
+    },
+    finish: () => {
+      if (pendingLocalDispatch.get(PENDING_THREAD_ID) !== controller) return;
+      pendingLocalDispatch.delete(PENDING_THREAD_ID);
+      state.abortController = null;
+      clearStreamingFlags(state);
+      clearStreamActivity(PENDING_THREAD_ID);
+      notify(state);
+    },
+  };
+}
 
 /** Last stream-related activity (chunk / open / status) for sticky seals. */
 const streamActivityAt = new Map<string, number>();
@@ -727,6 +753,10 @@ function armStreamWatchdog(sessionId: string): void {
       streamWatchdogs.delete(sessionId);
       const state = sessionStates.get(sessionId);
       if (!state) return;
+      if (pendingLocalDispatch.has(sessionId)) {
+        armStreamWatchdog(sessionId);
+        return;
+      }
       if (
         shouldWarnLocalStall({
           isStreaming: state.isStreaming,
@@ -1119,7 +1149,7 @@ function closeLiveSocket(
 /** Request cancellation without closing the stream or claiming completion. */
 export async function cancelStream(sessionId: string, agentId: string) {
   if (usesLocalRuntime(sessionId)) {
-    const importing = localAttachmentImports.get(sessionId);
+    const importing = pendingLocalDispatch.get(sessionId);
     if (
       importing &&
       sessionStates.get(sessionId)?.abortController === importing
@@ -1183,6 +1213,7 @@ export function removeSession(sessionId: string) {
  * (cross-thread stream bleed).
  */
 export function detachSessionKey(sessionId: string): void {
+  pendingLocalDispatch.get(sessionId)?.abort();
   sessionStates.delete(sessionId);
 }
 
@@ -2641,10 +2672,12 @@ async function attachLocalRuntime(
   let closed = false;
   let observing = false;
   let taskId: string | undefined;
+  const receiptWait = new AbortController();
   let pendingEvents: RuntimeEvent[] | undefined = [];
   const finish = (announce = true) => {
     if (closed) return;
     closed = true;
+    receiptWait.abort();
     pendingEvents = undefined;
     unsubscribe();
     controller.signal.removeEventListener("abort", cancel);
@@ -2707,17 +2740,48 @@ async function attachLocalRuntime(
     pendingEvents = undefined;
     for (const event of events) applyEvent(event);
   };
+  const endInterrupted = (event: RuntimeEvent) => {
+    if (closed) return;
+    if (observing)
+      appendErrorBubble(
+        state,
+        event.error || "本地运行时已退出，请核对任务结果。",
+        event.error_code || "local_runtime_error",
+        { stage: "runtime", retryable: false, action: "check_task_status" },
+      );
+    finish();
+  };
   const unsubscribe = bridge.subscribe((event) => {
     if (closed) return;
     if (event.event === "runtime_exit") {
-      if (observing)
-        appendErrorBubble(
-          state,
-          event.error || "本地运行时已退出，请核对任务结果。",
-          "local_runtime_error",
-          { stage: "runtime", retryable: false, action: "check_task_status" },
+      if (
+        event.error_code === "device_lease_interrupted" &&
+        observing &&
+        taskId
+      ) {
+        void readLocalTaskReceipt(
+          bridge,
+          threadId,
+          taskId,
+          receiptWait.signal,
+        ).then(
+          (receipt) => {
+            if (closed) return;
+            if (
+              receipt?.status === "running" ||
+              receipt?.status === "cancel_requested"
+            )
+              return;
+            if (
+              receipt?.status === "completed" ||
+              receipt?.status === "cancelled"
+            )
+              finish();
+            else endInterrupted(event);
+          },
+          () => endInterrupted(event),
         );
-      finish();
+      } else endInterrupted(event);
       return;
     }
     if (event.thread_id !== threadId) return;
@@ -3476,6 +3540,19 @@ export async function sendTurn(
         throw new Error("当前本地运行时暂不支持多专家协作，请新建单专家会话。");
       }
       const localAttachments: ChatAttachment[] = [];
+      const localTaskId = createRuntimeTaskId();
+      const readiness = {
+        signal: controller.signal,
+        onWait: (phase: "device" | "network") => {
+          pendingLocalDispatch.set(sessionId, controller);
+          state.localPreparingPhase = phase;
+          notify(state);
+        },
+        onDispatch: () => {
+          pendingLocalDispatch.delete(sessionId);
+          state.localPreparingPhase = undefined;
+        },
+      };
       for (const attachment of attachments ?? []) {
         if (attachment.localFile) {
           localAttachments.push(attachment);
@@ -3486,14 +3563,19 @@ export async function sendTurn(
           throw new Error(
             "当前客户端尚不支持导入上传的附件，请安装更新后的客户端。",
           );
-        localAttachmentImports.set(sessionId, controller);
-        const file = await runtime.importAttachment({
-          agent_id: agentId,
-          workspace_path: attachment.workspacePath!,
-          filename: attachment.filename,
-          thread_id: localThreadId,
-          token: getAuthToken(),
-        });
+        pendingLocalDispatch.set(sessionId, controller);
+        const importAttachment = runtime.importAttachment;
+        const file = await withReadyDesktopDevice(
+          () =>
+            importAttachment({
+              agent_id: agentId,
+              workspace_path: attachment.workspacePath!,
+              filename: attachment.filename,
+              thread_id: localThreadId,
+              token: getAuthToken(),
+            }),
+          { signal: controller.signal, onWait: readiness.onWait },
+        );
         if (state.abortController !== controller || controller.signal.aborted)
           return;
         localAttachments.push({
@@ -3503,8 +3585,8 @@ export async function sendTurn(
           localFile: file,
         });
       }
-      if (localAttachmentImports.get(sessionId) === controller)
-        localAttachmentImports.delete(sessionId);
+      if (pendingLocalDispatch.get(sessionId) === controller)
+        pendingLocalDispatch.delete(sessionId);
       if (state.abortController !== controller || controller.signal.aborted)
         return;
       const localText = [
@@ -3515,7 +3597,6 @@ export async function sendTurn(
       ]
         .filter(Boolean)
         .join("\n\n");
-      const localTaskId = createRuntimeTaskId();
       if (editMessageId) {
         const index = state.messages.findIndex(
           (m) => m.id === editMessageId && m.role === "user",
@@ -3552,80 +3633,90 @@ export async function sendTurn(
         );
       }
       notify(state);
-      await runLocalTurn(
-        {
-          task_id: localTaskId,
-          thread_id: localThreadId,
-          agent_id: agentId,
-          text: localText,
-          ...(localAttachments.length
-            ? {
-                local_attachments: localAttachments.map(
-                  (attachment) => attachment.localFile!,
-                ),
+      await withReadyDesktopDevice(
+        () =>
+          runLocalTurn(
+            {
+              task_id: localTaskId,
+              thread_id: localThreadId,
+              agent_id: agentId,
+              text: localText,
+              ...(localAttachments.length
+                ? {
+                    local_attachments: localAttachments.map(
+                      (attachment) => attachment.localFile!,
+                    ),
+                  }
+                : {}),
+              ...(editMessageId ? { edit_message_id: editMessageId } : {}),
+              ...(modelRef ? { model: modelRef } : {}),
+              ...(knowledgeBaseIds
+                ? { knowledge_base_ids: knowledgeBaseIds }
+                : {}),
+              ...(reasoningMode ? { reasoning_mode: reasoningMode } : {}),
+              ...(reasoningEffort ? { reasoning_effort: reasoningEffort } : {}),
+              ...(conversationMode
+                ? { conversation_mode: conversationMode }
+                : {}),
+              ...(hitlPolicy ? { hitl_policy: hitlPolicy } : {}),
+              ...(mcpServers ? { mcp_servers: mcpServers } : {}),
+            },
+            (event) => {
+              if (state.abortController !== controller) return;
+              if (event.event !== "runtime_progress") markStarted();
+              touchStreamActivity(sessionId);
+              if (event.event === "runtime_progress") {
+                state.localPreparingPhase = event.phase;
+                notify(state);
               }
-            : {}),
-          ...(editMessageId ? { edit_message_id: editMessageId } : {}),
-          ...(modelRef ? { model: modelRef } : {}),
-          ...(knowledgeBaseIds ? { knowledge_base_ids: knowledgeBaseIds } : {}),
-          ...(reasoningMode ? { reasoning_mode: reasoningMode } : {}),
-          ...(reasoningEffort ? { reasoning_effort: reasoningEffort } : {}),
-          ...(conversationMode ? { conversation_mode: conversationMode } : {}),
-          ...(hitlPolicy ? { hitl_policy: hitlPolicy } : {}),
-          ...(mcpServers ? { mcp_servers: mcpServers } : {}),
-        },
-        (event) => {
-          if (state.abortController !== controller) return;
-          if (event.event !== "runtime_progress") markStarted();
-          touchStreamActivity(sessionId);
-          if (event.event === "runtime_progress") {
-            state.localPreparingPhase = event.phase;
-            notify(state);
-          }
-          if (applyModelStatusEvent(state, event)) notify(state);
-          if (event.event === "process_output") {
-            applyLocalProcessOutput(state, event);
-            notifyStream(state);
-          }
-          if (event.event === "steer" && event.frame) {
-            applySteerProtocolFrame(state, event.frame, sessionId);
-            notify(state);
-          }
-          if (event.event === "chunk" && event.data) {
-            // The harness may finish before company history/artifacts are
-            // acknowledged. Only the native lifecycle event unlocks the turn.
-            handleHarnessChunk(state, event.data, sessionId, true);
-          }
-          if (event.event === "done" && event.artifacts?.length) {
-            const previous = localArtifactHistory.get(state) ?? [];
-            const files = changedLocalArtifacts(
-              state.messages,
-              event.artifacts,
-              previous,
-            );
-            const known = new Map(previous.map((file) => [file.path, file]));
-            for (const file of event.artifacts) known.set(file.path, file);
-            localArtifactHistory.set(state, [...known.values()]);
-            state.messages = placeLocalArtifactTurns(state.messages, [
-              {
-                task_id: localTaskId,
-                user_message_id: `${localTaskId}_user`,
-                // Older native clients still emit cumulative project snapshots.
-                // The server reconstructs the same delta when history is loaded.
-                message_id: state.messages.at(-1)?.id,
-                files,
-              },
-            ]);
-            notify(state);
-          }
-        },
-        controller.signal,
-        () => {
-          if (state.abortController === controller) {
-            markStarted();
-            notify(state);
-          }
-        },
+              if (applyModelStatusEvent(state, event)) notify(state);
+              if (event.event === "process_output") {
+                applyLocalProcessOutput(state, event);
+                notifyStream(state);
+              }
+              if (event.event === "steer" && event.frame) {
+                applySteerProtocolFrame(state, event.frame, sessionId);
+                notify(state);
+              }
+              if (event.event === "chunk" && event.data) {
+                // The harness may finish before company history/artifacts are
+                // acknowledged. Only the native lifecycle event unlocks the turn.
+                handleHarnessChunk(state, event.data, sessionId, true);
+              }
+              if (event.event === "done" && event.artifacts?.length) {
+                const previous = localArtifactHistory.get(state) ?? [];
+                const files = changedLocalArtifacts(
+                  state.messages,
+                  event.artifacts,
+                  previous,
+                );
+                const known = new Map(
+                  previous.map((file) => [file.path, file]),
+                );
+                for (const file of event.artifacts) known.set(file.path, file);
+                localArtifactHistory.set(state, [...known.values()]);
+                state.messages = placeLocalArtifactTurns(state.messages, [
+                  {
+                    task_id: localTaskId,
+                    user_message_id: `${localTaskId}_user`,
+                    // Older native clients still emit cumulative project snapshots.
+                    // The server reconstructs the same delta when history is loaded.
+                    message_id: state.messages.at(-1)?.id,
+                    files,
+                  },
+                ]);
+                notify(state);
+              }
+            },
+            controller.signal,
+            () => {
+              if (state.abortController === controller) {
+                markStarted();
+                notify(state);
+              }
+            },
+          ),
+        readiness,
       );
     } catch (error) {
       if (state.abortController !== controller || controller.signal.aborted)
@@ -3648,8 +3739,8 @@ export async function sendTurn(
         },
       );
     } finally {
-      if (localAttachmentImports.get(sessionId) === controller)
-        localAttachmentImports.delete(sessionId);
+      if (pendingLocalDispatch.get(sessionId) === controller)
+        pendingLocalDispatch.delete(sessionId);
       if (state.abortController === controller) {
         localStreams.delete(sessionId);
         applySteerProtocolFrame(state, { type: "turn.ended" }, sessionId);

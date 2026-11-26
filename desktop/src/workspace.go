@@ -111,11 +111,12 @@ type workspaceState struct {
 	Error       string         `json:"error,omitempty"`
 	RenewAt     int64          `json:"renew_at,omitempty"`
 	PairBlocked bool           `json:"pair_blocked,omitempty"`
+	ExpiresAt   int64          `json:"expires_at,omitempty"`
 }
 
 func (a *App) workspaceStateLocked() workspaceState {
 	s := a.company.Status()
-	return workspaceState{s.State, s.DeviceID, s.OwnerUserID, a.workspacePath, a.workspaceGrant, a.workspaceError, s.RenewAt, s.PairBlocked}
+	return workspaceState{s.State, s.DeviceID, s.OwnerUserID, a.workspacePath, a.workspaceGrant, a.workspaceError, s.RenewAt, s.PairBlocked, s.ExpiresAt}
 }
 
 func parseWorkspaceEvent(name, nonce string) (id, action, code string, ok bool) {
@@ -188,7 +189,7 @@ func (a *App) performWorkspaceAction(nonce, base, action, code string) error {
 	}
 	client := a.company
 	if action == "renew" && client.Status().State == "disconnected" && a.companyRuntime != nil {
-		a.stopCompanyRuntimeLocked()
+		a.stopCompanyRuntimeWithReasonLocked("device_lease_interrupted")
 	}
 	if action == "disconnect" || action == "pair" {
 		a.stopCompanyRuntimeLocked()

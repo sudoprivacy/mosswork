@@ -154,6 +154,81 @@ it("cancel requests remain pending until the native task terminates", async () =
   await pending;
   expect(done).toHaveBeenCalledOnce();
 });
+
+it.each([true, false])(
+  "checks an interrupted worker's receipt when its start acknowledgement arrived first: %s",
+  async (acknowledged) => {
+    const events = vi.fn();
+    vi.mocked(bridge.status).mockResolvedValueOnce({
+      active_tasks: [{ ...params, status: "completed" }],
+    });
+    const pending = runLocalTurn(params, events, new AbortController().signal);
+    if (acknowledged) await Promise.resolve();
+    listener?.({
+      event: "runtime_exit",
+      error_code: "device_lease_interrupted",
+    });
+    await pending;
+    expect(bridge.start).toHaveBeenCalledOnce();
+    expect(bridge.status).toHaveBeenCalledOnce();
+    expect(events).toHaveBeenCalledWith(
+      expect.objectContaining({ event: "done", status: "completed" }),
+    );
+  },
+);
+
+it("leaves an interrupted command unresolved when only a different task completed", async () => {
+  vi.mocked(bridge.status).mockResolvedValueOnce({
+    active_tasks: [
+      { ...params, task_id: "earlier", status: "completed" },
+      { ...params, thread_id: "other", status: "completed" },
+    ],
+  });
+  const pending = runLocalTurn(params, vi.fn(), new AbortController().signal);
+  listener?.({
+    event: "runtime_exit",
+    error_code: "device_lease_interrupted",
+    error: "check the original result",
+  });
+  await expect(pending).rejects.toThrow("check the original result");
+  expect(bridge.start).toHaveBeenCalledOnce();
+});
+
+it.each(["running", "completed", "unknown"])(
+  "checks the original %s task after losing its start acknowledgement",
+  async (status) => {
+    const failure = Object.assign(new Error("missing receipt"), {
+      errorCode: "task_result_unknown",
+    });
+    vi.mocked(bridge.start).mockRejectedValueOnce(failure);
+    vi.mocked(bridge.status).mockResolvedValueOnce({
+      active_tasks: [
+        { task_id: params.task_id, thread_id: params.thread_id, status },
+      ],
+    });
+    const started = vi.fn();
+    const pending = runLocalTurn(
+      params,
+      vi.fn(),
+      new AbortController().signal,
+      started,
+    );
+    if (status === "unknown") await expect(pending).rejects.toBe(failure);
+    else {
+      if (status === "running") {
+        await vi.waitFor(() => expect(started).toHaveBeenCalledOnce());
+        listener?.({
+          event: "done",
+          thread_id: params.thread_id,
+          task_id: params.task_id,
+          status: "completed",
+        });
+      }
+      await pending;
+    }
+    expect(bridge.start).toHaveBeenCalledOnce();
+  },
+);
 it("fails with a specific installation error when the bridge is missing", async () => {
   delete window.__mossworkRuntime;
   await expect(

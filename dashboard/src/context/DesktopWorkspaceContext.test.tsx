@@ -5,6 +5,7 @@ import {
   useDesktopWorkspace,
 } from "./DesktopWorkspaceContext";
 import { devicesApi } from "../api/modules/devices";
+import { withReadyDesktopDevice } from "../api/desktopDeviceReady";
 import type { DesktopWorkspaceState } from "../api/desktopWorkspace";
 import { StrictMode } from "react";
 
@@ -63,6 +64,60 @@ beforeEach(() => {
   };
 });
 describe("employee desktop connection", () => {
+  it("joins background recovery on wake and releases only uncancelled sends", async () => {
+    const native = window.mossworkDesktopWorkspace!;
+    vi.mocked(native.status).mockResolvedValue({
+      ...connected,
+      state: "disconnected",
+      renew_at: 1,
+      expires_at: 1,
+    });
+    vi.mocked(devicesApi.renewal).mockResolvedValue({ ticket: "once" });
+    let complete!: (state: DesktopWorkspaceState) => void;
+    native.renew = vi.fn(
+      () =>
+        new Promise<DesktopWorkspaceState>((resolve) => {
+          complete = resolve;
+        }),
+    );
+    render(
+      <DesktopWorkspaceProvider>
+        <Probe />
+      </DesktopWorkspaceProvider>,
+    );
+    await waitFor(() => expect(native.renew).toHaveBeenCalledOnce());
+    const first = vi.fn(),
+      second = vi.fn();
+    const controller = new AbortController();
+    const cancelled = withReadyDesktopDevice(first, {
+      signal: controller.signal,
+    });
+    const pending = withReadyDesktopDevice(second);
+    controller.abort();
+    await expect(cancelled).rejects.toMatchObject({ name: "AbortError" });
+    expect(second).not.toHaveBeenCalled();
+    await act(async () => complete(connected));
+    await pending;
+    expect(first).not.toHaveBeenCalled();
+    expect(second).toHaveBeenCalledOnce();
+    expect(devicesApi.renewal).toHaveBeenCalledOnce();
+  });
+
+  it("recovers cold pairing after a failed network request without a settings visit", async () => {
+    vi.mocked(devicesApi.list).mockRejectedValueOnce(new Error("offline"));
+    render(
+      <DesktopWorkspaceProvider>
+        <Probe />
+      </DesktopWorkspaceProvider>,
+    );
+    await screen.findByText("connection_failed");
+    const send = vi.fn();
+    await act(async () => {
+      await withReadyDesktopDevice(send);
+    });
+    expect(devicesApi.pair).toHaveBeenCalledOnce();
+    expect(send).toHaveBeenCalledOnce();
+  });
   it.each(["online", "disconnected"] as const)(
     "renews a due %s device without pairing",
     async (state) => {

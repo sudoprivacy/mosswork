@@ -41,7 +41,11 @@ export default function GeneratingIndicator({
   let label: string;
   if (preparing) {
     label =
-      preparingPhase === "tools"
+      preparingPhase === "device"
+        ? t("chat.connectingLocalDevice")
+        : preparingPhase === "network"
+        ? t("chat.waitingLocalNetwork")
+        : preparingPhase === "tools"
         ? t("chat.preparingLocalTools", "正在校验本地工具包")
         : preparingPhase === "runtime"
         ? t("chat.preparingLocalRuntime", "正在启动本地运行时")
