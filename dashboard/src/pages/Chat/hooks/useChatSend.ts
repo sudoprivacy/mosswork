@@ -201,8 +201,17 @@ export function useChatSend({
         );
       };
 
+      const pathParts = window.location.pathname.split("/").filter(Boolean);
+      const isCurrentAgentNewChat =
+        pathParts.length === 2 &&
+        pathParts[0] === "chat" &&
+        decodeURIComponent(pathParts[1]) === agent;
       const targetThreadId =
-        overrides?.threadId !== undefined ? overrides.threadId : activeThreadId;
+        overrides?.threadId !== undefined
+          ? overrides.threadId
+          : isCurrentAgentNewChat
+          ? null
+          : activeThreadId;
 
       if (targetThreadId) {
         if (isPendingThread(targetThreadId)) {
