@@ -1,5 +1,9 @@
 import type { HitlPendingPayload, HitlSessionPolicy } from "../types/hitl";
 import { isCompanyDesktop } from "../desktopRuntime";
+import {
+  withReadyDesktopDevice,
+  type DesktopDeviceWait,
+} from "../desktopDeviceReady";
 import { request } from "../request";
 
 /** Workspace file produced in a thread; ``agent_id`` is the producer. */
@@ -190,10 +194,18 @@ export const mossworkThreadsApi = {
       `/agents/${encodeURIComponent(agentId)}/threads?limit=${limit}`,
     ),
 
-  create: async (agentId: string, cloudTask = false) => {
+  create: async (
+    agentId: string,
+    cloudTask = false,
+    wait?: DesktopDeviceWait,
+  ) => {
     const runtime = window.__mossworkRuntime;
     if (!cloudTask && isCompanyDesktop() && runtime?.createThread) {
-      return runtime.createThread({ agent_id: agentId }).then((result) => ({
+      const create = runtime.createThread;
+      return withReadyDesktopDevice(
+        () => create({ agent_id: agentId }),
+        wait,
+      ).then((result) => ({
         ...result,
         execution_location: "desktop" as const,
         cloud_task: false,

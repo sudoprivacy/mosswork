@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"net/http"
 	"strings"
 	"time"
 )
@@ -28,20 +29,35 @@ func (a *App) companyCreateThread(nonce, base string, params json.RawMessage) (a
 	if err != nil {
 		return nil, err
 	}
-	status, response, err := a.company.CompanyPost(
+	a.companyMu.Lock()
+	if a.workspaceNonce != nonce || a.companyURL != base {
+		a.companyMu.Unlock()
+		return nil, errors.New("runtime_scope_changed")
+	}
+	client := a.company
+	a.companyMu.Unlock()
+	status, response, err := client.CompanyPost(
 		ctx,
 		base,
 		"/api/company-runtime/threads",
 		body,
 	)
 	if err != nil {
+		switch err.Error() {
+		case "device_session_expired", "device_disconnected", "device_unpaired", "device_reconnecting_timeout":
+			return nil, &devicePreparationError{err}
+		}
 		if errors.Is(err, context.DeadlineExceeded) || errors.Is(ctx.Err(), context.DeadlineExceeded) {
 			return nil, errors.New("公司服务器响应超时，请重试")
 		}
 		return nil, errors.New("公司连接不可用，请重新连接")
 	}
 	if status < 200 || status >= 300 {
-		return nil, errors.New(companyThreadErrorReason(status, response))
+		reason := companyThreadErrorReason(status, response)
+		if status == http.StatusUnauthorized && reason == "device_session_expired" {
+			return nil, &devicePreparationError{errors.New(reason)}
+		}
+		return nil, errors.New(reason)
 	}
 	var result map[string]any
 	if err := json.Unmarshal(response, &result); err != nil {

@@ -1,4 +1,5 @@
 import type { DeviceSelection } from "@/api/modules/devices";
+import type { DesktopDeviceWait } from "@/api/desktopDeviceReady";
 import { useCallback, useEffect } from "react";
 import type { TFunction } from "i18next";
 import { useNavigate } from "react-router-dom";
@@ -54,7 +55,11 @@ interface UseChatSendParams {
     hitlPolicy?: HitlSessionPolicy | null,
     device?: DeviceSelection | null,
   ) => void;
-  createSession: () => { session: Session; resolvedId: Promise<string> };
+  createSession: (
+    cloud?: boolean,
+    agent?: string,
+    wait?: DesktopDeviceWait,
+  ) => { session: Session; resolvedId: Promise<string> };
   renameSession: (id: string, name: string) => void;
   /** Called when auto-recording starts successfully from a pending message. */
   onAutoRecordingStarted?: (recordingId: string) => void;
@@ -213,16 +218,31 @@ export function useChatSend({
       const userMsg = buildUserMessage(trimmed, attachments, composerContext);
       chatStore.appendUserMessage(EMPTY_CHAT_SESSION_KEY, userMsg);
 
-      const { resolvedId } = createSession();
       const snap = chatStore.getSnapshot(EMPTY_CHAT_SESSION_KEY);
       // Break any leftover ``__pending__`` → previous thr_* alias so this new
       // chat cannot mutate / stream into an older thread's bucket.
       chatStore.detachSessionKey(PENDING_THREAD_ID);
       chatStore.setMessages(PENDING_THREAD_ID, snap.messages);
       chatStore.clearMessages(EMPTY_CHAT_SESSION_KEY);
+      const wait = window.mossworkDesktopWorkspace
+        ? chatStore.prepareLocalThread()
+        : undefined;
+      const { resolvedId } = createSession(false, agent, wait);
       navigate(`/chat/${agent}/${PENDING_THREAD_ID}`);
 
       void resolvedId.then((tid) => {
+        wait?.finish();
+        if (wait?.signal.aborted) {
+          if (
+            window.location.pathname ===
+              `/chat/${agent}/${PENDING_THREAD_ID}` &&
+            !chatStore.getSnapshot(PENDING_THREAD_ID).isStreaming
+          ) {
+            chatStore.clearMessages(PENDING_THREAD_ID);
+            navigate(`/chat/${agent}`, { replace: true });
+          }
+          return;
+        }
         if (!tid) {
           chatStore.clearMessages(PENDING_THREAD_ID);
           navigate(`/chat/${agent}`, { replace: true });

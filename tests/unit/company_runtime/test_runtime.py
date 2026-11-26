@@ -61,6 +61,27 @@ async def test_desktop_task_uses_thread_folder_or_existing_project(
         await runtime.close()
 
 
+async def test_device_rejection_before_acquisition_can_resume_the_same_task(company, tmp_path):
+    from tests.unit.company_runtime.test_memory_approvals import native_runtime
+
+    server, client, credentials, _ = company
+    install_agent(server)
+    thread = (await client.request("threads", {"agent_id": "expert"}))["thread_id"]
+    runtime = native_runtime(client, tmp_path, [])
+    task = {"agent_id": "expert", "thread_id": thread, "task_id": "resume", "text": "Create report"}
+    try:
+        client.replace_credential("mosswork-device.expired")
+        with pytest.raises(RuntimeError, match="device_rejected_before_task"):
+            await runtime.start(task)
+        assert not runtime.work and not runtime.tasks
+        client.replace_credential(credentials[0])
+        assert (await runtime.start(task))["task_id"] == "resume"
+        await asyncio.wait_for(runtime.work[thread], 15)
+        assert runtime.tasks[thread]["status"] == "completed"
+    finally:
+        await runtime.close()
+
+
 async def test_nonempty_server_thread_remains_server_owned(company, tmp_path):
     from octop.infra.company_runtime.client import CompanyServiceError
     from tests.unit.company_runtime.test_memory_approvals import native_runtime

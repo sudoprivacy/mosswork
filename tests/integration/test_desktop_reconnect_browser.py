@@ -79,7 +79,7 @@ async def test_built_desktop_chat_reconnect_and_cancel(
         "browser-device",
         hashlib.sha256(credential.encode()).hexdigest(),
         "Acceptance",
-        "test",
+        "darwin",
         2,
         now,
     )
@@ -191,7 +191,10 @@ async def test_built_desktop_chat_reconnect_and_cancel(
 
     runtime.emit = publish
     async with async_playwright() as playwright:
-        browser = await playwright.chromium.launch(ignore_default_args=["--hide-scrollbars"])
+        browser = await playwright.chromium.launch(
+            channel=os.environ.get("MOSSWORK_TEST_CHROMIUM_CHANNEL"),
+            ignore_default_args=["--hide-scrollbars"],
+        )
         context = await browser.new_context(
             viewport={"width": 1440, "height": 1000}, locale="en-US"
         )
@@ -294,6 +297,13 @@ async def test_built_desktop_chat_reconnect_and_cancel(
             + json.dumps(token)
             + "); localStorage.setItem('mosswork:locale', 'en');"
         )
+        await page.add_init_script(
+            "window.mossworkDesktopWorkspace = {status: async () => {"
+            "if (window.deviceAsleep) window.observedDeviceSleep = true; return {"
+            "state: window.deviceAsleep ? 'reconnecting' : 'online', "
+            f"owner_user_id: {user_id}, device_id: 'browser-device', "
+            "path: '/project', grant: {id: 'project'} }; }};"
+        )
 
         async def deliver():
             while True:
@@ -320,14 +330,30 @@ async def test_built_desktop_chat_reconnect_and_cancel(
                 "menuitem", name=re.compile(r"^(New local task|新建本机任务)$")
             ).click()
             await expect(page).to_have_url(f"http://testserver/chat/{agent_id}")
+            await page.evaluate("window.deviceAsleep = true")
+            await editor.fill("Cancel this offline request")
+            await editor.press("Enter")
+            await page.wait_for_function("window.observedDeviceSleep === true")
+            stop_waiting = page.get_by_role("button", name=re.compile(r"^(Stop|停止)$"))
+            await stop_waiting.click(timeout=10000)
+            await expect(page).to_have_url(f"http://testserver/chat/{agent_id}")
+            assert calls.count("start") == 0
+            assert calls.count("create_thread") == 0
+            await page.evaluate("window.observedDeviceSleep = false")
             await editor.fill("Create the browser acceptance report")
             await editor.press("Enter")
+            await page.wait_for_function("window.observedDeviceSleep === true")
+            assert calls.count("start") == 0
+            await page.evaluate(
+                "window.deviceAsleep = false; window.dispatchEvent(new Event('online'))"
+            )
             await expect(
                 page.get_by_text("Browser complete stream finished.", exact=False).first
             ).to_be_visible(timeout=45000)
             thread_id = urlsplit(page.url).path.rsplit("/", 1)[-1]
             assert thread_id != existing_thread_id
             assert calls.count("create_thread") == 1
+            assert calls.count("start") == 1
             async with asyncio.timeout(20):
                 while runtime.work:
                     await asyncio.sleep(0.02)

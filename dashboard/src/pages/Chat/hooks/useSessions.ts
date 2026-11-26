@@ -8,6 +8,7 @@ import {
   type ThreadArtifact,
 } from "../../../api/modules/mossworkThreads";
 import type { HitlSessionPolicy } from "../../../api/types/hitl";
+import type { DesktopDeviceWait } from "../../../api/desktopDeviceReady";
 import * as chatStore from "./chatStore";
 import { onSessionEvent } from "./chatStore";
 import { formatThreadTitle } from "../utils/threadTitle";
@@ -561,6 +562,7 @@ export function useSessions(agentId: string | null) {
     (
       cloudTask = false,
       targetAgentId = agentId,
+      wait?: DesktopDeviceWait,
     ): {
       session: Session;
       resolvedId: Promise<string>;
@@ -586,7 +588,7 @@ export function useSessions(agentId: string | null) {
         setModuleSessions((prev) => sortSessions([placeholder, ...prev]));
       }
       const resolvedId = mossworkThreadsApi
-        .create(targetAgentId, cloudTask)
+        .create(targetAgentId, cloudTask, wait)
         .then((created) => {
           if (!cloudTask) markPendingThread(created.thread_id);
           if (created.cloud_task) chatStore.setCloudTask(created.thread_id);

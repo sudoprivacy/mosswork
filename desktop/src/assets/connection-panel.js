@@ -35,20 +35,25 @@ function mountConnectionPanel(config) {
   });
   const runtimePending = new Map();
   const runtimeListeners = new Set();
+  function timeoutError(method) {
+    const error = new Error("本地运行时响应超时；请核对任务状态后重试");
+    if (method === "start") error.errorCode = "task_result_unknown";
+    return error;
+  }
   const extendRuntimeTimeouts = () => {
     for (const [id, call] of runtimePending) {
       clearTimeout(call.timer);
       call.timer = setTimeout(() => {
         runtimePending.delete(id);
-        call.reject(new Error("本地运行时响应超时；请核对任务状态后重试"));
+        call.reject(timeoutError(call.method));
       }, 60000);
     }
   };
   function runtimeRequest(method, params = {}) {
     return new Promise((resolve, reject) => {
       const id = String(++sequence);
-      const timer = setTimeout(() => { runtimePending.delete(id); reject(new Error("本地运行时响应超时；请核对任务状态后重试")); }, 60000);
-      runtimePending.set(id, { resolve, reject, timer });
+      const timer = setTimeout(() => { runtimePending.delete(id); reject(timeoutError(method)); }, 60000);
+      runtimePending.set(id, { resolve, reject, timer, method });
       emit(`runtime:${config.nonce}:${id}:${method}:${encodeURIComponent(JSON.stringify(params))}`);
     });
   }

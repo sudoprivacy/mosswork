@@ -29,6 +29,8 @@ var errRuntimeLaunch = errors.New("runtime_launch_failed")
 // local process, so the dashboard may safely retry the same task identity.
 type runtimePreparationError struct{ cause error }
 
+type devicePreparationError struct{ error }
+
 func (e *runtimePreparationError) Error() string { return e.cause.Error() }
 func (e *runtimePreparationError) Unwrap() error { return e.cause }
 
@@ -56,8 +58,14 @@ func parseRuntimeEvent(name, nonce string) (id, method string, params json.RawMe
 	return p[1], p[2], json.RawMessage(raw), true
 }
 func (a *App) stopCompanyRuntimeLocked() {
+	a.stopCompanyRuntimeWithReasonLocked("runtime_scope_changed")
+}
+
+func (a *App) stopCompanyRuntimeWithReasonLocked(reason string) {
 	if a.companyRuntime != nil && a.window != nil && a.workspaceNonce != "" {
-		a.window.ExecJS(`(function(origin,nonce){if(location.origin===origin)window.__mossworkRuntimeEvent?.(nonce,{event:"runtime_exit",status:"unknown",error:"工作目录或账号已切换，本地任务已停止；请核对已生成文件。"});})(` + jsonString(a.companyPageOriginLocked()) + `,` + jsonString(a.workspaceNonce) + `)`)
+		event := companyruntime.Message{Event: "runtime_exit", Status: "unknown", ErrorCode: reason, Error: runtimeErrorText(reason)}
+		data, _ := json.Marshal(event)
+		a.window.ExecJS(`(function(origin,nonce,event){if(location.origin===origin)window.__mossworkRuntimeEvent?.(nonce,event);})(` + jsonString(a.companyPageOriginLocked()) + `,` + jsonString(a.workspaceNonce) + `,` + string(data) + `)`)
 	}
 	a.runtimeEpoch++
 	if a.companyRuntime != nil {
@@ -221,7 +229,14 @@ func (a *App) performRuntimeAction(nonce, base, method string, params json.RawMe
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), 45*time.Second)
 	defer cancel()
-	return process.Request(ctx, method, params)
+	result, err := process.Request(ctx, method, params)
+	if method == "start" && err != nil && err.Error() == "device_rejected_before_task" {
+		return nil, &devicePreparationError{errors.New("device_session_expired")}
+	}
+	if method == "start" && err != nil && (errors.Is(ctx.Err(), context.DeadlineExceeded) || errors.Is(err, companyruntime.ErrDisconnected)) {
+		return nil, errors.New("task_result_unknown")
+	}
+	return result, err
 }
 
 func runtimeErrorCode(value string) string {
@@ -240,6 +255,10 @@ func runtimeErrorMetadata(err error) (code, stage string, retryable bool, action
 	var preparationErr *runtimePreparationError
 	if errors.As(err, &preparationErr) {
 		stage, retryable, action = "runtime_preparing", true, ""
+	}
+	var deviceErr *devicePreparationError
+	if errors.As(err, &deviceErr) {
+		stage, retryable, action = "device_preparing", true, ""
 	}
 	return code, stage, retryable, action
 }
@@ -300,6 +319,9 @@ func (a *App) ensureRuntimeProcess(nonce, base, method string, prepare func() (s
 	// holding companyMu, so status polling and account changes remain responsive.
 	identity, _, err := client.RuntimeIdentity()
 	if err != nil {
+		if method == "start" {
+			return nil, &devicePreparationError{err}
+		}
 		return nil, err
 	}
 	a.companyMu.Lock()
@@ -359,6 +381,9 @@ func (a *App) startRuntimeProcess(nonce, base, workspace string, epoch uint64, i
 	latest, credential := a.company.CurrentLease()
 	if credential == "" || latest.DeviceID != identity.DeviceID || latest.OwnerUserID != identity.OwnerUserID {
 		a.companyMu.Unlock()
+		if credential == "" && latest.DeviceID == identity.DeviceID && latest.OwnerUserID == identity.OwnerUserID {
+			return nil, &devicePreparationError{errors.New("device_disconnected")}
+		}
 		return nil, errors.New("device_disconnected")
 	}
 	ready := make(chan struct{})
@@ -477,7 +502,7 @@ func (a *App) watchRuntimeIdentity(nonce, base string, epoch uint64, credential 
 		}
 		status, key := a.company.CurrentLease()
 		if status.State == "unpaired" || status.State == "disconnected" || time.Now().Unix() >= status.ExpiresAt {
-			a.stopCompanyRuntimeLocked()
+			a.stopCompanyRuntimeWithReasonLocked("device_lease_interrupted")
 			a.companyMu.Unlock()
 			return
 		}
@@ -495,6 +520,8 @@ func (a *App) watchRuntimeIdentity(nonce, base string, epoch uint64, credential 
 }
 
 var runtimeErrorMessages = map[string]string{
+	"runtime_scope_changed":                  "工作目录或账号已切换，本地任务已停止；请核对已生成文件。",
+	"device_lease_interrupted":               "连接中断，本地任务结果尚未确认。请核对任务记录和已生成文件。",
 	"company_tools_archive_unavailable":      "客户端缺少或无法读取本机工具包。请安装包含 Python、文档工具和 FFmpeg 的完整企业客户端。",
 	"runtime_launch_failed":                  "本地运行时启动失败。请在「本地工作目录」中检查工具，确认客户端工具包完整。",
 	"runtime_process_disconnected":           "本地运行时连接已中断，请核对任务状态后重试。",

@@ -82,9 +82,11 @@ class DeviceManager:
         code = "mosswork-pair." + secrets.token_urlsafe(32)
         deadline = min(now + 120, expires)
         credential_deadline = min(now + 8 * 3600, expires)
-        await _db(
+        issued = await _db(
             self.repo.issue_code, _digest(code), owner, session, deadline, credential_deadline
         )
+        if not issued:
+            raise _error("device_pairing_blocked", status=403)
         return {"code": code, "expires_at": deadline, "credential_expires_at": credential_deadline}
 
     async def _identity(self, digest: str, handover: bool = False) -> dict[str, Any]:
@@ -224,7 +226,7 @@ class DeviceManager:
                     )
                     continue
                 if message.type == "revoke":
-                    await self.revoke(int(row["owner_user_id"]), device_id)
+                    await self.revoke(int(row["owner_user_id"]), device_id, block_pairing=False)
                     return
                 if message.type == "grants":
                     if row["protocol_version"] != 2 or len({g.id for g in message.grants}) != len(
@@ -530,8 +532,8 @@ class DeviceManager:
         with suppress(Exception):
             await asyncio.wait_for(conn.socket.close(code=code, reason=reason), 5)
 
-    async def revoke(self, owner: int, device_id: str) -> None:
-        if not await _db(self.repo.revoke, device_id, owner, int(time.time())):
+    async def revoke(self, owner: int, device_id: str, *, block_pairing: bool = True) -> None:
+        if not await _db(self.repo.revoke, device_id, owner, int(time.time()), block_pairing):
             raise _error("device_not_found", status=404)
         conn = self.connections.get(device_id)
         if conn is not None:

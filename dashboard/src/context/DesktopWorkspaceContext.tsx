@@ -5,15 +5,17 @@ import {
   useEffect,
   useRef,
   useState,
+  useSyncExternalStore,
   type ReactNode,
 } from "react";
 import { devicesApi } from "../api/modules/devices";
+import { reportDesktopDevice } from "../api/desktopDeviceReady";
 import {
   DESKTOP_WORKSPACE_READY,
   type DesktopWorkspaceState,
 } from "../api/desktopWorkspace";
 import { useCurrentUser } from "../hooks/useCurrentUser";
-import { getAuthToken } from "../api/request";
+import { AUTH_TOKEN_CHANGED_EVENT, getAuthToken } from "../api/request";
 import { tokenSessionIdentity } from "../utils/authSession";
 
 interface WorkspaceContext {
@@ -38,6 +40,17 @@ const Context = createContext<WorkspaceContext>({
   retry: () => {},
 });
 
+function subscribeSession(listener: () => void) {
+  window.addEventListener(AUTH_TOKEN_CHANGED_EVENT, listener);
+  window.addEventListener("storage", listener);
+  return () => {
+    window.removeEventListener(AUTH_TOKEN_CHANGED_EVENT, listener);
+    window.removeEventListener("storage", listener);
+  };
+}
+
+const currentSession = () => tokenSessionIdentity(getAuthToken());
+
 export function DesktopWorkspaceProvider({
   children,
 }: {
@@ -45,6 +58,7 @@ export function DesktopWorkspaceProvider({
 }) {
   const user = useCurrentUser();
   const owner = user?.id;
+  const session = useSyncExternalStore(subscribeSession, currentSession);
   const [available, setAvailable] = useState(
     Boolean(window.mossworkDesktopWorkspace),
   );
@@ -66,25 +80,31 @@ export function DesktopWorkspaceProvider({
     if (!available || !bridge || !owner) return;
     let cancelled = false;
     let attempted = false;
+    let deviceEnabled = true;
+    let pairingBlocked = false;
     let nextAttempt = 0;
     let delay = 1000;
-    const session = tokenSessionIdentity(getAuthToken());
     const sameSession = () =>
       !cancelled && tokenSessionIdentity(getAuthToken()) === session;
     const refresh = async () => {
       if (working.current) return;
+      if (!sameSession()) {
+        reportDesktopDevice({ error: "session_changed" });
+        return;
+      }
       working.current = true;
       try {
         let next = await bridge.status();
         if (cancelled) return;
         if (next.owner_user_id && next.owner_user_id !== owner) {
+          reportDesktopDevice({ error: "session_changed" });
           next = await bridge.disconnect();
           if (cancelled) return;
         }
         if (!attempted) {
-          attempted = true;
           const devices = await devicesApi.list();
           if (cancelled) return;
+          deviceEnabled = devices.enabled;
           setEnabled(devices.enabled);
           if (
             devices.enabled &&
@@ -97,6 +117,7 @@ export function DesktopWorkspaceProvider({
             if (!sameSession()) return;
             next = await bridge.pair(pairing.code);
           }
+          attempted = true;
         }
         if (cancelled) return;
         if (
@@ -119,6 +140,17 @@ export function DesktopWorkspaceProvider({
               next = await bridge.renew(
                 key_hint ? `${ticket}.${key_hint}` : ticket,
               );
+            else if (next.state === "disconnected") {
+              const { devices } = await devicesApi.list();
+              if (
+                devices.some(
+                  (device) =>
+                    device.device_id === next.device_id &&
+                    device.revoked_at != null,
+                )
+              )
+                next = { ...next, pair_blocked: true };
+            }
           } catch {
             if (!sameSession()) return;
             if (next.state === "disconnected")
@@ -134,6 +166,16 @@ export function DesktopWorkspaceProvider({
           throw new Error("session_changed");
         }
         setState(next);
+        reportDesktopDevice({
+          state: next,
+          error: !deviceEnabled
+            ? "tools_disabled"
+            : next.pair_blocked || pairingBlocked
+            ? "device_rejected"
+            : next.error === "connection_failed"
+            ? undefined
+            : next.error,
+        });
         setError(
           (previous) =>
             next.error ??
@@ -142,8 +184,20 @@ export function DesktopWorkspaceProvider({
               ? ""
               : previous),
         );
-      } catch {
-        if (!cancelled) setError("connection_failed");
+      } catch (err) {
+        if (!cancelled) {
+          const error =
+            err instanceof Error &&
+            err.message.includes("device_pairing_blocked")
+              ? "device_rejected"
+              : "connection_failed";
+          if (error === "device_rejected") {
+            attempted = true;
+            pairingBlocked = true;
+            reportDesktopDevice({ error });
+          }
+          setError(error);
+        }
       } finally {
         working.current = false;
         if (!cancelled) setBusy(false);
@@ -158,12 +212,13 @@ export function DesktopWorkspaceProvider({
     window.addEventListener("mosswork:device-lease-due", refresh);
     return () => {
       cancelled = true;
+      reportDesktopDevice({ error: "session_changed" });
       window.clearInterval(timer);
       window.removeEventListener("online", refresh);
       window.removeEventListener("focus", refresh);
       window.removeEventListener("mosswork:device-lease-due", refresh);
     };
-  }, [available, owner, revision]);
+  }, [available, owner, revision, session]);
 
   const change = useCallback(
     async (action: "choose" | "clear") => {
@@ -176,6 +231,7 @@ export function DesktopWorkspaceProvider({
         const next = await bridge[action]();
         if (next.owner_user_id !== owner) throw new Error("session_changed");
         setState(next);
+        reportDesktopDevice({ error: "workspace_changed" });
         setError(next.error ?? "");
       } catch (err) {
         const code = err instanceof Error ? err.message : "save_failed";

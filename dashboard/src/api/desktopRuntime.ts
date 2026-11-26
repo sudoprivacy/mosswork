@@ -1,5 +1,6 @@
 import type { HarnessChunk } from "../utils/parseHarnessChunk";
 import type { HitlPendingPayload } from "./types/hitl";
+import { withReadyDesktopDevice } from "./desktopDeviceReady";
 
 export interface LocalArtifact {
   path: string;
@@ -198,6 +199,7 @@ export function matchesRuntimeTask(
 const LOCAL_RUNTIME_PREPARATION_RETRY_DELAYS_MS = [500, 1_500] as const;
 
 type RuntimeStartError = Error & {
+  errorCode?: string;
   stage?: string;
   retryable?: boolean;
 };
@@ -226,6 +228,20 @@ function waitForRuntimePreparationRetry(
   });
 }
 
+export async function readLocalTaskReceipt(
+  runtime: DesktopRuntimeBridge,
+  threadId: string,
+  taskId: string,
+  signal: AbortSignal,
+) {
+  const snapshot = await withReadyDesktopDevice(() => runtime.status(), {
+    signal,
+  });
+  return snapshot.active_tasks.find(
+    (task) => task.task_id === taskId && task.thread_id === threadId,
+  );
+}
+
 /** Subscribe before starting: a short task may complete before its start reply. */
 export async function runLocalTurn(
   params: RuntimeStart,
@@ -236,21 +252,64 @@ export async function runLocalTurn(
   const runtime = requireDesktopRuntime();
   return new Promise<void>((resolve, reject) => {
     let finished = false;
+    let acknowledged = false;
+    let interruption: Error | undefined;
+    let checking = false;
+    const receiptWait = new AbortController();
     const finish = (error?: Error) => {
       if (finished) return;
       finished = true;
+      receiptWait.abort();
       unsubscribe();
       signal.removeEventListener("abort", abort);
       if (error) reject(error);
       else resolve();
     };
+    const checkReceipt = async (failure: Error) => {
+      if (finished || checking) return;
+      checking = true;
+      try {
+        const receipt = await readLocalTaskReceipt(
+          runtime,
+          params.thread_id,
+          params.task_id,
+          receiptWait.signal,
+        );
+        if (finished) return;
+        if (
+          receipt?.status === "running" ||
+          receipt?.status === "cancel_requested"
+        ) {
+          acknowledged = true;
+          onStarted?.();
+        } else if (
+          receipt?.status === "completed" ||
+          receipt?.status === "cancelled"
+        ) {
+          onEvent({
+            event: "done",
+            task_id: params.task_id,
+            thread_id: params.thread_id,
+            status: receipt.status,
+            sync_state: receipt.sync_state,
+          });
+          finish();
+        } else finish(failure);
+      } catch {
+        finish(failure);
+      } finally {
+        checking = false;
+      }
+    };
     const unsubscribe = runtime.subscribe((event) => {
       if (event.event === "runtime_exit") {
-        finish(
-          new Error(
-            event.error || "本地运行时已退出，请核对任务状态和生成文件。",
-          ),
+        const failure = new Error(
+          event.error || "本地运行时已退出，请核对任务状态和生成文件。",
         );
+        if (event.error_code === "device_lease_interrupted") {
+          interruption = failure;
+          if (acknowledged) void checkReceipt(failure);
+        } else finish(failure);
         return;
       }
       if (!matchesRuntimeTask(event, params.thread_id, params.task_id)) return;
@@ -268,6 +327,7 @@ export async function runLocalTurn(
       }
     });
     const abort = () => {
+      receiptWait.abort();
       void runtime
         .cancel({ thread_id: params.thread_id })
         .catch((err: unknown) => {
@@ -288,7 +348,9 @@ export async function runLocalTurn(
       while (!finished && !signal.aborted) {
         try {
           await runtime.start(params);
-          if (!finished) onStarted?.();
+          acknowledged = true;
+          if (interruption) await checkReceipt(interruption);
+          else if (!finished) onStarted?.();
           return;
         } catch (err) {
           if (
@@ -306,6 +368,13 @@ export async function runLocalTurn(
           }
           if (signal.aborted) {
             finish();
+            return;
+          }
+          if (
+            !finished &&
+            (err as RuntimeStartError)?.errorCode === "task_result_unknown"
+          ) {
+            await checkReceipt(interruption ?? (err as Error));
             return;
           }
           finish(err instanceof Error ? err : new Error("无法启动本地任务。"));
