@@ -25,6 +25,7 @@ import {
 import { CRON_NAME_MAX_LEN, CRON_PROMPT_MAX_LEN } from "../constants";
 import { channelFromSessionKey } from "../cronDisplay";
 import type { CronJobFormValues } from "../useCronJobs";
+import { exampleFormValues } from "../taskExamples";
 import {
   buildModelSelectOptions,
   defaultModelToForm,
@@ -37,6 +38,7 @@ const { Text } = Typography;
 
 interface JobDrawerProps {
   open: boolean;
+  example: string;
   editingJob: CronJobFormValues | null;
   activeAgentId: string | null;
   cronTimezone: string;
@@ -80,6 +82,7 @@ function SectionHeader({
 
 export function JobDrawer({
   open,
+  example,
   editingJob,
   activeAgentId,
   cronTimezone,
@@ -132,9 +135,12 @@ export function JobDrawer({
       });
     } else {
       form.resetFields();
-      form.setFieldsValue(buildDefaultFormValues(cronTimezone));
+      form.setFieldsValue({
+        ...buildDefaultFormValues(cronTimezone),
+        ...(example && exampleFormValues(example, t)),
+      });
     }
-  }, [open, editingJob, cronTimezone, form]);
+  }, [open, editingJob, example, cronTimezone, form, t]);
 
   useEffect(() => {
     if (!open) return;
