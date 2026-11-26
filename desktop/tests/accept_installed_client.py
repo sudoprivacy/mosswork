@@ -68,9 +68,9 @@ def windows(
     installed_digest = digest(binary)
     if installed_digest != sums[update.name]:
         raise ValueError("Installed executable differs from the published update executable")
-    app_data = target.parent / "app-data"
-    app_data.mkdir()
-    env["APPDATA"] = str(app_data)
+    webview_profile = Path(env["APPDATA"]) / binary.name
+    if webview_profile.exists():
+        raise ValueError("This test requires a fresh Windows runner profile")
     driver = Path(__file__).with_name("accept_installed_windows_ui.ps1")
     command = (
         "powershell.exe",
@@ -86,7 +86,7 @@ def windows(
         run(*command, "-ClientPid", str(process.pid), "-SwitchToEnglish", timeout=120)
         settings = Path(env["MOSSWORK_HOME"]) / "desktop-settings.json"
         assert json.loads(settings.read_text(encoding="utf-8"))["locale"] == "en"
-        assert (app_data / binary.name).is_dir()
+        assert webview_profile.is_dir()
     with client(binary, env, evidence / "client-relaunch.log") as process:
         run(*command, "-ClientPid", str(process.pid), timeout=66)
     return {
