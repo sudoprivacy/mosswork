@@ -27,8 +27,14 @@ async function panel(status, server = "https://company.example") {
   const emitted = [];
   let listener;
   let current = status;
-  let confirmed = false;
-  window.confirm = () => confirmed;
+  // jsdom exposes the dialog element but does not implement its modal methods.
+  const dialog = window.document.getElementById("restart-dialog");
+  dialog.showModal = () => {
+    dialog.open = true;
+  };
+  dialog.close = () => {
+    dialog.open = false;
+  };
   // Labels are supplied by native localization, not inferred from the server
   // dashboard, release notes, or the remote company account.
   const strings = {
@@ -44,6 +50,7 @@ async function panel(status, server = "https://company.example") {
     error: "Update failed",
     note: "Keep work",
     confirm: "Restart?",
+    cancel: "Cancel",
     server: "Update server",
     platform: "Platform",
     development: "Development builds do not support online updates.",
@@ -80,9 +87,6 @@ async function panel(status, server = "https://company.example") {
     dom,
     emitted,
     byId: (id) => window.document.getElementById(id),
-    confirm: () => {
-      confirmed = true;
-    },
     close() {
       window.dispatchEvent(new window.Event("pagehide"));
       window.close();
@@ -123,17 +127,38 @@ test("available update requires an explicit download and a separate confirmed re
       is_ready: true,
     });
     p.byId("restart").click();
+    assert.equal(p.byId("restart-dialog").open, true);
+    assert.equal(p.byId("confirm").textContent, "Restart?");
+    assert.equal(p.byId("cancel").textContent, "Cancel");
+    assert.equal(p.byId("confirm-restart").textContent, "Restart");
+    p.byId("cancel").click();
+    assert.equal(p.byId("restart-dialog").open, false);
     assert.equal(
       p.emitted.length,
       1,
       "cancelled confirmation must not restart",
     );
-    p.confirm();
     p.byId("restart").click();
+    p.byId("confirm-restart").click();
+    assert.equal(p.byId("restart-dialog").open, false);
+    p.byId("confirm-restart").click();
     assert.deepEqual(p.emitted, [
       "desktop:update:download",
       "desktop:update:restart",
     ]);
+  } finally {
+    p.close();
+  }
+});
+
+test("a candidate becoming unavailable dismisses its restart confirmation", async () => {
+  const p = await panel({ state: "ready", is_ready: true });
+  try {
+    p.byId("restart").click();
+    await p.change({ state: "idle", is_ready: false });
+    assert.equal(p.byId("restart-dialog").open, false);
+    p.byId("confirm-restart").click();
+    assert.deepEqual(p.emitted, []);
   } finally {
     p.close();
   }

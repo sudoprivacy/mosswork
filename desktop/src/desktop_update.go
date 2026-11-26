@@ -253,6 +253,7 @@ var desktopUpdateCopy = map[Locale]map[string]string{
 		"location": "Move mosswork to a writable Applications folder before updating.",
 		"check":    "Check for updates", "download": "Download update", "restart": "Restart and install",
 		"confirm": "Save your work before continuing. Restart mosswork and install the verified update now?",
+		"cancel":  "Cancel",
 		"note":    "Your account settings and working folders are preserved. Installation restarts the client; save any unsent edits first.",
 	},
 	LocaleZH: {
@@ -269,6 +270,7 @@ var desktopUpdateCopy = map[Locale]map[string]string{
 		"location": "请先将 mosswork 移到有写入权限的“应用程序”文件夹，再进行更新。",
 		"check":    "检查更新", "download": "下载更新", "restart": "重启并安装",
 		"confirm": "请先保存正在编辑的内容。现在重启 mosswork 并安装已校验的更新吗？",
+		"cancel":  "取消",
 		"note":    "更新会保留账号设置和工作目录。安装需要重启客户端，请先保存未发送的编辑内容。",
 	},
 }

@@ -56,6 +56,7 @@
         opacity: 0.5;
       }
       #restart,
+      #confirm-restart,
       #download {
         background: #f97316;
         color: white;
@@ -90,6 +91,13 @@
       <button id="download" type="button" hidden></button>
       <button id="restart" type="button" hidden></button>
     </footer>
+    <dialog id="restart-dialog" aria-labelledby="confirm">
+      <p id="confirm"></p>
+      <footer>
+        <button id="cancel" type="button" autofocus></button>
+        <button id="confirm-restart" type="button"></button>
+      </footer>
+    </dialog>
     <script type="module" src="/desktop-update.js"></script>
   </body>
 </html>

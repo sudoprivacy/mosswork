@@ -6,6 +6,12 @@
 
 ## [Unreleased]
 
+## [0.0.10] - 2026-11-26
+
+### Fixed
+
+- The macOS desktop update window now shows a confirmation when you choose **Restart and install**. Cancelling keeps the downloaded update ready to install.
+
 ## [0.0.9] - 2026-11-25
 
 ### Added
