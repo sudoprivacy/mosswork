@@ -60,8 +60,27 @@ Other routes are JWT-gated by `api/middleware/jwt_auth.py`; the setup lockdown m
 (`api/middleware/setup_lockdown.py`) additionally blocks non-setup
 routes until the wizard finishes.
 
-`GET /api/company-runtime/capabilities` advertises `checkpoint_batches` for the
-desktop worker. `POST /api/company-runtime/tasks/{task_id}/checkpoint-batch`
+`GET /api/company-runtime/capabilities` advertises the runtime protocol, checkpoint
+format and supported features. The desktop worker requires protocol `1`, checkpoint
+format `langgraph-jsonplus-v1` and `checkpoint_batches` before acquiring tasks. It
+validates the protocol and required data in each expert snapshot before execution.
+Protocol-aware clients send `X-Mosswork-Snapshot-Protocol: 1`. Their snapshots report
+the installed server engine in `harness_version`. Compatible builds can differ in
+package version. New optional fields are allowed. Changes requiring new client
+behavior must use a new protocol version.
+
+The original 0.0.8 employee client can run local conversations after a server-only
+upgrade. For its protocol-1 snapshot the server returns `harness_version: "0.0.8"`
+and records the actual build in `server_harness_version`. Old task requests carry
+no engine version. A request carrying `mcp_servers` uses the native server snapshot,
+even if the list is empty. For other unversioned requests the server consults the
+last completed task for the same employee and installation. A fresh installation
+with that request shape receives the 0.0.8 snapshot. On a mixed deployment, set
+`company_runtime_snapshot_profiles` in the server's `config.json` to map individual
+paired device IDs to `"server"` or `"0.0.8"` to override this inference. Restart the
+server after editing the file. A negotiated protocol takes precedence.
+
+`POST /api/company-runtime/tasks/{task_id}/checkpoint-batch`
 accepts 1–64 ordered `put`/`writes` operations and commits them atomically for
 the owning device and latest task. Repeating an acknowledged batch is safe;
 conflicting checkpoint identities roll back the batch. Running, cancellation-requested

@@ -138,6 +138,7 @@ class MossworkConfig:
     enable_api_docs: bool = False
     history_v2_enabled: bool = False
     company_runtime_enabled: bool = False
+    company_runtime_snapshot_profiles: dict[str, str] = field(default_factory=dict)
     device_channel_enabled: bool = False
     require_setup_password: bool = True
     database: DatabaseConfig = field(default_factory=DatabaseConfig)
@@ -460,6 +461,14 @@ def load_config(path: Path) -> MossworkConfig:
         database_in_file = False
 
     merged = {**file_defaults, **raw}
+    snapshot_profiles = merged["company_runtime_snapshot_profiles"]
+    if not isinstance(snapshot_profiles, dict) or not all(
+        isinstance(profile, str) and profile in {"0.0.8", "server"}
+        for profile in snapshot_profiles.values()
+    ):
+        raise ValueError(
+            'company_runtime_snapshot_profiles must map device IDs to "0.0.8" or "server"'
+        )
     # Legacy key: prefer default_timezone when both are present in the file.
     if "default_timezone" not in raw and "cron_timezone" in raw:
         merged["default_timezone"] = raw["cron_timezone"]
@@ -643,6 +652,7 @@ def load_config(path: Path) -> MossworkConfig:
             ),
             False,
         ),
+        company_runtime_snapshot_profiles=snapshot_profiles,
         device_channel_enabled=_coerce_bool(
             "MOSSWORK_DEVICE_CHANNEL_ENABLED",
             os.environ.get(

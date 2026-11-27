@@ -436,9 +436,10 @@ async def test_identity_event_and_device_isolation(company):
 
 
 @pytest.mark.asyncio
-async def test_real_harness_remote_model_tool_checkpoint_history(company, tmp_path):
+async def test_real_harness_remote_model_tool_checkpoint_history(company, tmp_path, monkeypatch):
     server, client, _, _ = company
     install_agent(server)
+    monkeypatch.setattr("octop.infra.company_runtime.service.version", lambda _: "0.0.999")
     workspace = tmp_path / "中文 work"
     workspace.mkdir()
     events = []
@@ -492,6 +493,7 @@ async def test_real_harness_remote_model_tool_checkpoint_history(company, tmp_pa
     task = server.services.company_runtime_repo.task("task2")
     assert task is not None
     snapshot = json.loads(task["expert_json"])
+    assert snapshot["harness_version"] == "0.0.999"
     assert snapshot["default_model"] == "test/renamed-model"
     assert snapshot["models"] == ["test/renamed-model"]
     assert (workspace / "thread1" / "report.txt").read_text() == "local report 42"

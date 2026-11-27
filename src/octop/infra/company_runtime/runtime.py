@@ -38,6 +38,7 @@ from octop.infra.company_runtime.client import (
     CompanyModelError,
     CompanyServiceError,
 )
+from octop.infra.company_runtime.compatibility import check_capabilities, validated_snapshot
 from octop.infra.company_runtime.connector_side_effects import (
     adapter_manages_confirmation,
     side_effect_for,
@@ -259,12 +260,13 @@ class EnterpriseRuntime:
             self.installation_token = secrets.token_urlsafe(32)
             await offload(atomic_json, install_file, {"token": self.installation_token})
         self.authorized = params.get("execute_authorized") is True
-        self.client = CompanyClient(params["company_url"], params["credential"])
-        capabilities = await self.client.request("capabilities")
-        if capabilities["protocol_version"] != 1 or "checkpoint_batches" not in capabilities.get(
-            "features", []
-        ):
-            raise RuntimeError("company_protocol_incompatible")
+        client = CompanyClient(params["company_url"], params["credential"])
+        try:
+            check_capabilities(await client.request("capabilities"))
+        except Exception:
+            await client.close()
+            raise
+        self.client = client
         self.tools = {"python": sys.version.split()[0], "harness": version("moss-harness")}
         # The native shell supplies a verified package path. Development is explicit.
         bin_dir = Path(sys.executable).parent
@@ -575,14 +577,12 @@ class EnterpriseRuntime:
         error_action = ""
         sent_files: dict[str, dict[str, Any]] = {}
         try:
+            snapshot = validated_snapshot(acquired.get("expert", {}))
             if project.is_symlink() or not project.resolve().is_relative_to(self.workspace):
                 raise RuntimeError("project_path_invalid")
             await offload(project.mkdir, parents=True, exist_ok=True)
             # Unchanged files from earlier turns must never move into this turn.
             before = await offload(artifact_index, project, limit=None)
-            snapshot = acquired["expert"]
-            if snapshot["harness_version"] != version("moss-harness"):
-                raise RuntimeError("公司引擎版本与客户端不兼容，请安装匹配的客户端")
             cache = await offload(cache_expert, self.state / "experts", snapshot)
             saver = LocalCheckpointSaver(client, task_id, thread, directory)
             backend = ProjectBackend(

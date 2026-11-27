@@ -42,6 +42,16 @@ def test_defaults_when_missing(tmp_path: Path):
     assert written["max_upload_mb"] == 100
 
 
+def test_company_runtime_snapshot_profiles(tmp_path: Path):
+    path = tmp_path / "config.json"
+    profiles = {"older-device": "0.0.8", "current-device": "server"}
+    path.write_text(json.dumps({"company_runtime_snapshot_profiles": profiles}))
+    assert load_config(path).company_runtime_snapshot_profiles == profiles
+    path.write_text(json.dumps({"company_runtime_snapshot_profiles": {"device": "unknown"}}))
+    with pytest.raises(ValueError, match="company_runtime_snapshot_profiles"):
+        load_config(path)
+
+
 def test_loads_backup_section(tmp_path: Path):
     cfg_path = tmp_path / "config.json"
     cfg_path.write_text(
