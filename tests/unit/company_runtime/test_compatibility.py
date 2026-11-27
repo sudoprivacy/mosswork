@@ -156,6 +156,29 @@ async def test_incompatible_handshake_prevents_acquisition(company, tmp_path, mo
     peer.close.assert_awaited_once()
 
 
+async def test_unavailable_task_feature_fails_before_acquisition(company, tmp_path):
+    from .test_memory_approvals import native_runtime
+
+    server, client, _, _ = company
+    runtime = native_runtime(client, tmp_path, [])
+    runtime.task_features = set()
+    try:
+        with pytest.raises(RuntimeError, match="^feature_not_supported$"):
+            await runtime.start(
+                {
+                    "agent_id": "expert",
+                    "thread_id": "thread1",
+                    "task_id": "feature",
+                    "text": "hello",
+                    "mcp_servers": ["mail"],
+                }
+            )
+        assert not runtime.tasks
+        assert server.services.company_runtime_repo.task("feature") is None
+    finally:
+        await client.close()
+
+
 def test_snapshot_validates_consumed_fields_and_allows_extensions():
     snapshot = {
         "protocol_version": 1,

@@ -53,6 +53,7 @@ class Capabilities(Document):
     protocol_version: int = PROTOCOL_VERSION
     checkpoint_format: str = CHECKPOINT_FORMAT
     execution: str = "desktop"
+    task_features: list[str] = ["connector_tools"]
     features: list[str] = [
         "model_stream",
         "remote_checkpoints",
@@ -80,8 +81,13 @@ async def service(request: Request, server: Any = Depends(get_server)) -> Compan
     response_model=Capabilities,
     summary="Negotiate company desktop runtime capabilities",
 )
-async def capabilities(svc: CompanyRuntimeService = Depends(service)) -> Capabilities:
+async def capabilities(
+    svc: CompanyRuntimeService = Depends(service),
+    snapshot_protocol: str | None = Header(default=None, alias=SNAPSHOT_PROTOCOL_HEADER),
+) -> Capabilities:
     del svc
+    if snapshot_protocol is not None and snapshot_protocol != str(PROTOCOL_VERSION):
+        raise denied("company_protocol_incompatible")
     return Capabilities()
 
 

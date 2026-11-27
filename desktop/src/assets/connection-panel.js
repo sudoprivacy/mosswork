@@ -71,6 +71,7 @@ function mountConnectionPanel(config) {
         stage: result.stage,
         retryable: result.retryable,
         action: result.action,
+        diagnostic_id: result.diagnostic_id,
       });
       call.reject(error);
     } else call.resolve(result.result);

@@ -221,12 +221,13 @@ async def test_cleanup_failure_closes_other_resources_and_releases_task(
         assert len(done) == 1
         assert done[0]["status"] == "unknown"
         assert done[0]["sync_state"] == "synced"
-        assert done[0]["error"] == f"cleanup failed: {method}"
-        assert f"cleanup failed: {method}" in caplog.text
+        assert done[0]["error"] == "task_result_unknown"
+        assert f"cleanup failed task=task1 method={method}" in caplog.text
+        assert f"cleanup failed: {method}" not in caplog.text
         receipt = json.loads((runtime.state / "tasks/task1/task.json").read_text())
         assert receipt["status"] == receipt["reported_status"] == "unknown"
         assert server.services.company_runtime_repo.task("task1")["status"] == "unknown"
-        with pytest.raises(RuntimeError, match="上次任务结果待核对"):
+        with pytest.raises(RuntimeError, match="task_result_unknown"):
             await runtime.start(
                 {
                     "task_id": "task2",
@@ -279,8 +280,9 @@ async def test_finalization_write_failure_emits_done_and_recovers_without_replay
         assert len(done) == 1
         assert done[0]["status"] == "completed"
         assert done[0]["sync_state"] == "pending"
-        assert done[0]["error"] == "task receipt write failed"
-        assert "task receipt write failed" in caplog.text
+        assert done[0]["error"] == "checkpoint_sync_pending"
+        assert "task receipt write failed" not in caplog.text
+        assert "task=task1" in caplog.text
         output = runtime.workspace / "thread1/report.txt"
         written_at = output.stat().st_mtime_ns
         monkeypatch.setattr(runtime_module, "atomic_json", atomic_json)

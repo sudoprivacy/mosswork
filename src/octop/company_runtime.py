@@ -8,6 +8,7 @@ import signal
 import sys
 from typing import Any
 
+from octop.infra.company_runtime.rpc_errors import rpc_failure
 from octop.infra.company_runtime.runtime import EnterpriseRuntime
 
 
@@ -45,10 +46,16 @@ def main() -> None:
                 if not line:
                     break
                 request: dict[str, Any] = {}
+                method = ""
                 try:
                     if len(line) > 2 * 1024 * 1024:
                         raise ValueError("ipc_request_too_large")
-                    request = json.loads(line)
+                    document = json.loads(line)
+                    if not isinstance(document, dict) or not isinstance(
+                        document.get("method"), str
+                    ):
+                        raise ValueError("invalid_runtime_request")
+                    request = document
                     method, params = request["method"], request.get("params", {})
                     if method == "initialize":
                         result = await runtime.initialize(params)
@@ -73,7 +80,7 @@ def main() -> None:
                         raise ValueError("unknown_runtime_method")
                     emit({"id": request.get("id"), "result": result})
                 except Exception as exc:
-                    emit({"id": request.get("id"), "error": str(exc)})
+                    emit({"id": request.get("id"), **rpc_failure(method, exc)})
         finally:
             await runtime.close()
 

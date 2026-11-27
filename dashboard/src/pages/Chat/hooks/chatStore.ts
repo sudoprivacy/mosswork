@@ -2602,7 +2602,10 @@ function appendErrorBubble(
   state: SessionStreamState,
   message: string,
   errorCode?: string,
-  details?: Pick<ProcessErrorInfo, "stage" | "retryable" | "action">,
+  details?: Pick<
+    ProcessErrorInfo,
+    "stage" | "retryable" | "action" | "diagnostic_id" | "source"
+  >,
 ): void {
   state.messages = [
     ...state.messages,
@@ -2751,6 +2754,8 @@ async function attachLocalRuntime(
           event.error,
           event.error_code || "local_runtime_error",
           {
+            source: "desktop_runtime",
+            diagnostic_id: event.diagnostic_id,
             stage: event.stage,
             retryable: event.retryable,
             action: event.action,
@@ -2771,7 +2776,13 @@ async function attachLocalRuntime(
         state,
         event.error || "本地运行时已退出，请核对任务结果。",
         event.error_code || "local_runtime_error",
-        { stage: "runtime", retryable: false, action: "check_task_status" },
+        {
+          source: "desktop_runtime",
+          diagnostic_id: event.diagnostic_id,
+          stage: event.stage || "runtime_exit",
+          retryable: false,
+          action: "check_task_status",
+        },
       );
     finish();
   };
@@ -3747,6 +3758,7 @@ export async function sendTurn(
         return;
       if (beforeEdit && !started) state.messages = beforeEdit;
       const nativeError = error as Error & {
+        diagnostic_id?: string;
         errorCode?: string;
         stage?: string;
         retryable?: boolean;
@@ -3757,6 +3769,8 @@ export async function sendTurn(
         error instanceof Error ? error.message : "本地任务失败，请检查运行时。",
         nativeError.errorCode || "local_runtime_error",
         {
+          source: "desktop_runtime",
+          diagnostic_id: nativeError.diagnostic_id,
           stage: nativeError.stage,
           retryable: nativeError.retryable,
           action: nativeError.action,

@@ -37,6 +37,22 @@ def denied(reason: str, status: int = 409) -> MossworkError:
     return MossworkError(ErrorCode.FORBIDDEN, reason, status=status, details={"reason": reason})
 
 
+def legacy_profile(
+    repo: CompanyRuntimeRepo,
+    profiles: dict[str, str],
+    device: str,
+    owner: int,
+    installation_hash: str | None,
+) -> tuple[str, str]:
+    if device in profiles:
+        return profiles[device], "device"
+    if installation_hash and (prior := repo.last_completed_harness(owner, installation_hash)):
+        return prior, "completed_task"
+    if "*" in profiles:
+        return profiles["*"], "fleet"
+    return "server", "server_fallback"
+
+
 def authenticate_company_device(services: Any, credential: str, origin: str | None = None) -> Any:
     if origin:
         raise denied("native_runtime_required", 403)
@@ -324,11 +340,14 @@ class CompanyRuntimeService:
         except RuntimeError as exc:
             raise denied("company_protocol_incompatible") from exc
         profiles = self.services.config.company_runtime_snapshot_profiles
-        profile = profiles.get(self.identity["device_id"])
-        if profile is None:
-            profile = await offload(self.repo.last_completed_harness, self.owner, installation_hash)
-        if profile is None:
-            profile = profiles.get("*", "server")
+        profile, _ = await offload(
+            legacy_profile,
+            self.repo,
+            profiles,
+            self.identity["device_id"],
+            self.owner,
+            installation_hash,
+        )
         if profile == "server" or profile == snapshot["harness_version"]:
             return
         snapshot["server_harness_version"] = snapshot["harness_version"]

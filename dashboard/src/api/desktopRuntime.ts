@@ -40,6 +40,7 @@ export interface RuntimeEvent {
   max_attempts?: number;
   error?: string;
   error_code?: string;
+  diagnostic_id?: string;
   stage?: string;
   retryable?: boolean;
   action?: string;
@@ -255,6 +256,7 @@ export async function runLocalTurn(
     let finished = false;
     let acknowledged = false;
     let interruption: Error | undefined;
+    let workerExited = false;
     let checking = false;
     const receiptWait = new AbortController();
     const finish = (error?: Error) => {
@@ -281,6 +283,10 @@ export async function runLocalTurn(
           receipt?.status === "running" ||
           receipt?.status === "cancel_requested"
         ) {
+          if (workerExited) {
+            finish(failure);
+            return;
+          }
           acknowledged = true;
           onStarted?.();
         } else if (
@@ -304,11 +310,26 @@ export async function runLocalTurn(
     };
     const unsubscribe = runtime.subscribe((event) => {
       if (event.event === "runtime_exit") {
-        const failure = new Error(
-          event.error || "本地运行时已退出，请核对任务状态和生成文件。",
+        const failure = Object.assign(
+          new Error(
+            event.error || "本地运行时已退出，请核对任务状态和生成文件。",
+          ),
+          {
+            errorCode: event.error_code || "task_result_unknown",
+            stage: event.stage || "runtime_exit",
+            retryable: false,
+            action: "check_task_status",
+            diagnostic_id: event.diagnostic_id,
+          },
         );
-        if (event.error_code === "device_lease_interrupted") {
+        if (
+          event.error_code === "device_lease_interrupted" ||
+          event.stage === "runtime_exit"
+        ) {
           interruption = failure;
+          workerExited =
+            event.stage === "runtime_exit" &&
+            event.error_code === "runtime_process_disconnected";
           if (acknowledged) void checkReceipt(failure);
         } else finish(failure);
         return;
@@ -320,7 +341,13 @@ export async function runLocalTurn(
           const error = new Error(
             event.error || "本地任务未完成，请检查公司连接和本地工具状态。",
           ) as Error & { errorCode?: string };
-          error.errorCode = event.error_code;
+          Object.assign(error, {
+            errorCode: event.error_code,
+            stage: event.stage,
+            retryable: event.retryable,
+            action: event.action,
+            diagnostic_id: event.diagnostic_id,
+          });
           finish(error);
         } else {
           finish();
@@ -354,6 +381,10 @@ export async function runLocalTurn(
           else if (!finished) onStarted?.();
           return;
         } catch (err) {
+          if (interruption && !signal.aborted) {
+            await checkReceipt(interruption);
+            return;
+          }
           if (
             preparationRetry <
               LOCAL_RUNTIME_PREPARATION_RETRY_DELAYS_MS.length &&

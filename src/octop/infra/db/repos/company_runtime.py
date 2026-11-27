@@ -113,6 +113,15 @@ class CompanyRuntimeRepo:
             ).fetchone()
         return str(row[0]) if row and row[0] else None
 
+    def paired_installations(self) -> list[tuple[str, int, str | None]]:
+        with self.db.connect() as conn:
+            rows = conn.execute(
+                "SELECT DISTINCT d.device_id,d.owner_user_id,b.installation_hash FROM desktop_devices d "
+                "LEFT JOIN company_runtime_threads b ON d.device_id=b.device_id "
+                "AND d.owner_user_id=b.owner_user_id WHERE d.revoked_at IS NULL ORDER BY d.device_id"
+            ).fetchall()
+        return [(row[0], row[1], row[2]) for row in rows]
+
     def storage_summary(self) -> dict[str, Any]:
         tables = {
             "tasks": ("company_runtime_tasks", "LENGTH(request_json)+LENGTH(expert_json)"),

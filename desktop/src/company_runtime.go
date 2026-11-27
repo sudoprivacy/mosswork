@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"crypto/rand"
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
@@ -12,9 +13,11 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"regexp"
 	"runtime"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 
 	"mosswork.desktop/internal/company"
@@ -104,6 +107,9 @@ func (a *App) dispatchRuntimeEvent(name string) {
 			payload["error_code"] = code
 			payload["stage"] = stage
 			payload["retryable"] = retryable
+			if code == "local_runtime_error" {
+				payload["diagnostic_id"] = runtimeDiagnostic(stage, "unknown")
+			}
 			if action != "" {
 				payload["action"] = action
 			}
@@ -246,15 +252,56 @@ func runtimeErrorCode(value string) string {
 	if _, ok := runtimeErrorMessages[value]; ok {
 		return value
 	}
-	if strings.HasPrefix(value, "company_model_") || strings.HasPrefix(value, "device_") {
+	if runtimeHTTPError.MatchString(value) {
 		return value
 	}
 	return "local_runtime_error"
 }
 
+var runtimeHTTPError = regexp.MustCompile(`^company_model_http_[1-5][0-9]{2}$`)
+
+var diagnosticMu sync.Mutex
+
+func runtimeDiagnostic(stage, category string) string {
+	diagnosticMu.Lock()
+	defer diagnosticMu.Unlock()
+	dir := filepath.Join(mossworkHome(), "company-runtime", "diagnostics")
+	if os.MkdirAll(dir, 0700) != nil {
+		return ""
+	}
+	path := filepath.Join(dir, "runtime.log")
+	if stat, err := os.Stat(path); err == nil && stat.Size() >= 512*1024 {
+		if err := os.Rename(path, path+".previous"); err != nil {
+			return ""
+		}
+	}
+	file, err := os.OpenFile(path, os.O_WRONLY|os.O_CREATE|os.O_APPEND, 0600)
+	if err != nil {
+		return ""
+	}
+	defer file.Close()
+	id := "rt_" + rand.Text()
+	if _, err := fmt.Fprintln(file, time.Now().UTC().Format(time.RFC3339), id, stage, category); err != nil {
+		return ""
+	}
+	return id
+}
+
 func runtimeErrorMetadata(err error) (code, stage string, retryable bool, action string) {
 	code = runtimeErrorCode(err.Error())
 	stage, retryable, action = runtimeErrorStage(code), runtimeErrorRetryable(code), runtimeErrorAction(code)
+	var rpc *companyruntime.RPCError
+	if errors.As(err, &rpc) {
+		switch rpc.Reply.Stage {
+		case "task_acquire", "task_reconcile", "runtime_preparing":
+			stage = rpc.Reply.Stage
+		}
+		switch rpc.Reply.Action {
+		case "check_task_status", "check_workspace", "check_compatibility", "check_toolkit", "check_file_permissions":
+			action = rpc.Reply.Action
+		}
+		return code, stage, false, action
+	}
 	var preparationErr *runtimePreparationError
 	if errors.As(err, &preparationErr) {
 		stage, retryable, action = "runtime_preparing", true, ""
@@ -465,6 +512,7 @@ func applyRuntimeErrorTranslation(m companyruntime.Message) companyruntime.Messa
 		m.ErrorCode = m.Error
 	}
 	if m.ErrorCode != "" {
+		m.ErrorCode = runtimeErrorCode(m.ErrorCode)
 		m.Error = runtimeErrorText(m.ErrorCode)
 	}
 	return m
@@ -492,6 +540,14 @@ func (a *App) deliverRuntimeEvent(nonce, base string, epoch uint64, m companyrun
 		}
 	}
 	m = applyRuntimeErrorTranslation(m)
+	if m.Event == "runtime_exit" || m.ErrorCode == "local_runtime_error" {
+		stage, category := "task_execute", "unknown"
+		if m.Event == "runtime_exit" {
+			m.Stage = "runtime_exit"
+			stage, category = m.Stage, m.ExitCategory
+		}
+		m.DiagnosticID = runtimeDiagnostic(stage, category)
+	}
 	data, _ := json.Marshal(m)
 	a.window.ExecJS(`(function(origin,nonce,event){if(location.origin===origin)window.__mossworkRuntimeEvent?.(nonce,event);})(` + jsonString(a.companyPageOriginLocked()) + `,` + jsonString(nonce) + `,` + string(data) + `)`)
 }
@@ -525,6 +581,10 @@ func (a *App) watchRuntimeIdentity(nonce, base string, epoch uint64, credential 
 }
 
 var runtimeErrorMessages = map[string]string{
+	"checkpoint_sync_pending":                "本地结果待同步，请核对当前任务状态。",
+	"local_runtime_error":                    "本地任务发生未分类错误，请核对任务状态并提供诊断编号。",
+	"workspace_authorization_required":       "请选择工作目录并授权本机终端执行。",
+	"feature_not_supported":                  "公司服务缺少此任务需要的能力。",
 	"approval_result_unknown":                "审批结果尚未确认，请检查原任务的审批状态。",
 	"thread_create_unconfirmed":              "创建对话的结果尚未确认，请重试。",
 	"runtime_scope_changed":                  "工作目录或账号已切换，本地任务已停止；请核对已生成文件。",
