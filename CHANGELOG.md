@@ -6,6 +6,14 @@
 
 ## [Unreleased]
 
+## [0.0.12] - 2026-11-27
+
+### Fixed
+
+- Start new desktop tasks in a fresh conversation and avoid duplicate threads when retrying a chat action.
+- Restore local tasks for compatible older desktop clients, including 0.0.8, when the server uses a newer engine.
+- Preserve the cause of desktop runtime failures so administrators can diagnose connection and startup problems.
+
 ## [0.0.11] - 2026-11-26
 
 ### Fixed
