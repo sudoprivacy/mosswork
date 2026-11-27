@@ -9,12 +9,16 @@ from collections.abc import AsyncIterator
 from typing import Any, Literal
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, Query, Request
+from fastapi import APIRouter, Depends, Header, Query, Request
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, ConfigDict, Field
 
 from octop.api.deps import get_server
-from octop.infra.company_runtime import PROTOCOL_VERSION
+from octop.infra.company_runtime import (
+    CHECKPOINT_FORMAT,
+    PROTOCOL_VERSION,
+    SNAPSHOT_PROTOCOL_HEADER,
+)
 from octop.infra.company_runtime.connector_broker import ConnectorBroker
 from octop.infra.company_runtime.service import (
     CompanyRuntimeService,
@@ -47,7 +51,7 @@ class Document(BaseModel):
 
 class Capabilities(Document):
     protocol_version: int = PROTOCOL_VERSION
-    checkpoint_format: str = "langgraph-jsonplus-v1"
+    checkpoint_format: str = CHECKPOINT_FORMAT
     execution: str = "desktop"
     features: list[str] = [
         "model_stream",
@@ -110,8 +114,12 @@ class TaskStarted(Document):
     response_model=TaskStarted,
     summary="Acquire a single desktop execution for an empty or local thread",
 )
-async def start(body: StartTask, svc: CompanyRuntimeService = Depends(service)) -> Any:
-    return await svc.start(body.model_dump())
+async def start(
+    body: StartTask,
+    svc: CompanyRuntimeService = Depends(service),
+    snapshot_protocol: str | None = Header(default=None, alias=SNAPSHOT_PROTOCOL_HEADER),
+) -> Any:
+    return await svc.start(body.model_dump(), snapshot_protocol=snapshot_protocol)
 
 
 def _connector_broker(svc: CompanyRuntimeService) -> ConnectorBroker:

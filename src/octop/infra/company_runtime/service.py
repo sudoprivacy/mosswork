@@ -22,7 +22,8 @@ from octop.infra.agents.providers.reasoning import (
     reasoning_request_parameters,
 )
 from octop.infra.agents.settings.runtime_limits import agent_model_settings, agent_runtime_values
-from octop.infra.company_runtime import PROTOCOL_VERSION
+from octop.infra.company_runtime import CHECKPOINT_FORMAT, PROTOCOL_VERSION
+from octop.infra.company_runtime.compatibility import validated_snapshot
 from octop.infra.company_runtime.model_context import model_token_limits
 from octop.infra.db.repos.company_runtime import CompanyRuntimeRepo, RuntimeConflict, encode
 from octop.infra.db.repos.execution import ExecutionConflict
@@ -205,7 +206,7 @@ class CompanyRuntimeService:
             raise denied("company_" + CAPABILITIES[capability][0] + "_not_assigned", 403)
         return task
 
-    async def expert(self, agent_id: str) -> dict[str, Any]:
+    async def expert(self, agent_id: str, *, negotiated: bool = False) -> dict[str, Any]:
         row = await self.authorize(agent_id)
         registry = self.server.app_runtime.agent_registry
         resources = getattr(self.server, "employee_resources", None)
@@ -295,6 +296,8 @@ class CompanyRuntimeService:
                 else agent_runtime_values(json.loads(row.config_json or "{}"))
             ),
         }
+        if negotiated:
+            snapshot["negotiated_snapshot_protocol"] = PROTOCOL_VERSION
         snapshot["version"] = hashlib.sha256(encode(snapshot).encode()).hexdigest()
         if assigned is not None:
             assert resources is not None
@@ -313,12 +316,42 @@ class CompanyRuntimeService:
             snapshot["version"] = hashlib.sha256(encode(snapshot).encode()).hexdigest()
         return snapshot
 
-    async def start(self, body: dict[str, Any]) -> dict[str, Any]:
+    async def _legacy_snapshot(self, snapshot: dict[str, Any], installation_hash: str) -> None:
+        if snapshot["protocol_version"] != 1 or CHECKPOINT_FORMAT != "langgraph-jsonplus-v1":
+            raise denied("company_protocol_incompatible")
+        try:
+            validated_snapshot(snapshot)
+        except RuntimeError as exc:
+            raise denied("company_protocol_incompatible") from exc
+        profiles = self.services.config.company_runtime_snapshot_profiles
+        profile = profiles.get(self.identity["device_id"])
+        if profile is None:
+            profile = await offload(self.repo.last_completed_harness, self.owner, installation_hash)
+        if profile is None:
+            profile = profiles.get("*", "server")
+        if profile == "server" or profile == snapshot["harness_version"]:
+            return
+        snapshot["server_harness_version"] = snapshot["harness_version"]
+        snapshot["harness_version"] = profile
+        del snapshot["version"]
+        snapshot["version"] = hashlib.sha256(encode(snapshot).encode()).hexdigest()
+
+    async def start(
+        self,
+        body: dict[str, Any],
+        *,
+        snapshot_protocol: str | None = None,
+    ) -> dict[str, Any]:
         await self.authorize(body["agent_id"], body["thread_id"])
+        if snapshot_protocol is not None and snapshot_protocol != str(PROTOCOL_VERSION):
+            raise denied("company_protocol_incompatible")
         hub = self.server.app_runtime.gateway.ws_hub
         if hub.is_turn_active(body["thread_id"]):
             raise denied("server_thread_running")
-        snapshot = await self.expert(body["agent_id"])
+        snapshot = await self.expert(body["agent_id"], negotiated=snapshot_protocol is not None)
+        installation_hash = hashlib.sha256(body["installation_token"].encode()).hexdigest()
+        if snapshot_protocol is None:
+            await self._legacy_snapshot(snapshot, installation_hash)
         if body.get("model") and body["model"] not in snapshot["models"]:
             raise denied("model_not_available", 403)
         await offload(
@@ -361,7 +394,7 @@ class CompanyRuntimeService:
                 device_id=self.identity["device_id"],
                 request=request,
                 expert=snapshot,
-                installation_hash=hashlib.sha256(body["installation_token"].encode()).hexdigest(),
+                installation_hash=installation_hash,
                 recovery_hash=hashlib.sha256(body["recovery_token"].encode()).hexdigest(),
                 edit=edit,
             )

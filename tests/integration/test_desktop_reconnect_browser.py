@@ -183,11 +183,14 @@ async def test_built_desktop_chat_reconnect_and_cancel(
     page_errors = []
     calls = []
     queue = asyncio.Queue()
+    completions = asyncio.Queue()
     emit = runtime.emit
 
     def publish(event):
         emit(event)
         queue.put_nowait(events[-1])
+        if event["event"] == "done":
+            completions.put_nowait(event)
 
     runtime.emit = publish
     async with async_playwright() as playwright:
@@ -686,6 +689,7 @@ async def test_built_desktop_chat_reconnect_and_cancel(
             await expect(page).to_have_url(f"http://testserver/chat/{agent_id}")
             await page.evaluate("window.deviceAsleep = true; window.observedDeviceSleep = false")
             phase["mode"] = "history-background"
+            existing_threads = set(runtime.tasks)
             await editor.fill("Finish in original conversation")
             await editor.press("Enter")
             await page.wait_for_function("window.observedDeviceSleep === true")
@@ -701,10 +705,13 @@ async def test_built_desktop_chat_reconnect_and_cancel(
                 "window.deviceAsleep = false; window.dispatchEvent(new Event('online'))"
             )
             async with asyncio.timeout(30):
-                while calls.count("start") < turns_before + 3 or runtime.work:
-                    await asyncio.sleep(0.05)
+                while True:
+                    receipt = await completions.get()
+                    if receipt["thread_id"] not in existing_threads:
+                        break
             await expect(page).to_have_url(other_url)
-            assert len(runtime.tasks) >= 2
+            assert receipt["status"] == "completed", receipt
+            assert calls.count("start") == turns_before + 3
             await new_task.and_(page.locator('[aria-haspopup="menu"]')).last.press("Enter")
             await page.get_by_role(
                 "menuitem", name=re.compile(r"^(New local task|新建本机任务)$")

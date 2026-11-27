@@ -18,6 +18,7 @@ from langchain_core.utils.function_calling import convert_to_openai_tool
 from langgraph.checkpoint.base import WRITES_IDX_MAP, BaseCheckpointSaver, CheckpointTuple
 from pydantic import ConfigDict, Field
 
+from octop.infra.company_runtime import PROTOCOL_VERSION, SNAPSHOT_PROTOCOL_HEADER
 from octop.infra.company_runtime.model_context import calibrated_prompt_tokens
 
 _FIRST_BYTE_TIMEOUT_SECONDS = 120.0
@@ -58,7 +59,10 @@ class CompanyClient:
             tls_context = ssl.create_default_context()
         self.http = httpx.AsyncClient(
             base_url=base.rstrip("/") + "/api/company-runtime/",
-            headers={"X-mosswork-Device-Credential": credential},
+            headers={
+                "X-mosswork-Device-Credential": credential,
+                SNAPSHOT_PROTOCOL_HEADER: str(PROTOCOL_VERSION),
+            },
             timeout=httpx.Timeout(120, connect=10),
             follow_redirects=False,
             trust_env=False,

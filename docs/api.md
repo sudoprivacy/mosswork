@@ -60,8 +60,44 @@ Other routes are JWT-gated by `api/middleware/jwt_auth.py`; the setup lockdown m
 (`api/middleware/setup_lockdown.py`) additionally blocks non-setup
 routes until the wizard finishes.
 
-`GET /api/company-runtime/capabilities` advertises `checkpoint_batches` for the
-desktop worker. `POST /api/company-runtime/tasks/{task_id}/checkpoint-batch`
+`GET /api/company-runtime/capabilities` advertises the runtime protocol, checkpoint
+format and supported features. The desktop worker requires protocol `1`, checkpoint
+format `langgraph-jsonplus-v1` and `checkpoint_batches` before acquiring tasks. It
+validates the protocol and required data in each expert snapshot before execution.
+Protocol-aware clients send `X-Mosswork-Snapshot-Protocol: 1`. Their snapshots report
+the installed server engine in `harness_version`. Compatible builds can differ in
+package version. New optional fields are allowed. Changes requiring new client
+behavior must use a new protocol version.
+
+Earlier desktop workers require `expert.harness_version` to match their installed
+`moss-harness` version exactly. They send neither that version nor a snapshot
+protocol header. For these workers the server validates the protocol-1 snapshot
+and checkpoint format, then selects the version for the legacy field in this order.
+
+1. An override for the paired device ID in `company_runtime_snapshot_profiles`.
+2. The version from the most recent completed legacy protocol-1 task by the same
+   employee on the same installation. This includes tasks completed before a
+   server upgrade. Negotiated tasks do not establish a legacy engine version.
+3. The fleet default (`"*"`) in the same configuration, if set.
+4. The server's installed engine version.
+
+An employee who has already completed a local task can keep using that installation
+across a compatible server upgrade. For an older installation without history,
+the server cannot discover its engine version from the request. If it differs
+from the server's version, set the exact installed `moss-harness` version in the
+server's `config.json` and restart the server. For example, a fleet running `1.4.2`
+with one device on `1.3.1` would use the following configuration.
+
+```json
+{"company_runtime_snapshot_profiles": {"*": "1.4.2", "paired-device-id": "1.3.1"}}
+```
+
+The value `"server"` selects the server's installed version. When the legacy
+field differs, `server_harness_version` records the actual server build. Retries
+of an acquired task return its original snapshot. Workers that send the protocol
+header use the negotiated contract regardless of these legacy settings.
+
+`POST /api/company-runtime/tasks/{task_id}/checkpoint-batch`
 accepts 1–64 ordered `put`/`writes` operations and commits them atomically for
 the owning device and latest task. Repeating an acknowledged batch is safe;
 conflicting checkpoint identities roll back the batch. Running, cancellation-requested
