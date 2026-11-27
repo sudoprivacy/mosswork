@@ -328,6 +328,7 @@ class EnterpriseRuntime:
             "active_tasks": [
                 {
                     "pending_approval": self.steering.approvals.snapshot(value["thread_id"]),
+                    "last_approval": self.steering.approvals.last_resolved.get(value["thread_id"]),
                     **{
                         k: value[k]
                         for k in (

@@ -846,7 +846,9 @@ async def test_built_cloud_task_reopens_in_a_fresh_browser(env: Any) -> None:
     login += "localStorage.setItem('mosswork:locale', 'en');"
     try:
         async with serve_http(c._mosswork_app) as origin, async_playwright() as playwright:
-            browser = await playwright.chromium.launch()
+            browser = await playwright.chromium.launch(
+                channel=os.environ.get("MOSSWORK_TEST_CHROMIUM_CHANNEL")
+            )
             desktop = await browser.new_context(locale="en-US")
             await desktop.add_init_script(login + "window.mossworkDesktopWorkspace = {};")
             page = await desktop.new_page()
@@ -892,6 +894,18 @@ async def test_built_cloud_task_reopens_in_a_fresh_browser(env: Any) -> None:
             await editor.press("Enter")
             await expect(page.get_by_text("Cloud report continued.", exact=True)).to_be_visible()
             assert requests == [thread, thread]
+            await page.evaluate("""() => {
+                window.localRetryChecks = 0;
+                window.__mossworkRuntime = {version:1, status:async () => {
+                    window.localRetryChecks++; throw new Error('device_session_expired');
+                }};
+            }""")
+            await page.get_by_title(re.compile(r"^(Regenerate|重新生成)$")).last.click(force=True)
+            async with asyncio.timeout(20):
+                while len(requests) < 3:
+                    await asyncio.sleep(0.05)
+            assert requests == [thread, thread, thread]
+            assert await page.evaluate("window.localRetryChecks") == 0
             await browser.close()
     finally:
         release.set()

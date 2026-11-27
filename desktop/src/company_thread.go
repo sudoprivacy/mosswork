@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
+	"net/url"
 	"strings"
 	"time"
 )
@@ -14,7 +15,8 @@ var companyCreateThreadTimeout = 30 * time.Second
 
 func (a *App) companyCreateThread(nonce, base string, params json.RawMessage) (any, error) {
 	var input struct {
-		AgentID string `json:"agent_id"`
+		AgentID   string `json:"agent_id"`
+		RequestID string `json:"request_id"`
 	}
 	if err := json.Unmarshal(params, &input); err != nil || strings.TrimSpace(input.AgentID) == "" {
 		return nil, errors.New("invalid_create_thread_request")
@@ -36,10 +38,14 @@ func (a *App) companyCreateThread(nonce, base string, params json.RawMessage) (a
 	}
 	client := a.company
 	a.companyMu.Unlock()
+	path := "/api/company-runtime/threads"
+	if input.RequestID != "" {
+		path += "?request_id=" + url.QueryEscape(input.RequestID)
+	}
 	status, response, err := client.CompanyPost(
 		ctx,
 		base,
-		"/api/company-runtime/threads",
+		path,
 		body,
 	)
 	if err != nil {
@@ -47,12 +53,18 @@ func (a *App) companyCreateThread(nonce, base string, params json.RawMessage) (a
 		case "device_session_expired", "device_disconnected", "device_unpaired", "device_reconnecting_timeout":
 			return nil, &devicePreparationError{err}
 		}
+		if input.RequestID != "" {
+			return nil, errors.New("thread_create_unconfirmed")
+		}
 		if errors.Is(err, context.DeadlineExceeded) || errors.Is(ctx.Err(), context.DeadlineExceeded) {
 			return nil, errors.New("公司服务器响应超时，请重试")
 		}
 		return nil, errors.New("公司连接不可用，请重新连接")
 	}
 	if status < 200 || status >= 300 {
+		if input.RequestID != "" && (status >= 500 || status == http.StatusRequestTimeout) {
+			return nil, errors.New("thread_create_unconfirmed")
+		}
 		reason := companyThreadErrorReason(status, response)
 		if status == http.StatusUnauthorized && reason == "device_session_expired" {
 			return nil, &devicePreparationError{errors.New(reason)}
@@ -61,6 +73,9 @@ func (a *App) companyCreateThread(nonce, base string, params json.RawMessage) (a
 	}
 	var result map[string]any
 	if err := json.Unmarshal(response, &result); err != nil {
+		if input.RequestID != "" {
+			return nil, errors.New("thread_create_unconfirmed")
+		}
 		return nil, fmt.Errorf("company_runtime_invalid_response: %w", err)
 	}
 	return result, nil

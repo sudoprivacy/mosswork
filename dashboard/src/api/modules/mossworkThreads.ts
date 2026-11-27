@@ -1,10 +1,16 @@
 import type { HitlPendingPayload, HitlSessionPolicy } from "../types/hitl";
-import { isCompanyDesktop } from "../desktopRuntime";
+import { createRuntimeTaskId, isCompanyDesktop } from "../desktopRuntime";
 import {
   withReadyDesktopDevice,
   type DesktopDeviceWait,
 } from "../desktopDeviceReady";
-import { request } from "../request";
+import { getAuthToken, request } from "../request";
+import { tokenSessionIdentity } from "../../utils/authSession";
+
+const unconfirmedCreations = new Map<
+  string,
+  { intent: string; requestId: string }
+>();
 
 /** Workspace file produced in a thread; ``agent_id`` is the producer. */
 export type ThreadArtifact = {
@@ -198,14 +204,39 @@ export const mossworkThreadsApi = {
     agentId: string,
     cloudTask = false,
     wait?: DesktopDeviceWait,
+    retryIntent?: string,
   ) => {
     const runtime = window.__mossworkRuntime;
     if (!cloudTask && isCompanyDesktop() && runtime?.createThread) {
       const create = runtime.createThread;
-      return withReadyDesktopDevice(
-        () => create({ agent_id: agentId }),
-        wait,
-      ).then((result) => ({
+      const scope = JSON.stringify([
+        tokenSessionIdentity(getAuthToken()),
+        agentId,
+      ]);
+      const previous = unconfirmedCreations.get(scope);
+      const requestId =
+        previous && previous.intent === retryIntent
+          ? previous.requestId
+          : createRuntimeTaskId();
+      return withReadyDesktopDevice(async () => {
+        try {
+          const result = await create({
+            agent_id: agentId,
+            request_id: requestId,
+          });
+          if (unconfirmedCreations.get(scope)?.requestId === requestId)
+            unconfirmedCreations.delete(scope);
+          return result;
+        } catch (error) {
+          if (
+            retryIntent !== undefined &&
+            (error as { errorCode?: string })?.errorCode ===
+              "thread_create_unconfirmed"
+          )
+            unconfirmedCreations.set(scope, { intent: retryIntent, requestId });
+          throw error;
+        }
+      }, wait).then((result) => ({
         ...result,
         execution_location: "desktop" as const,
         cloud_task: false,

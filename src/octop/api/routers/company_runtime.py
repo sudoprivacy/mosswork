@@ -7,6 +7,7 @@ import json
 import logging
 from collections.abc import AsyncIterator
 from typing import Any, Literal
+from uuid import UUID
 
 from fastapi import APIRouter, Depends, Query, Request
 from fastapi.responses import StreamingResponse
@@ -578,37 +579,11 @@ class CreateThread(Document):
     response_model=dict[str, str],
     summary="Create an employee-owned conversation for local execution",
 )
-async def create_thread(body: CreateThread, svc: CompanyRuntimeService = Depends(service)) -> Any:
-    from octop.infra.utils.ulid import new_short_id
-
-    await svc.authorize(body.agent_id, execution=False)
-    thread_id = "thr_" + new_short_id()
-    session_key = f"dashboard:{body.agent_id}:{svc.owner}"
-    await offload(
-        svc.services.thread_repo.insert,
-        thread_id=thread_id,
-        agent_id=body.agent_id,
-        user_id=svc.owner,
-        channel_type="dashboard",
-        session_key=session_key,
-        title=body.title or None,
-        last_active=0,
-        execution_mode=body.execution_mode,
-    )
-    await offload(
-        svc.services.session_repo.upsert,
-        session_key=session_key,
-        agent_id=body.agent_id,
-        user_id=svc.owner,
-        channel_type="dashboard",
-        chat_type="dm",
-        thread_id=thread_id,
-        channel_subject_id=str(svc.owner),
-        channel_chat_type="dm",
-        channel_metadata={"channel_type": "dashboard", "user_id": svc.owner},
-    )
-    return {
-        "thread_id": thread_id,
-        "session_key": session_key,
-        "execution_mode": body.execution_mode,
-    }
+async def create_thread(
+    body: CreateThread,
+    request_id: UUID | None = Query(
+        None, description="Reuse this UUID when retrying the same creation."
+    ),
+    svc: CompanyRuntimeService = Depends(service),
+) -> dict[str, str]:
+    return await svc.create_thread(body.agent_id, body.title, request_id)

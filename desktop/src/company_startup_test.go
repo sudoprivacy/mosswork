@@ -138,6 +138,22 @@ for line in sys.stdin:
 	}
 }
 
+func TestExpiredLeaseWaitsBeforeDispatchingChatActions(t *testing.T) {
+	expires := time.Now().Add(2 * time.Second).Unix()
+	app := startupTestAppWithLease(t, expires, true)
+	time.Sleep(time.Until(time.Unix(expires, 0)) + 100*time.Millisecond)
+	for _, method := range []string{"start", "status", "hitl_resume"} {
+		_, err := app.performRuntimeAction("nonce", app.companyURL, method, json.RawMessage(`{}`))
+		if err == nil {
+			t.Fatalf("%s accepted expired lease", method)
+		}
+		code, stage, retryable, _ := runtimeErrorMetadata(err)
+		if code != "device_session_expired" || stage != "device_preparing" || !retryable {
+			t.Fatalf("%s: %s %s retryable=%t", method, code, stage, retryable)
+		}
+	}
+}
+
 func TestEmitRuntimeProgressWithoutWindowIsSafe(t *testing.T) {
 	a := &App{}
 	a.emitRuntimeProgress("nonce", "https://company.test", 0, "tools")

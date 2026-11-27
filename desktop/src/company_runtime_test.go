@@ -98,6 +98,40 @@ func TestRuntimeRepliesPreserveKnownErrors(t *testing.T) {
 	}
 }
 
+func TestRuntimeConflictErrorsPreserveServerReason(t *testing.T) {
+	cases := []struct {
+		code   string
+		action string
+	}{
+		{code: "thread_already_running", action: "check_task_status"},
+		{code: "task_identity_conflict", action: "check_task_status"},
+		{code: "execution_mode_server"},
+		{code: "edit_history_changed"},
+		{code: "project_on_another_device"},
+		{code: "previous_device_still_active", action: "check_task_status"},
+	}
+	for _, tc := range cases {
+		t.Run(tc.code, func(t *testing.T) {
+			code, stage, retryable, action := runtimeErrorMetadata(errors.New(tc.code))
+			if code != tc.code {
+				t.Fatalf("error code = %q, want %q", code, tc.code)
+			}
+			if stage != "task_reconcile" || retryable || action != tc.action {
+				t.Fatalf("metadata = (%q, %t, %q), want (task_reconcile, false, %q)", stage, retryable, action, tc.action)
+			}
+			translated := applyRuntimeErrorTranslation(companyruntime.Message{Error: tc.code})
+			if translated.ErrorCode != tc.code || translated.Error == tc.code {
+				t.Fatalf("translated error = (%q, %q)", translated.ErrorCode, translated.Error)
+			}
+		})
+	}
+
+	code, stage, retryable, action := runtimeErrorMetadata(errors.New("unrecognized_server_reason"))
+	if code != "local_runtime_error" || stage != "runtime" || retryable || action != "check_task_status" {
+		t.Fatalf("unexpected generic fallback = (%q, %q, %t, %q)", code, stage, retryable, action)
+	}
+}
+
 func TestRuntimePreparationErrorsAreSafelyRetryable(t *testing.T) {
 	code, stage, retryable, _ := runtimeErrorMetadata(&runtimePreparationError{cause: errors.New("temporary startup failure")})
 	if code != "local_runtime_error" || stage != "runtime_preparing" || !retryable {

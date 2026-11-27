@@ -105,6 +105,24 @@ class CompanyRuntimeService:
         self.repo = CompanyRuntimeRepo(self.services.db)
         self.owner = int(identity["owner_user_id"])
 
+    async def create_thread(
+        self, agent_id: str, title: str, request_id: uuid.UUID | None
+    ) -> dict[str, str]:
+        from octop.infra.utils.ulid import new_short_id
+
+        await self.authorize(agent_id, execution=False)
+        session_key = f"dashboard:{agent_id}:{self.owner}"
+        suffix = (
+            hashlib.sha256(f"{session_key}/{request_id}".encode()).hexdigest()[:32]
+            if request_id
+            else new_short_id()
+        )
+        thread_id = "thr_" + suffix
+        await offload(
+            self.repo.create_local_thread, thread_id, agent_id, self.owner, session_key, title
+        )
+        return {"thread_id": thread_id, "session_key": session_key, "execution_mode": "local"}
+
     async def authorize(
         self, agent_id: str, thread_id: str | None = None, *, execution: bool = True
     ) -> Any:

@@ -236,6 +236,9 @@ func (a *App) performRuntimeAction(nonce, base, method string, params json.RawMe
 	if method == "start" && err != nil && (errors.Is(ctx.Err(), context.DeadlineExceeded) || errors.Is(err, companyruntime.ErrDisconnected)) {
 		return nil, errors.New("task_result_unknown")
 	}
+	if method == "hitl_resume" && err != nil && (errors.Is(ctx.Err(), context.DeadlineExceeded) || errors.Is(err, companyruntime.ErrDisconnected)) {
+		return nil, errors.New("approval_result_unknown")
+	}
 	return result, err
 }
 
@@ -271,7 +274,9 @@ func runtimeErrorStage(code string) string {
 		return "model_request"
 	case strings.HasPrefix(code, "workspace_"):
 		return "artifact_write"
-	case code == "task_result_unknown":
+	case code == "task_result_unknown", code == "thread_already_running", code == "task_identity_conflict",
+		code == "execution_mode_server", code == "edit_history_changed", code == "project_on_another_device",
+		code == "previous_device_still_active":
 		return "task_reconcile"
 	default:
 		return "runtime"
@@ -295,7 +300,7 @@ func runtimeErrorAction(code string) string {
 		return "close_file_and_retry"
 	case "workspace_permission_denied":
 		return "check_file_permissions"
-	case "task_result_unknown", "local_runtime_error":
+	case "task_result_unknown", "thread_already_running", "task_identity_conflict", "previous_device_still_active", "local_runtime_error":
 		return "check_task_status"
 	default:
 		return ""
@@ -319,7 +324,7 @@ func (a *App) ensureRuntimeProcess(nonce, base, method string, prepare func() (s
 	// holding companyMu, so status polling and account changes remain responsive.
 	identity, _, err := client.RuntimeIdentity()
 	if err != nil {
-		if method == "start" {
+		if method == "start" || method == "status" || method == "hitl_resume" {
 			return nil, &devicePreparationError{err}
 		}
 		return nil, err
@@ -520,6 +525,8 @@ func (a *App) watchRuntimeIdentity(nonce, base string, epoch uint64, credential 
 }
 
 var runtimeErrorMessages = map[string]string{
+	"approval_result_unknown":                "审批结果尚未确认，请检查原任务的审批状态。",
+	"thread_create_unconfirmed":              "创建对话的结果尚未确认，请重试。",
 	"runtime_scope_changed":                  "工作目录或账号已切换，本地任务已停止；请核对已生成文件。",
 	"device_lease_interrupted":               "连接中断，本地任务结果尚未确认。请核对任务记录和已生成文件。",
 	"company_tools_archive_unavailable":      "客户端缺少或无法读取本机工具包。请安装包含 Python、文档工具和 FFmpeg 的完整企业客户端。",
@@ -546,6 +553,7 @@ var runtimeErrorMessages = map[string]string{
 	"previous_device_still_active":           "该任务仍连接到另一会话，请先结束原会话再核对。",
 	"task_not_found":                         "服务器上的原会话已不存在，本地成果文件仍保留；请安装新版客户端以结束这条提示。",
 	"thread_already_running":                 "该会话已有活动或待核对的任务，请先检查任务状态。",
+	"task_identity_conflict":                 "此任务标识已用于不同请求，请先检查已有任务状态，勿重复提交。",
 	"edit_history_changed":                   "会话记录已变化，请刷新后重新编辑。",
 	"edit_message_not_found":                 "原消息已变化或不存在，请刷新后重新编辑。",
 	"runtime_data_must_be_outside_project":   "所选工作目录包含客户端应用数据，请选择独立的项目工作目录。",

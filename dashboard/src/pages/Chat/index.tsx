@@ -440,6 +440,7 @@ function ChatPageInner() {
   const workspaceExpanded = dockOpen && activeTabId === "workspace";
 
   const chromeCheckInFlightRef = useRef(false);
+  const localRetryInFlightRef = useRef(false);
   const bridgeConnectionId =
     activeAgent?.bridge && activeAgent.bridge_connection_id
       ? activeAgent.bridge_connection_id
@@ -1165,9 +1166,53 @@ function ChatPageInner() {
         }
       }
       if (!userMsg) return;
+      if (
+        isCompanyDesktop() &&
+        (!activeThreadId || companyHistoryReadOnly || !historyHydrated)
+      )
+        return;
+      if (
+        activeThreadId &&
+        !composerSession?.cloudTask &&
+        chatStore.usesLocalRuntime(activeThreadId)
+      ) {
+        if (isStreaming || localRetryInFlightRef.current) {
+          antMessage.warning("当前本地任务仍在处理中，请等待完成后再重试。");
+          return;
+        }
+        localRetryInFlightRef.current = true;
+        const wait = chatStore.prepareLocalThread(activeThreadId);
+        void (async () => {
+          try {
+            await chatStore.ensureLocalRetryReady(activeThreadId, wait);
+            if (wait.signal.aborted) return;
+            wait.finish();
+            wrappedHandleSend(userMsg.content, userMsg.attachments);
+          } catch (error) {
+            if (wait.signal.aborted) return;
+            antMessage.warning(
+              error instanceof Error ? error.message : t("chat.sendFailed"),
+            );
+          } finally {
+            wait.finish();
+            localRetryInFlightRef.current = false;
+          }
+        })();
+        return;
+      }
       wrappedHandleSend(userMsg.content, userMsg.attachments);
     },
-    [messages, wrappedHandleSend, hasPendingHitlPause, t],
+    [
+      activeThreadId,
+      composerSession?.cloudTask,
+      companyHistoryReadOnly,
+      historyHydrated,
+      isStreaming,
+      messages,
+      wrappedHandleSend,
+      hasPendingHitlPause,
+      t,
+    ],
   );
 
   const handleDisableStreamUsage = useCallback(async () => {

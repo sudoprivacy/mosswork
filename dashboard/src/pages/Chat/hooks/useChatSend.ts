@@ -1,6 +1,6 @@
 import type { DeviceSelection } from "@/api/modules/devices";
 import type { DesktopDeviceWait } from "@/api/desktopDeviceReady";
-import { useCallback, useEffect } from "react";
+import { useCallback, useEffect, useRef } from "react";
 import type { TFunction } from "i18next";
 import { useNavigate } from "react-router-dom";
 import type { ChatAttachment, UserComposerContext } from "./useChat";
@@ -59,6 +59,7 @@ interface UseChatSendParams {
     cloud?: boolean,
     agent?: string,
     wait?: DesktopDeviceWait,
+    retryIntent?: string,
   ) => { session: Session; resolvedId: Promise<string> };
   renameSession: (id: string, name: string) => void;
   /** Called when auto-recording starts successfully from a pending message. */
@@ -110,6 +111,7 @@ export function useChatSend({
 }: UseChatSendParams) {
   const pageVisible = useConversationPageVisible();
   const navigate = useNavigate();
+  const latestCreation = useRef<symbol>();
 
   /** @returns false when the send was rejected before starting a turn. */
   const handleSend = useCallback(
@@ -199,8 +201,17 @@ export function useChatSend({
         );
       };
 
+      const pathParts = window.location.pathname.split("/").filter(Boolean);
+      const isCurrentAgentNewChat =
+        pathParts.length === 2 &&
+        pathParts[0] === "chat" &&
+        decodeURIComponent(pathParts[1]) === agent;
       const targetThreadId =
-        overrides?.threadId !== undefined ? overrides.threadId : activeThreadId;
+        overrides?.threadId !== undefined
+          ? overrides.threadId
+          : isCurrentAgentNewChat
+          ? null
+          : activeThreadId;
 
       if (targetThreadId) {
         if (isPendingThread(targetThreadId)) {
@@ -227,15 +238,26 @@ export function useChatSend({
       const wait = window.mossworkDesktopWorkspace
         ? chatStore.prepareLocalThread()
         : undefined;
-      const { resolvedId } = createSession(false, agent, wait);
-      navigate(`/chat/${agent}/${PENDING_THREAD_ID}`);
+      const creation = Symbol();
+      latestCreation.current = creation;
+      const { resolvedId } = createSession(
+        false,
+        agent,
+        wait,
+        JSON.stringify([trimmed, attachments ?? []]),
+      );
+      const pendingPath = `/chat/${agent}/${PENDING_THREAD_ID}`;
+      navigate(pendingPath);
 
       void resolvedId.then((tid) => {
+        const ownsPlaceholder =
+          latestCreation.current === creation && (!wait || wait.isCurrent());
+        const stillViewing =
+          ownsPlaceholder && window.location.pathname === pendingPath;
         wait?.finish();
         if (wait?.signal.aborted) {
           if (
-            window.location.pathname ===
-              `/chat/${agent}/${PENDING_THREAD_ID}` &&
+            stillViewing &&
             !chatStore.getSnapshot(PENDING_THREAD_ID).isStreaming
           ) {
             chatStore.clearMessages(PENDING_THREAD_ID);
@@ -244,14 +266,18 @@ export function useChatSend({
           return;
         }
         if (!tid) {
-          chatStore.clearMessages(PENDING_THREAD_ID);
-          navigate(`/chat/${agent}`, { replace: true });
-          message.error(t("chat.createSessionFailed", "创建会话失败，请重试"));
+          if (ownsPlaceholder) chatStore.clearMessages(PENDING_THREAD_ID);
+          if (stillViewing) {
+            navigate(`/chat/${agent}`, { replace: true });
+            message.error(
+              t("chat.createSessionFailed", "创建会话失败，请重试"),
+            );
+          }
           return;
         }
         const currentSnap = chatStore.getSnapshot(PENDING_THREAD_ID);
-        const hadMessages = currentSnap.messages.length > 1;
-        chatStore.renameSessionKey(PENDING_THREAD_ID, tid);
+        const hadMessages = ownsPlaceholder && currentSnap.messages.length > 1;
+        if (ownsPlaceholder) chatStore.renameSessionKey(PENDING_THREAD_ID, tid);
         // ``sessions`` in this closure predates the thread just created, so the
         // name lookup in maybeRenameNewThread always misses here. A freshly
         // created thread has no title yet — rename it straight away.
@@ -275,7 +301,7 @@ export function useChatSend({
           policy,
           selectedDevice,
         );
-        navigate(`/chat/${agent}/${tid}`, { replace: true });
+        if (stillViewing) navigate(`/chat/${agent}/${tid}`, { replace: true });
       });
       return true;
     },

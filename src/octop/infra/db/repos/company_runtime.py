@@ -9,6 +9,7 @@ from typing import Any
 
 from octop.infra.db.pool import DatabasePool
 from octop.infra.db.repos.thread_messages import ThreadMessageInput
+from octop.infra.db.repos.threads import clip_thread_title
 
 
 def encode(value: Any) -> str:
@@ -34,6 +35,40 @@ def _thread_is_empty_for_local_claim(conn: Any, thread_id: str, last_active: int
 class CompanyRuntimeRepo:
     def __init__(self, db: DatabasePool) -> None:
         self.db = db
+
+    def create_local_thread(
+        self, thread: str, agent: str, owner: int, session: str, title: str
+    ) -> None:
+        now = int(time.time())
+        with self.db.transaction() as conn:
+            created = conn.execute(
+                "INSERT INTO threads(thread_id, agent_id, user_id, channel_type, session_key, title, "
+                "last_active, created_at, execution_mode, execution_mode_locked) "
+                "VALUES (?, ?, ?, 'dashboard', ?, ?, 0, ?, 'local', 1) "
+                "ON CONFLICT(thread_id) DO NOTHING RETURNING thread_id",
+                (thread, agent, owner, session, clip_thread_title(title) if title else None, now),
+            ).fetchone()
+            if created is None:
+                return
+            conn.execute(
+                "INSERT INTO thread_history_projection(thread_id, status, updated_at) VALUES (?, 'ready', ?)",
+                (thread, now),
+            )
+            conn.execute(
+                "INSERT INTO sessions(session_key, agent_id, user_id, channel_type, chat_type, thread_id, "
+                "updated_at, channel_subject_id, channel_chat_type, channel_metadata) "
+                "VALUES (?, ?, ?, 'dashboard', 'dm', ?, ?, ?, 'dm', ?) "
+                "ON CONFLICT(session_key) DO UPDATE SET thread_id=excluded.thread_id, updated_at=excluded.updated_at",
+                (
+                    session,
+                    agent,
+                    owner,
+                    thread,
+                    now,
+                    str(owner),
+                    encode({"channel_type": "dashboard", "user_id": owner}),
+                ),
+            )
 
     def binding(self, thread_id: str) -> dict[str, Any] | None:
         with self.db.connect() as conn:
