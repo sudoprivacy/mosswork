@@ -96,16 +96,18 @@ class CompanyRuntimeRepo:
         return dict(row) if row else None
 
     def last_completed_harness(self, owner: int, installation_hash: str) -> str | None:
-        version_field = (
-            "CAST(t.expert_json AS jsonb)->>'harness_version'"
+        snapshot_field = (
+            "CAST(t.expert_json AS jsonb)->>'{}'"
             if self.db.dialect == "postgresql"
-            else "json_extract(t.expert_json, '$.harness_version')"
+            else "json_extract(t.expert_json, '$.{}')"
         )
         with self.db.connect() as conn:
             row = conn.execute(
-                f"SELECT {version_field} FROM company_runtime_tasks t "
+                f"SELECT {snapshot_field.format('harness_version')} FROM company_runtime_tasks t "
                 "JOIN company_runtime_threads b ON b.thread_id=t.thread_id "
                 "WHERE b.owner_user_id=? AND b.installation_hash=? AND t.status='completed' "
+                f"AND CAST({snapshot_field.format('protocol_version')} AS TEXT)='1' "
+                f"AND {snapshot_field.format('negotiated_snapshot_protocol')} IS NULL "
                 "ORDER BY t.id DESC LIMIT 1",
                 (owner, installation_hash),
             ).fetchone()

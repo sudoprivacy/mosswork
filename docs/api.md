@@ -69,16 +69,33 @@ the installed server engine in `harness_version`. Compatible builds can differ i
 package version. New optional fields are allowed. Changes requiring new client
 behavior must use a new protocol version.
 
-The original 0.0.8 employee client can run local conversations after a server-only
-upgrade. For its protocol-1 snapshot the server returns `harness_version: "0.0.8"`
-and records the actual build in `server_harness_version`. Old task requests carry
-no engine version. A request carrying `mcp_servers` uses the native server snapshot,
-even if the list is empty. For other unversioned requests the server consults the
-last completed task for the same employee and installation. A fresh installation
-with that request shape receives the 0.0.8 snapshot. On a mixed deployment, set
-`company_runtime_snapshot_profiles` in the server's `config.json` to map individual
-paired device IDs to `"server"` or `"0.0.8"` to override this inference. Restart the
-server after editing the file. A negotiated protocol takes precedence.
+Earlier desktop workers require `expert.harness_version` to match their installed
+`moss-harness` version exactly. They send neither that version nor a snapshot
+protocol header. For these workers the server validates the protocol-1 snapshot
+and checkpoint format, then selects the version for the legacy field in this order.
+
+1. An override for the paired device ID in `company_runtime_snapshot_profiles`.
+2. The version from the most recent completed legacy protocol-1 task by the same
+   employee on the same installation. This includes tasks completed before a
+   server upgrade. Negotiated tasks do not establish a legacy engine version.
+3. The fleet default (`"*"`) in the same configuration, if set.
+4. The server's installed engine version.
+
+An employee who has already completed a local task can keep using that installation
+across a compatible server upgrade. For an older installation without history,
+the server cannot discover its engine version from the request. If it differs
+from the server's version, set the exact installed `moss-harness` version in the
+server's `config.json` and restart the server. For example, a fleet running `1.4.2`
+with one device on `1.3.1` would use the following configuration.
+
+```json
+{"company_runtime_snapshot_profiles": {"*": "1.4.2", "paired-device-id": "1.3.1"}}
+```
+
+The value `"server"` selects the server's installed version. When the legacy
+field differs, `server_harness_version` records the actual server build. Retries
+of an acquired task return its original snapshot. Workers that send the protocol
+header use the negotiated contract regardless of these legacy settings.
 
 `POST /api/company-runtime/tasks/{task_id}/checkpoint-batch`
 accepts 1–64 ordered `put`/`writes` operations and commits them atomically for

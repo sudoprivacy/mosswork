@@ -5,6 +5,7 @@ from __future__ import annotations
 import json
 import logging
 import os
+import re
 from dataclasses import asdict, dataclass, field, replace
 from pathlib import Path
 from typing import Any
@@ -463,11 +464,13 @@ def load_config(path: Path) -> MossworkConfig:
     merged = {**file_defaults, **raw}
     snapshot_profiles = merged["company_runtime_snapshot_profiles"]
     if not isinstance(snapshot_profiles, dict) or not all(
-        isinstance(profile, str) and profile in {"0.0.8", "server"}
+        isinstance(profile, str)
+        and (profile == "server" or re.fullmatch(r"[0-9][a-zA-Z0-9.!+_-]{0,127}", profile))
         for profile in snapshot_profiles.values()
     ):
         raise ValueError(
-            'company_runtime_snapshot_profiles must map device IDs to "0.0.8" or "server"'
+            'company_runtime_snapshot_profiles must map device IDs or "*" to a '
+            'moss-harness version or "server"'
         )
     # Legacy key: prefer default_timezone when both are present in the file.
     if "default_timezone" not in raw and "cron_timezone" in raw:

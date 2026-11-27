@@ -1,5 +1,5 @@
+import hashlib
 from dataclasses import replace
-from importlib.metadata import version
 from unittest.mock import AsyncMock
 
 import pytest
@@ -8,12 +8,46 @@ from octop.infra.company_runtime import SNAPSHOT_PROTOCOL_HEADER
 from octop.infra.company_runtime.compatibility import check_capabilities, validated_snapshot
 from octop.infra.company_runtime.runtime import EnterpriseRuntime
 
-from .test_runtime import install_agent
+from .test_runtime import acquire, install_agent
 
 
-async def test_legacy_snapshot_selection_is_scoped_and_replayable(company):
+@pytest.mark.parametrize("installed", ["1.4.2", "2.0.0rc1"])
+async def test_server_upgrade_preserves_legacy_installation(company, monkeypatch, installed):
+    server, client, _, owner = company
+    install_agent(server)
+    del client.http.headers[SNAPSHOT_PROTOCOL_HEADER]
+    monkeypatch.setattr("octop.infra.company_runtime.service.version", lambda _: installed)
+    try:
+        assert (await acquire(client))["expert"]["harness_version"] == installed
+        await client.request("tasks/task1/status", {"status": "completed"})
+        monkeypatch.setattr("octop.infra.company_runtime.service.version", lambda _: "3.1.0")
+        client.http.headers[SNAPSHOT_PROTOCOL_HEADER] = "1"
+        negotiated = (await acquire(client, "negotiated"))["expert"]
+        assert negotiated["harness_version"] == "3.1.0"
+        await client.request("tasks/negotiated/status", {"status": "completed"})
+        del client.http.headers[SNAPSHOT_PROTOCOL_HEADER]
+        resumed = (await acquire(client, "resumed", "thread2"))["expert"]
+        assert resumed["harness_version"] == installed
+        assert resumed["server_harness_version"] == "3.1.0"
+        assert resumed["version"] != negotiated["version"]
+        installation = hashlib.sha256(("i" * 32).encode()).hexdigest()
+        repo = server.services.company_runtime_repo
+        assert repo.last_completed_harness(owner + 1, installation) is None
+    finally:
+        await client.close()
+
+
+async def test_legacy_profile_precedence_and_replay(company, monkeypatch):
     server, client, _, _ = company
     install_agent(server)
+    monkeypatch.setattr("octop.infra.company_runtime.service.version", lambda _: "4.0.0")
+
+    def profiles(mapping):
+        server.services = replace(
+            server.services,
+            config=replace(server.services.config, company_runtime_snapshot_profiles=mapping),
+        )
+
     body = {
         "agent_id": "expert",
         "thread_id": "thread1",
@@ -22,7 +56,7 @@ async def test_legacy_snapshot_selection_is_scoped_and_replayable(company):
         "installation_token": "x" * 32,
         "recovery_token": "r" * 32,
     }
-    native = version("moss-harness")
+    profiles({"*": "1.3.0", "device0": "1.2.1"})
     try:
         refused = await client.http.post(
             "tasks", json=body, headers={SNAPSHOT_PROTOCOL_HEADER: "2"}
@@ -31,22 +65,14 @@ async def test_legacy_snapshot_selection_is_scoped_and_replayable(company):
         assert server.services.company_runtime_repo.task("first") is None
         del client.http.headers[SNAPSHOT_PROTOCOL_HEADER]
         first = (await client.request("tasks", body))["expert"]
-        assert (first["harness_version"], first["server_harness_version"]) == ("0.0.8", native)
-        server.services = replace(
-            server.services,
-            config=replace(
-                server.services.config, company_runtime_snapshot_profiles={"device0": "server"}
-            ),
-        )
+        assert (first["harness_version"], first["server_harness_version"]) == ("1.2.1", "4.0.0")
+        profiles({"device0": "server"})
         assert (await client.request("tasks", body))["expert"] == first
         await client.request("tasks/first/status", {"status": "completed"})
         second = (await client.request("tasks", {**body, "task_id": "second"}))["expert"]
-        assert second["harness_version"] == native and second["version"] != first["version"]
+        assert second["harness_version"] == "4.0.0" and second["version"] != first["version"]
         await client.request("tasks/second/status", {"status": "completed"})
-        server.services = replace(
-            server.services,
-            config=replace(server.services.config, company_runtime_snapshot_profiles={}),
-        )
+        profiles({"*": "1.3.0"})
         inherited = (
             await client.request("tasks", {**body, "thread_id": "thread2", "task_id": "third"})
         )["expert"]
@@ -56,11 +82,37 @@ async def test_legacy_snapshot_selection_is_scoped_and_replayable(company):
             "installation_token": "y" * 32,
             "thread_id": "thread3",
             "task_id": "fourth",
+            "mcp_servers": [],
         }
-        assert (await client.request("tasks", other))["expert"] == first
+        assert (await client.request("tasks", other))["expert"]["harness_version"] == "1.3.0"
         await client.request("tasks/fourth/status", {"status": "completed"})
-        connectors = await client.request("tasks", {**other, "task_id": "fifth", "mcp_servers": []})
-        assert connectors["expert"] == second
+        profiles({"device0": "1.2.1"})
+        client.http.headers[SNAPSHOT_PROTOCOL_HEADER] = "1"
+        negotiated = (await client.request("tasks", {**other, "task_id": "fifth"}))["expert"]
+        assert negotiated["harness_version"] == "4.0.0"
+    finally:
+        await client.close()
+
+
+async def test_legacy_client_rejects_incompatible_wire_format(company, monkeypatch):
+    server, client, _, _ = company
+    install_agent(server)
+    del client.http.headers[SNAPSHOT_PROTOCOL_HEADER]
+    monkeypatch.setattr("octop.infra.company_runtime.service.CHECKPOINT_FORMAT", "future-format")
+    try:
+        response = await client.http.post(
+            "tasks",
+            json={
+                "agent_id": "expert",
+                "thread_id": "thread1",
+                "task_id": "incompatible",
+                "text": "hello",
+                "installation_token": "x" * 32,
+                "recovery_token": "r" * 32,
+            },
+        )
+        assert response.status_code == 409
+        assert server.services.company_runtime_repo.task("incompatible") is None
     finally:
         await client.close()
 

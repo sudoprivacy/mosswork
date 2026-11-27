@@ -119,11 +119,7 @@ async def start(
     svc: CompanyRuntimeService = Depends(service),
     snapshot_protocol: str | None = Header(default=None, alias=SNAPSHOT_PROTOCOL_HEADER),
 ) -> Any:
-    return await svc.start(
-        body.model_dump(),
-        snapshot_protocol=snapshot_protocol,
-        connector_aware="mcp_servers" in body.model_fields_set,
-    )
+    return await svc.start(body.model_dump(), snapshot_protocol=snapshot_protocol)
 
 
 def _connector_broker(svc: CompanyRuntimeService) -> ConnectorBroker:

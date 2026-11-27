@@ -44,7 +44,7 @@ def test_defaults_when_missing(tmp_path: Path):
 
 def test_company_runtime_snapshot_profiles(tmp_path: Path):
     path = tmp_path / "config.json"
-    profiles = {"older-device": "0.0.8", "current-device": "server"}
+    profiles = {"*": "1.4.2", "older-device": "1.2.0rc1+corp.2", "current-device": "server"}
     path.write_text(json.dumps({"company_runtime_snapshot_profiles": profiles}))
     assert load_config(path).company_runtime_snapshot_profiles == profiles
     path.write_text(json.dumps({"company_runtime_snapshot_profiles": {"device": "unknown"}}))
