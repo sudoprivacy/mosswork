@@ -93,7 +93,17 @@ with one device on `1.3.1` would use the following configuration.
 ```
 
 The value `"server"` selects the server's installed version. When the legacy
-field differs, `server_harness_version` records the actual server build. Retries
+profile should follow a distributed installer, copy its trusted
+`company-runtime-manifest.json` to the server. For example, set
+`"company_runtime_snapshot_profiles": {"*": {"manifest": "desktop/fleet.json"}}`.
+Paths are relative to `config.json`. A device-specific entry can reference its
+own manifest in a mixed deployment. The server checks the manifest protocol and
+reads `harness_version` on startup. Use the manifest from the employee installation.
+
+Before upgrading, run `mosswork admin desktop-compatibility` on the server to
+preview the version and selection source for paired installations. Review
+`server_fallback` entries against the version distributed to those devices.
+When the legacy field differs, `server_harness_version` records the actual server build. Retries
 of an acquired task return its original snapshot. Workers that send the protocol
 header use the negotiated contract regardless of these legacy settings.
 

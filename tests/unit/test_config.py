@@ -52,6 +52,25 @@ def test_company_runtime_snapshot_profiles(tmp_path: Path):
         load_config(path)
 
 
+@pytest.mark.parametrize("protocol", [1, 2, True])
+def test_legacy_manifest_uses_installed_harness(tmp_path: Path, protocol):
+    path = tmp_path / "config.json"
+    manifest = tmp_path / "issued.json"
+    path.write_text(
+        json.dumps({"company_runtime_snapshot_profiles": {"*": {"manifest": manifest.name}}})
+    )
+    manifest.write_text(
+        json.dumps(
+            {"protocol_version": protocol, "harness_version": "3.4.5", "shell_version": "7.8.9"}
+        )
+    )
+    if type(protocol) is int and protocol == 1:
+        assert load_config(path).company_runtime_snapshot_profiles == {"*": "3.4.5"}
+    else:
+        with pytest.raises(ValueError, match="Incompatible"):
+            load_config(path)
+
+
 def test_loads_backup_section(tmp_path: Path):
     cfg_path = tmp_path / "config.json"
     cfg_path.write_text(

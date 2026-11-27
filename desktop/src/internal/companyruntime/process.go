@@ -17,29 +17,36 @@ import (
 )
 
 type Message struct {
-	ID          string          `json:"id,omitempty"`
-	Event       string          `json:"event,omitempty"`
-	ThreadID    string          `json:"thread_id,omitempty"`
-	TaskID      string          `json:"task_id,omitempty"`
-	Result      json.RawMessage `json:"result,omitempty"`
-	Error       string          `json:"error,omitempty"`
-	Data        json.RawMessage `json:"data,omitempty"`
-	Frame       json.RawMessage `json:"frame,omitempty"`
-	Status      string          `json:"status,omitempty"`
-	Attempt     int             `json:"attempt,omitempty"`
-	MaxAttempts int             `json:"max_attempts,omitempty"`
-	SyncState   string          `json:"sync_state,omitempty"`
-	PID         int             `json:"pid,omitempty"`
-	Stream      string          `json:"stream,omitempty"`
-	Content     string          `json:"content,omitempty"`
-	ToolCallID  string          `json:"tool_call_id,omitempty"`
-	Artifacts   json.RawMessage `json:"artifacts,omitempty"`
-	ErrorCode   string          `json:"error_code,omitempty"`
-	Phase       string          `json:"phase,omitempty"`
-	Stage       string          `json:"stage,omitempty"`
-	Retryable   *bool           `json:"retryable,omitempty"`
-	Action      string          `json:"action,omitempty"`
+	ID           string          `json:"id,omitempty"`
+	Event        string          `json:"event,omitempty"`
+	ThreadID     string          `json:"thread_id,omitempty"`
+	TaskID       string          `json:"task_id,omitempty"`
+	Result       json.RawMessage `json:"result,omitempty"`
+	Error        string          `json:"error,omitempty"`
+	Data         json.RawMessage `json:"data,omitempty"`
+	Frame        json.RawMessage `json:"frame,omitempty"`
+	Status       string          `json:"status,omitempty"`
+	Attempt      int             `json:"attempt,omitempty"`
+	MaxAttempts  int             `json:"max_attempts,omitempty"`
+	SyncState    string          `json:"sync_state,omitempty"`
+	PID          int             `json:"pid,omitempty"`
+	Stream       string          `json:"stream,omitempty"`
+	Content      string          `json:"content,omitempty"`
+	ToolCallID   string          `json:"tool_call_id,omitempty"`
+	Artifacts    json.RawMessage `json:"artifacts,omitempty"`
+	ErrorCode    string          `json:"error_code,omitempty"`
+	Phase        string          `json:"phase,omitempty"`
+	Stage        string          `json:"stage,omitempty"`
+	Retryable    *bool           `json:"retryable,omitempty"`
+	Action       string          `json:"action,omitempty"`
+	DiagnosticID string          `json:"diagnostic_id,omitempty"`
+	ExitCategory string          `json:"-"`
 }
+
+type RPCError struct{ Reply Message }
+
+func (err *RPCError) Error() string { return err.Reply.ErrorCode }
+
 type Process struct {
 	cmd       *exec.Cmd
 	stdin     io.WriteCloser
@@ -114,7 +121,7 @@ func Start(python, launch, dir string, env []string, event func(Message)) (*Proc
 		diagnostic := fmt.Sprintf("%s (exit=%d)", category, cmd.ProcessState.ExitCode())
 		close(p.done)
 		if event != nil {
-			event(Message{Event: "runtime_exit", Status: "unknown", Error: "本地运行时已退出；请核对任务结果后重新连接，不会自动重做已执行操作。诊断：" + diagnostic})
+			event(Message{Event: "runtime_exit", Status: "unknown", ErrorCode: "runtime_process_disconnected", ExitCategory: category, Error: "本地运行时已退出；请核对任务结果后重新连接，不会自动重做已执行操作。诊断：" + diagnostic})
 		}
 	}()
 	return p, nil
@@ -135,6 +142,9 @@ func (p *Process) Request(ctx context.Context, method string, params any) (json.
 	select {
 	case m := <-ch:
 		if m.Error != "" {
+			if m.ErrorCode != "" {
+				return nil, &RPCError{Reply: m}
+			}
 			return nil, errors.New(m.Error)
 		}
 		return m.Result, nil

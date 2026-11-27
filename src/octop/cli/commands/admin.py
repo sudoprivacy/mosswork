@@ -55,6 +55,31 @@ def audit(actor: str | None, action: str | None, limit: int) -> None:
     Console(file=sys.stdout).print(table)
 
 
+@admin.command("desktop-compatibility")
+def desktop_compatibility() -> None:
+    """Preview legacy snapshot selection for paired employee installations."""
+    from importlib.metadata import version
+
+    from octop.cli.support.db import open_cli_services
+    from octop.infra.company_runtime.service import legacy_profile
+
+    with open_cli_services(migrate=False) as services:
+        repo = services.company_runtime_repo
+        rows = []
+        for device, owner, installation in repo.paired_installations():
+            profile, source = legacy_profile(
+                repo, services.config.company_runtime_snapshot_profiles, device, owner, installation
+            )
+            rows.append(
+                {
+                    "device_id": device,
+                    "source": source,
+                    "harness_version": version("moss-harness") if profile == "server" else profile,
+                }
+            )
+    click.echo(_json.dumps(rows, indent=2))
+
+
 @admin.group("providers")
 def admin_providers() -> None:
     """Global (admin) providers."""

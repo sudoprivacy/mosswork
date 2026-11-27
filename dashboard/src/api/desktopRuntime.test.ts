@@ -155,6 +155,27 @@ it("cancel requests remain pending until the native task terminates", async () =
   expect(done).toHaveBeenCalledOnce();
 });
 
+it("reconciles an exited worker without replaying an unresolved task", async () => {
+  vi.mocked(bridge.status).mockResolvedValueOnce({
+    active_tasks: [{ ...params, status: "running" }],
+  });
+  const pending = runLocalTurn(params, vi.fn(), new AbortController().signal);
+  await Promise.resolve();
+  listener?.({
+    event: "runtime_exit",
+    stage: "runtime_exit",
+    error_code: "runtime_process_disconnected",
+    diagnostic_id: "rt_fixture",
+  });
+  await expect(pending).rejects.toMatchObject({
+    stage: "runtime_exit",
+    diagnostic_id: "rt_fixture",
+    action: "check_task_status",
+  });
+  expect(bridge.start).toHaveBeenCalledOnce();
+  expect(bridge.status).toHaveBeenCalledOnce();
+});
+
 it.each([true, false])(
   "checks an interrupted worker's receipt when its start acknowledgement arrived first: %s",
   async (acknowledged) => {

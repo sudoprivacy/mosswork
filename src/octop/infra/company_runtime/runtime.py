@@ -222,6 +222,7 @@ class EnterpriseRuntime:
         # Employee processes do not run MossworkServer.start().
         install_safe_grep_fallback()
         self.client: CompanyClient | None = None
+        self.task_features: set[str] | None = None
         self.tasks: dict[str, dict[str, Any]] = {}
         self._connector_tools_cache: dict[str, list[dict[str, Any]]] = {}
 
@@ -262,7 +263,15 @@ class EnterpriseRuntime:
         self.authorized = params.get("execute_authorized") is True
         client = CompanyClient(params["company_url"], params["credential"])
         try:
-            check_capabilities(await client.request("capabilities"))
+            capabilities = await client.request("capabilities")
+            check_capabilities(capabilities)
+            if "task_features" in capabilities:
+                features = capabilities["task_features"]
+                if not isinstance(features, list) or not all(
+                    isinstance(item, str) for item in features
+                ):
+                    raise RuntimeError("company_protocol_incompatible")
+                self.task_features = set(features)
         except Exception:
             await client.close()
             raise
@@ -353,19 +362,19 @@ class EnterpriseRuntime:
 
     async def start(self, params: dict[str, Any]) -> dict[str, str]:
         if not self.client or not self.authorized:
-            raise RuntimeError("请选择工作目录并授权本机终端执行")
+            raise RuntimeError("workspace_authorization_required")
         if "ffmpeg" not in self.tools or any(
             self.tools.get(k) == "unavailable" for k in ("openpyxl", "python-docx", "Pillow")
         ):
-            raise RuntimeError("企业工具包不完整，请重新安装公司客户端")
+            raise RuntimeError("company_tools_archive_unavailable")
         for key in ("task_id", "thread_id", "agent_id"):
             if not _IDENTIFIER.fullmatch(str(params.get(key, ""))):
                 raise ValueError("invalid_task_identity")
         thread = params["thread_id"]
         if thread in self.work or len(self.work) >= 4:
-            raise RuntimeError("已有任务正在本机执行")
+            raise RuntimeError("thread_already_running")
         if self.tasks.get(thread, {}).get("status") == "unknown":
-            raise RuntimeError("上次任务结果待核对，不能自动重放。请检查已有成果后新建任务")
+            raise RuntimeError("task_result_unknown")
         recovery = secrets.token_urlsafe(32)
         request = {
             key: params[key]
@@ -386,6 +395,10 @@ class EnterpriseRuntime:
             if key in params
         }
         request["recovery_token"] = recovery
+        if not request.get("mcp_servers"):
+            request.pop("mcp_servers", None)
+        elif self.task_features is not None and "connector_tools" not in self.task_features:
+            raise RuntimeError("feature_not_supported")
         request["installation_token"] = self.installation_token
         previous = self.tasks.get(thread)
         if previous and previous.get("sync_state") == "pending":
@@ -1255,6 +1268,19 @@ class EnterpriseRuntime:
                 error_code = error_code or "task_result_unknown"
                 error_stage = error_stage or "task_reconcile"
                 error_action = error_action or "check_task_status"
+            if not error_code:
+                error_code = (
+                    "company_protocol_incompatible"
+                    if error == "company_protocol_incompatible"
+                    else "local_runtime_error"
+                )
+                error_stage = "task_execute"
+                error_action = (
+                    "check_compatibility"
+                    if error_code == "company_protocol_incompatible"
+                    else "check_task_status"
+                )
+            error = error_code
             if error_code:
                 task.update(
                     error_code=error_code,
@@ -1318,13 +1344,15 @@ class EnterpriseRuntime:
                         continue
                     try:
                         await getattr(resource, method)()
-                    except Exception as exc:
-                        logger.exception(
+                    except Exception:
+                        logger.warning(
                             "Company runtime cleanup failed task=%s method=%s", task_id, method
                         )
                         # Do not claim that local effects have stopped when cleanup failed.
                         status = "unknown"
-                        error = error or str(exc)
+                        if not error:
+                            error = error_code = "task_result_unknown"
+                            error_stage, error_action = "task_reconcile", "check_task_status"
                 task["reported_status"] = status
                 await offload(atomic_json, directory / "task.json", task)
                 async with asyncio.timeout(5):
@@ -1332,21 +1360,22 @@ class EnterpriseRuntime:
                     await self.flush_events(task, directory)
                     await client.request(f"tasks/{task_id}/status", {"status": status})
             except Exception as exc:
-                logger.warning(
-                    "Company runtime final synchronization pending task=%s", task_id, exc_info=True
-                )
-                if isinstance(exc, OSError):
-                    error = error or str(exc)
+                logger.warning("Company runtime final synchronization pending task=%s", task_id)
+                if isinstance(exc, OSError) and not error:
+                    error = error_code = "checkpoint_sync_pending"
+                    error_stage, error_action = "checkpoint_sync", "check_task_status"
             else:
                 task["sync_state"] = "synced"
             finally:
                 task.update(status=status, reported_status=status)
                 try:
                     await offload(atomic_json, directory / "task.json", task)
-                except Exception as exc:
+                except Exception:
                     task["sync_state"] = "pending"
-                    error = error or str(exc)
-                    logger.exception("Company runtime final receipt write failed task=%s", task_id)
+                    if not error:
+                        error = error_code = "checkpoint_sync_pending"
+                        error_stage, error_action = "checkpoint_sync", "check_task_status"
+                    logger.warning("Company runtime final receipt write failed task=%s", task_id)
                 finally:
                     # No cleanup or disk failure may retain a finished worker slot.
                     self.work.pop(thread, None)

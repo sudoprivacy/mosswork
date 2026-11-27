@@ -46,4 +46,6 @@ def test_unicode_stdio_with_gbk_pipes(monkeypatch):
     company_runtime.main()
     rows = [json.loads(line) for line in output.getvalue().decode("utf-8").splitlines()]
     assert rows[0]["result"]["message"] == "中文任务 📝"
-    assert rows[1]["error"] == "中文 📝"
+    assert rows[1]["error"] == rows[1]["error_code"] == "local_runtime_error"
+    assert rows[1]["stage"] == "runtime_preparing" and not rows[1]["retryable"]
+    assert "中文 📝" not in json.dumps(rows[1], ensure_ascii=False)

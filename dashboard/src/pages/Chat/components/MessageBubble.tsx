@@ -165,6 +165,9 @@ function formatErrorDebugTags(errorInfo: ChatMessage["errorInfo"]): string[] {
   if (errorInfo.retryable) {
     parts.push("retryable");
   }
+  if (typeof errorInfo.diagnostic_id === "string" && errorInfo.diagnostic_id) {
+    parts.push(`ID: ${errorInfo.diagnostic_id}`);
+  }
   return parts;
 }
 

@@ -431,6 +431,41 @@ def env_bind_overrides() -> tuple[str | None, int | None]:
     return host, port
 
 
+def _snapshot_profiles(value: Any, directory: Path) -> dict[str, str]:
+    if not isinstance(value, dict):
+        raise ValueError("company_runtime_snapshot_profiles must be an object")
+    profiles = {}
+    for device, profile in value.items():
+        if (
+            isinstance(profile, dict)
+            and set(profile) == {"manifest"}
+            and isinstance(profile["manifest"], str)
+        ):
+            try:
+                manifest = json.loads((directory / profile["manifest"]).read_bytes())
+            except (OSError, ValueError) as exc:
+                raise ValueError(
+                    f"Unreadable company_runtime_snapshot_profiles manifest for {device}"
+                ) from exc
+            if (
+                not isinstance(manifest, dict)
+                or type(manifest.get("protocol_version")) is not int
+                or manifest["protocol_version"] != 1
+            ):
+                raise ValueError(
+                    f"Incompatible company_runtime_snapshot_profiles manifest for {device}"
+                )
+            profile = manifest.get("harness_version")
+            if profile == "server":
+                raise ValueError("Expected installed moss-harness version in manifest")
+        if not isinstance(profile, str) or (
+            profile != "server" and not re.fullmatch(r"[0-9][a-zA-Z0-9.!+_-]{0,127}", profile)
+        ):
+            raise ValueError(f"Invalid company_runtime_snapshot_profiles entry for {device}")
+        profiles[device] = profile
+    return profiles
+
+
 def load_config(path: Path) -> MossworkConfig:
     """Load ``config.json``; write defaults if absent. Apply env overrides.
 
@@ -462,16 +497,7 @@ def load_config(path: Path) -> MossworkConfig:
         database_in_file = False
 
     merged = {**file_defaults, **raw}
-    snapshot_profiles = merged["company_runtime_snapshot_profiles"]
-    if not isinstance(snapshot_profiles, dict) or not all(
-        isinstance(profile, str)
-        and (profile == "server" or re.fullmatch(r"[0-9][a-zA-Z0-9.!+_-]{0,127}", profile))
-        for profile in snapshot_profiles.values()
-    ):
-        raise ValueError(
-            'company_runtime_snapshot_profiles must map device IDs or "*" to a '
-            'moss-harness version or "server"'
-        )
+    snapshot_profiles = _snapshot_profiles(merged["company_runtime_snapshot_profiles"], path.parent)
     # Legacy key: prefer default_timezone when both are present in the file.
     if "default_timezone" not in raw and "cron_timezone" in raw:
         merged["default_timezone"] = raw["cron_timezone"]

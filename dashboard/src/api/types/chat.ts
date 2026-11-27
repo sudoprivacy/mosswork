@@ -27,6 +27,7 @@ export interface TokenUsage {
 }
 
 export interface ProcessErrorInfo {
+  diagnostic_id?: string;
   message?: string;
   code?: string | number;
   source?: string;
